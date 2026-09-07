@@ -1,0 +1,27 @@
+{
+  "name": "valuation-backend",
+  "version": "1.0.0",
+  "description": "Enterprise Backend API for State Bank of India Panel Valuer Tech Portal connected to MongoDB Atlas",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "seed": "node seed.js"
+  },
+  "dependencies": {
+    "@simplewebauthn/server": "^13.3.2",
+    "body-parser": "^1.20.6",
+    "cloudinary": "^2.10.0",
+    "cors": "^2.8.6",
+    "docxtemplater": "^3.69.3",
+    "docxtemplater-image-module-free": "^1.1.1",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.2",
+    "mongodb": "^7.5.0",
+    "mongoose": "^8.5.1",
+    "multer": "^2.2.0",
+    "pdf-lib": "^1.17.1",
+    "pizzip": "^3.2.0",
+    "tesseract.js": "^7.0.0"
+  }
+}
