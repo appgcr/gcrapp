@@ -38,11 +38,27 @@ jobs:
         working-directory: ./ValuationApp
         run: zip -r frontend-build.zip dist/
 
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Build Android APK
+        working-directory: ./ValuationApp/android
+        run: chmod +x gradlew && ./gradlew assembleDebug
+
+      - name: Copy APK for Release
+        working-directory: ./ValuationApp
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk ValuationApp.apk
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: Release ${{ github.ref_name }}
-          files: ValuationApp/frontend-build.zip
+          files: |
+            ValuationApp/frontend-build.zip
+            ValuationApp/ValuationApp.apk
           generate_release_notes: true
           draft: false
           prerelease: false
