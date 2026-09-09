@@ -38,6 +38,10 @@ jobs:
         working-directory: ./ValuationApp
         run: zip -r frontend-build.zip dist/
 
+      - name: Sync Capacitor Android
+        working-directory: ./ValuationApp
+        run: npx cap sync android
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
