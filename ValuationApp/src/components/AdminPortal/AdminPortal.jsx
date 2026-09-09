@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '../../config/api';
 import React, { useState, useEffect, useRef } from 'react';
 import { Menu, Bell, LayoutDashboard, ClipboardList, PenSquare, Users, Settings, MessageCircle, Megaphone, X, Send, ImagePlus, Loader2 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
@@ -68,7 +69,7 @@ export default function AdminPortal({ currentUser, handleLogout }) {
       
       // 2. Loop through staff and send a notification to each
       const promises = targetList.map(staff => 
-        fetch('https://gcr-9ys1.onrender.com/api/notifications', {
+        fetch(`${API_BASE_URL}/api/notifications`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -104,7 +105,7 @@ export default function AdminPortal({ currentUser, handleLogout }) {
   useEffect(() => {
     if (showBroadcastModal) {
       // Fetch staff every time modal opens to ensure it's dynamically updated
-      fetch('https://gcr-9ys1.onrender.com/api/users')
+      fetch(`${API_BASE_URL}/api/users`)
         .then(res => res.json())
         .then(data => {
           setAvailableStaff(data.filter(u => u.role === 'ENGINEER'));
@@ -126,7 +127,7 @@ export default function AdminPortal({ currentUser, handleLogout }) {
 
     const checkMessages = async () => {
       try {
-        const res = await fetch('https://gcr-9ys1.onrender.com/api/chat/admin/users');
+        const res = await fetch(`${API_BASE_URL}/api/chat/admin/users`);
         if (res.ok) {
           const data = await res.json();
           const currentUnread = data.reduce((acc, user) => acc + user.unreadCount, 0);

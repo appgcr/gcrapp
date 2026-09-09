@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '../../config/api';
 import React, { useState, useEffect } from 'react';
 import { Map, Users, MapPin, Clock, Plus, Car, Loader2, X, Eye, EyeOff } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -51,8 +52,8 @@ export default function AdminStaff() {
   const fetchStaffData = async () => {
       try {
         const [usersRes, attRes] = await Promise.all([
-          fetch('https://gcr-9ys1.onrender.com/api/users'),
-          fetch('https://gcr-9ys1.onrender.com/api/attendance')
+          fetch(`${API_BASE_URL}/api/users`),
+          fetch(`${API_BASE_URL}/api/attendance`)
         ]);
         const users = await usersRes.json();
         const attendances = await attRes.json();
@@ -133,7 +134,7 @@ export default function AdminStaff() {
     
     setIsSubmitting(true);
     try {
-      const res = await fetch('https://gcr-9ys1.onrender.com/api/users', {
+      const res = await fetch(`${API_BASE_URL}/api/users`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '../../config/api';
 import React, { useState, useEffect, useRef } from 'react';
 import { Moon, Sun, Shield, HelpCircle, LogOut, ChevronRight, Camera, User, Calendar, MapPin, FileText, CheckCircle2, ChevronDown } from 'lucide-react';
 import { startRegistration } from '@simplewebauthn/browser';
@@ -83,7 +84,7 @@ export default function SettingsView({ currentUser, handleLogout }) {
 
   const handleRegisterBiometrics = async () => {
     try {
-      const resp = await fetch('https://gcr-9ys1.onrender.com/api/auth/webauthn/register-options', {
+      const resp = await fetch(`${API_BASE_URL}/api/auth/webauthn/register-options`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: currentUser.id })
@@ -95,7 +96,7 @@ export default function SettingsView({ currentUser, handleLogout }) {
       // Start WebAuthn Registration
       const attResp = await startRegistration(options);
 
-      const verifyResp = await fetch('https://gcr-9ys1.onrender.com/api/auth/webauthn/register-verify', {
+      const verifyResp = await fetch(`${API_BASE_URL}/api/auth/webauthn/register-verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: currentUser.id, response: attResp })

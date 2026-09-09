@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '../../config/api';
 import React, { useState } from 'react';
 import { Mail, Lock, Eye, EyeOff, Fingerprint, Home, Loader2 } from 'lucide-react';
 import { startAuthentication } from '@simplewebauthn/browser';
@@ -15,7 +16,7 @@ export default function LoginScreen({ onLogin, users }) {
     setError('');
 
     try {
-      const response = await fetch('https://gcr-9ys1.onrender.com/api/auth/login', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: username.trim(), password })
@@ -40,7 +41,7 @@ export default function LoginScreen({ onLogin, users }) {
     
     try {
       // 1. Fetch authentication options (challenge) from backend
-      const resp = await fetch('https://gcr-9ys1.onrender.com/api/auth/webauthn/login-options', {
+      const resp = await fetch(`${API_BASE_URL}/api/auth/webauthn/login-options`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -52,7 +53,7 @@ export default function LoginScreen({ onLogin, users }) {
       const asseResp = await startAuthentication(options);
 
       // 3. Verify response on backend
-      const verifyResp = await fetch('https://gcr-9ys1.onrender.com/api/auth/webauthn/login-verify', {
+      const verifyResp = await fetch(`${API_BASE_URL}/api/auth/webauthn/login-verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '../../config/api';
 import React, { useState, useEffect } from 'react';
 import { Users, MapPin, Clock, Search, ShieldCheck, LogIn, LogOut, Download, FileText } from 'lucide-react';
 import { jsPDF } from 'jspdf';
@@ -19,7 +20,7 @@ export default function AttendanceLogs() {
   const [customEndDate, setCustomEndDate] = useState(todayStr);
 
   useEffect(() => {
-    fetch('https://gcr-9ys1.onrender.com/api/attendance')
+    fetch(`${API_BASE_URL}/api/attendance`)
       .then(res => res.json())
       .then(data => setLogs(data))
       .catch(err => console.error("Error fetching attendance logs:", err));

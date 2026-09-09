@@ -1,3 +1,4 @@
+import { API_BASE_URL } from './config/api';
 import React, { useState, useEffect, useRef } from 'react';
 import { Home, Bell, LayoutGrid, ClipboardList, PenSquare, Settings, ArrowLeft, LogOut, MessageCircle } from 'lucide-react';
 import { App as CapacitorApp } from '@capacitor/app';

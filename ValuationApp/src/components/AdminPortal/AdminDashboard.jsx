@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '../../config/api';
 import React, { useState, useEffect } from 'react';
 import { CheckCircle2, Clock, Users, Mail, TrendingUp, TrendingDown, Info, CheckSquare, Clipboard, AlertCircle, MoreHorizontal, Loader2 } from 'lucide-react';
 
@@ -20,8 +21,8 @@ export default function AdminDashboard({ onViewAll, onNavigate }) {
     const fetchDashboardData = async () => {
       try {
         const [casesRes, usersRes] = await Promise.all([
-          fetch('https://gcr-9ys1.onrender.com/api/cases'),
-          fetch('https://gcr-9ys1.onrender.com/api/users')
+          fetch(`${API_BASE_URL}/api/cases`),
+          fetch(`${API_BASE_URL}/api/users`)
         ]);
         const cases = await casesRes.json();
         const users = await usersRes.json();

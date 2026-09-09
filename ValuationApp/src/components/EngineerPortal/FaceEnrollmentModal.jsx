@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '../../config/api';
 import React, { useState, useEffect, useRef } from 'react';
 import { ShieldCheck, Camera, CheckCircle2, AlertTriangle, Loader2, X, RefreshCw, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';

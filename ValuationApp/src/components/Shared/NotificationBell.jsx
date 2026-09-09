@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '../../config/api';
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Bell, X, Check } from 'lucide-react';
@@ -24,8 +25,8 @@ export default function NotificationBell({ userId }) {
     try {
       if (userId === 'ADMIN') {
         const [casesRes, attRes] = await Promise.all([
-          fetch('https://gcr-9ys1.onrender.com/api/cases'),
-          fetch('https://gcr-9ys1.onrender.com/api/attendance')
+          fetch(`${API_BASE_URL}/api/cases`),
+          fetch(`${API_BASE_URL}/api/attendance`)
         ]);
         const cases = await casesRes.json();
         const attendance = await attRes.json();

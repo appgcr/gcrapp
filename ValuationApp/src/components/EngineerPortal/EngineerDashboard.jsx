@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '../../config/api';
 import React, { useState, useEffect } from 'react';
 import { Navigation, MapPin, FileText } from 'lucide-react';
 
@@ -9,7 +10,7 @@ export default function EngineerDashboard({ currentUser, onOpenCase }) {
   useEffect(() => {
     const fetchCases = async () => {
       try {
-        const res = await fetch('https://gcr-9ys1.onrender.com/api/cases');
+        const res = await fetch(`${API_BASE_URL}/api/cases`);
         if (res.ok) {
           const data = await res.json();
           // Filter cases assigned to this user

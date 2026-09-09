@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '../../config/api';
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Send, Search, UserCircle2, Check, CheckCheck, Paperclip, FileText, ImageIcon, MapPin, UserPlus, Loader2, X, MessageCircle, ChevronDown } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
@@ -65,7 +66,7 @@ export default function ChatSystem({ currentUser, otherUserId, caseId, onBack, i
 
   const fetchAdminChats = async () => {
     try {
-      const res = await fetch('https://gcr-9ys1.onrender.com/api/chat/admin/users');
+      const res = await fetch(`${API_BASE_URL}/api/chat/admin/users`);
       if (res.ok) {
         const data = await res.json();
         const decryptedData = data.map(chat => ({
@@ -150,7 +151,7 @@ export default function ChatSystem({ currentUser, otherUserId, caseId, onBack, i
     };
 
     try {
-      const res = await fetch('https://gcr-9ys1.onrender.com/api/chat', {
+      const res = await fetch(`${API_BASE_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(encryptedPayload)
@@ -195,7 +196,7 @@ export default function ChatSystem({ currentUser, otherUserId, caseId, onBack, i
     reader.readAsDataURL(file);
     reader.onloadend = async () => {
       try {
-        const res = await fetch('https://gcr-9ys1.onrender.com/api/upload', {
+        const res = await fetch(`${API_BASE_URL}/api/upload`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ image: reader.result, folder: 'chat_attachments' })
@@ -290,7 +291,7 @@ export default function ChatSystem({ currentUser, otherUserId, caseId, onBack, i
     
     // Load real registered team members as contacts
     try {
-      const res = await fetch('https://gcr-9ys1.onrender.com/api/users');
+      const res = await fetch(`${API_BASE_URL}/api/users`);
       if (res.ok) {
         const users = await res.json();
         const teamContacts = users
