@@ -18,6 +18,9 @@ ValuationBackend/uploads/
 *.apk
 *.aab
 
+# Large binary / OCR training data (downloaded at runtime by tesseract.js)
+*.traineddata
+
 # OS files
 .DS_Store
 .DS_Store?
