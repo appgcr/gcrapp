@@ -1,0 +1,48 @@
+name: CI/CD Pipeline & GitHub Release
+
+on:
+  push:
+    # This workflow will run every time you push a new version tag (e.g., v1.0.0)
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    name: Build and Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required to create a GitHub Release
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Backend Dependencies
+        working-directory: ./ValuationBackend
+        run: npm install
+
+      - name: Install Frontend Dependencies
+        working-directory: ./ValuationApp
+        run: npm install
+
+      - name: Build Frontend (Web)
+        working-directory: ./ValuationApp
+        run: npm run build
+
+      - name: Zip Frontend Build
+        working-directory: ./ValuationApp
+        run: zip -r frontend-build.zip dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ github.ref_name }}
+          files: ValuationApp/frontend-build.zip
+          generate_release_notes: true
+          draft: false
+          prerelease: false
