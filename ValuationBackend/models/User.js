@@ -6,9 +6,9 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   name: { type: String, required: true },
   role: { type: String, enum: ['SUPER_ADMIN', 'ENGINEER'], default: 'ENGINEER' },
-  phone: { type: String, default: '9440164412' },
-  licenseNo: { type: String, default: 'Indian Institution of Valuers F – 13622' },
-  branch: { type: String, default: '1. State Bank of India (SBI) - RACPC Branch, Kadapa' },
+  phone: { type: String, default: '' },
+  licenseNo: { type: String, default: '' },
+  branch: { type: String, default: '' },
   status: { type: String, default: 'Active' },
   createdAt: { type: String, default: () => new Date().toLocaleDateString('en-IN') },
   // WebAuthn Passkey Credentials
@@ -19,7 +19,12 @@ const userSchema = new mongoose.Schema({
     transports: { type: [String], default: [] }
   }],
   // Challenge used during WebAuthn registration/authentication
-  currentChallenge: { type: String }
+  currentChallenge: { type: String },
+  // Biometric Facial Recognition Profile
+  faceDescriptor: { type: [Number], default: [] },
+  faceEnrolled: { type: Boolean, default: false },
+  facePhotoUrl: { type: String, default: '' },
+  faceEnrolledAt: { type: Date }
 });
 
 module.exports = mongoose.model('User', userSchema);

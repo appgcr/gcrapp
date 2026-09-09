@@ -29,8 +29,8 @@ export default function SettingsView({ currentUser, handleLogout }) {
       name: currentUser?.name || currentUser?.username || 'Unknown User',
       phone: currentUser?.phone || 'Not Set',
       email: currentUser?.email || 'Not Set',
-      address: '124 Maple Street, Mumbai',
-      bio: 'Senior Valuation Engineer at GCR Panel.'
+      address: 'Kadapa, Y.S.R District, Andhra Pradesh',
+      bio: 'Technical Valuation Engineer at GCR Panel.'
     };
   });
 
@@ -160,7 +160,7 @@ export default function SettingsView({ currentUser, handleLogout }) {
         </div>
         <h2 style={{ fontSize: '20px', fontWeight: '700', margin: '0 0 4px 0' }}>{profileData.name}</h2>
         <p className="text-muted" style={{ fontSize: '14px', margin: 0 }}>
-          {currentUser?.role === 'SUPER_ADMIN' ? 'Administrator' : 'Field Engineer'} • ID: ENG-001
+          {currentUser?.role === 'SUPER_ADMIN' ? 'Administrator' : 'Field Engineer'} • ID: {currentUser?.id || 'ENG-001'}
         </p>
       </div>
 

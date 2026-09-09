@@ -29,9 +29,9 @@ router.post('/', async (req, res) => {
       password,
       name,
       role: role || 'ENGINEER',
-      phone: phone || '9440164412',
-      licenseNo: licenseNo || 'Indian Institution of Valuers F – ',
-      branch: branch || '1. State Bank of India (SBI) - RACPC Branch, Kadapa'
+      phone: phone || '',
+      licenseNo: licenseNo || '',
+      branch: branch || ''
     });
 
     const saved = await newUser.save();
@@ -66,6 +66,49 @@ router.put('/:username', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
     res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/users/:idOrUsername/face-enroll
+router.post('/:idOrUsername/face-enroll', async (req, res) => {
+  try {
+    const { idOrUsername } = req.params;
+    const { faceDescriptor, facePhotoUrl } = req.body;
+
+    if (!faceDescriptor || !Array.isArray(faceDescriptor) || faceDescriptor.length === 0) {
+      return res.status(400).json({ error: 'Valid faceDescriptor array is required' });
+    }
+
+    const updated = await User.findOneAndUpdate(
+      { $or: [{ id: idOrUsername }, { username: idOrUsername }] },
+      {
+        $set: {
+          faceDescriptor,
+          facePhotoUrl: facePhotoUrl || '',
+          faceEnrolled: true,
+          faceEnrolledAt: new Date()
+        }
+      },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Face profile successfully enrolled!',
+      user: {
+        id: updated.id,
+        username: updated.username,
+        name: updated.name,
+        faceEnrolled: updated.faceEnrolled,
+        faceEnrolledAt: updated.faceEnrolledAt
+      }
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

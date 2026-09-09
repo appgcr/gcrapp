@@ -30,7 +30,7 @@ export default function AdminSettings({ currentUser, handleLogout }) {
 // ... Inside AdminSettings component, add handleRegisterBiometrics:
   const handleRegisterBiometrics = async () => {
     try {
-      const resp = await fetch('http://localhost:5001/api/auth/webauthn/register-options', {
+      const resp = await fetch('https://gcr-9ys1.onrender.com/api/auth/webauthn/register-options', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: currentUser.id })
@@ -42,7 +42,7 @@ export default function AdminSettings({ currentUser, handleLogout }) {
       // Start WebAuthn Registration
       const attResp = await startRegistration(options);
 
-      const verifyResp = await fetch('http://localhost:5001/api/auth/webauthn/register-verify', {
+      const verifyResp = await fetch('https://gcr-9ys1.onrender.com/api/auth/webauthn/register-verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: currentUser.id, response: attResp })

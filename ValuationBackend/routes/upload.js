@@ -45,7 +45,9 @@ router.post('/', async (req, res) => {
     // Save file
     fs.writeFileSync(filepath, base64Data, 'base64');
     
-    const localUrl = `http://localhost:5001/uploads/${filename}`;
+    const host = req.get('host') || 'localhost:5001';
+    const protocol = req.protocol || 'http';
+    const localUrl = `${protocol}://${host}/uploads/${filename}`;
     console.log(`✅ Local Upload Success: ${localUrl}`);
 
     res.status(200).json({

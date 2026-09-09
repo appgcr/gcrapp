@@ -19,6 +19,7 @@
     "@capacitor/local-notifications": "^8.3.1",
     "@capgo/capacitor-native-biometric": "^8.6.7",
     "@simplewebauthn/browser": "^13.3.0",
+    "@vladmandic/face-api": "^1.7.15",
     "canvas-confetti": "^1.9.4",
     "crypto-js": "^4.2.0",
     "docx": "^9.7.1",

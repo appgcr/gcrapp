@@ -6,7 +6,7 @@ const valuationCaseSchema = new mongoose.Schema({
   clientFatherName: { type: String, default: '' },
   bankName: { type: String, required: true },
   bankBranch: { type: String, default: '' },
-  bankDistrict: { type: String, default: 'Y.S.R' },
+  bankDistrict: { type: String, default: '' },
   
   // New task assignment fields
   clientPhone: { type: String, default: '' },
@@ -23,6 +23,9 @@ const valuationCaseSchema = new mongoose.Schema({
     surveyNo: String,
     plotNo: String,
     khathaNo: String,
+    assessmentNo: String,
+    doorNo: String,
+    marketValueAmount: String,
     approvalPlanNo: String,
     approvalPlanDate: String,
     
@@ -57,7 +60,7 @@ const valuationCaseSchema = new mongoose.Schema({
 
   locationData: { type: String, default: '' },
   
-  status: { type: String, enum: ['Pending', 'Approved', 'Rejected'], default: 'Pending' },
+  status: { type: String, enum: ['Pending', 'Reviewing', 'Approved', 'Rejected'], default: 'Pending' },
   assignedEngineerId: { type: String, default: 'UNASSIGNED' },
   assignedEngineerName: { type: String, default: 'Unknown' },
   rejectionReason: { type: String, default: '' },

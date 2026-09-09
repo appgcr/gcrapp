@@ -3,8 +3,9 @@ import { Search, MapPin, FileText, Home, CheckCircle2, ChevronRight, MessageSqua
 import toast from 'react-hot-toast';
 import LiveTrackingMap from './LiveTrackingMap';
 import { generateDocxReport } from '../../utils/docxGenerator';
+import { API_BASE_URL } from '../../config/api';
 
-const INDIAN_BANKS = [
+const FALLBACK_BANKS = [
   "State Bank of India (SBI)", "Punjab National Bank (PNB)", "Bank of Baroda", 
   "Canara Bank", "Union Bank of India", "Bank of India", "Indian Bank", 
   "Central Bank of India", "Indian Overseas Bank", "UCO Bank", "Bank of Maharashtra", 
@@ -21,6 +22,11 @@ export default function AdminCases({ defaultFilter = '' }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [trackingCaseId, setTrackingCaseId] = useState(null);
+  const [availableBanks, setAvailableBanks] = useState(() => {
+    const saved = localStorage.getItem('gcr_valuation_custom_banks') || localStorage.getItem('custom_banks');
+    const custom = saved ? JSON.parse(saved) : [];
+    return Array.from(new Set([...custom, ...FALLBACK_BANKS]));
+  });
   
   // New Task Form State
   const [newTask, setNewTask] = useState({
@@ -40,7 +46,7 @@ export default function AdminCases({ defaultFilter = '' }) {
   const [addressSuggestions, setAddressSuggestions] = useState([]);
   const [showAddressDropdown, setShowAddressDropdown] = useState(false);
   const [recentAddresses, setRecentAddresses] = useState(() => {
-    const saved = localStorage.getItem('sbi_valuation_recent_addresses');
+    const saved = localStorage.getItem('gcr_valuation_recent_addresses') || localStorage.getItem('sbi_valuation_recent_addresses');
     return saved ? JSON.parse(saved) : [];
   });
   
@@ -51,26 +57,35 @@ export default function AdminCases({ defaultFilter = '' }) {
     recents.unshift(addr);
     if (recents.length > 5) recents = recents.slice(0, 5);
     setRecentAddresses(recents);
-    localStorage.setItem('sbi_valuation_recent_addresses', JSON.stringify(recents));
+    localStorage.setItem('gcr_valuation_recent_addresses', JSON.stringify(recents));
+  };
+
+  const handleSaveCustomBank = async (bankName) => {
+    if (!bankName || !bankName.trim()) return;
+    const trimmed = bankName.trim();
+    try {
+      await fetch(`${API_BASE_URL}/api/config/banks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bank: trimmed })
+      });
+    } catch (_) {}
+    const saved = localStorage.getItem('gcr_valuation_custom_banks');
+    const custom = saved ? JSON.parse(saved) : [];
+    if (!custom.includes(trimmed)) {
+      const updated = [...custom, trimmed];
+      localStorage.setItem('gcr_valuation_custom_banks', JSON.stringify(updated));
+      setAvailableBanks(prev => Array.from(new Set([...prev, trimmed])));
+    }
   };
   
   useEffect(() => {
     if (newTask.address.length > 0 && showAddressDropdown) {
       const timeoutId = setTimeout(() => {
-        // Use viewbox to prefer results near Kadapa/Andhra Pradesh (Long,Lat)
-        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(newTask.address)}&countrycodes=in&viewbox=78.0,15.5,79.5,13.8&bounded=0&limit=8`)
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(newTask.address)}&countrycodes=in&limit=6`)
           .then(res => res.json())
           .then(data => {
-            // Client-side prioritization for Kadapa/YSR District
-            const sortedData = data.sort((a, b) => {
-              const aIsLocal = a.display_name.toLowerCase().includes('kadapa') || a.display_name.toLowerCase().includes('ysr');
-              const bIsLocal = b.display_name.toLowerCase().includes('kadapa') || b.display_name.toLowerCase().includes('ysr');
-              if (aIsLocal && !bIsLocal) return -1;
-              if (!aIsLocal && bIsLocal) return 1;
-              return 0;
-            }).slice(0, 5); // keep top 5
-            
-            setAddressSuggestions(sortedData);
+            setAddressSuggestions(Array.isArray(data) ? data.slice(0, 5) : []);
           })
           .catch(err => console.error(err));
       }, 500);
@@ -83,16 +98,28 @@ export default function AdminCases({ defaultFilter = '' }) {
   const [selectedStaffForReview, setSelectedStaffForReview] = useState('');
   const [selectedStaffForCompleted, setSelectedStaffForCompleted] = useState('');
   
+  const [systemConfig, setSystemConfig] = useState(null);
   const [assignments, setAssignments] = useState({});
   const [processingId, setProcessingId] = useState(null);
 
   const fetchData = () => {
     Promise.all([
-      fetch('https://gcr-9ys1.onrender.com/api/cases').then(res => res.json()),
-      fetch('https://gcr-9ys1.onrender.com/api/users').then(res => res.json())
-    ]).then(([casesData, usersData]) => {
-      setCases(casesData);
-      setUsers(usersData.filter(u => u.role === 'ENGINEER'));
+      fetch(`${API_BASE_URL}/api/cases`).then(res => res.json()),
+      fetch(`${API_BASE_URL}/api/users`).then(res => res.json()),
+      fetch(`${API_BASE_URL}/api/config`).then(res => res.json()).catch(() => null)
+    ]).then(([casesData, usersData, configData]) => {
+      if (configData) setSystemConfig(configData);
+      const casesArr = Array.isArray(casesData) ? casesData : [];
+      setCases(casesArr);
+      setUsers(Array.isArray(usersData) ? usersData.filter(u => u.role === 'ENGINEER') : []);
+
+      const dbBanks = configData?.banks || [];
+      const caseBanks = casesArr.map(c => c.bankName).filter(Boolean);
+      const saved = localStorage.getItem('gcr_valuation_custom_banks');
+      const custom = saved ? JSON.parse(saved) : [];
+      const merged = Array.from(new Set([...dbBanks, ...caseBanks, ...custom, ...FALLBACK_BANKS]));
+      setAvailableBanks(merged);
+
       setLoading(false);
     }).catch(err => {
       console.error(err);
@@ -126,7 +153,7 @@ export default function AdminCases({ defaultFilter = '' }) {
 
     try {
       // 1. Assign Task
-      await fetch(`https://gcr-9ys1.onrender.com/api/cases/${caseId}`, {
+      await fetch(`${API_BASE_URL}/api/cases/${caseId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -137,7 +164,7 @@ export default function AdminCases({ defaultFilter = '' }) {
       });
 
       // 2. Send Notification to Staff
-      await fetch('https://gcr-9ys1.onrender.com/api/notifications', {
+      await fetch(`${API_BASE_URL}/api/notifications`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -147,6 +174,7 @@ export default function AdminCases({ defaultFilter = '' }) {
         })
       });
 
+      toast.success(`Assigned to ${engineer.name}!`);
       fetchData();
     } catch (err) {
       console.error(err);
@@ -156,37 +184,40 @@ export default function AdminCases({ defaultFilter = '' }) {
     }
   };
 
-  const handleCreateNewTask = async (e) => {
+  const handleCreateOrUpdateTask = async (e) => {
     e.preventDefault();
-    if (!newTask.id && !newTask.assignedStaffId) return toast.error("Please select a staff member");
-
-    setProcessingId('creating');
-    const engineer = users.find(u => u.id === newTask.assignedStaffId);
-    
-    let payload = {
-      clientName: newTask.borrowerName,  // Matches ValuationCase schema
-      bankName: newTask.bankName || 'Unknown Bank',
-      borrowerName: newTask.borrowerName,
-      clientPhone: newTask.mobileNumber,
-      note: newTask.note,
-      locationData: newTask.address,
-      inspectionDate: newTask.date,
-      inspectionTime: newTask.time
-    };
-
-    if (engineer) {
-      payload.assignedEngineerId = engineer.id;
-      payload.assignedEngineerName = engineer.name;
-      payload.status = 'Pending';
+    if (!newTask.borrowerName || !newTask.bankName || !newTask.mobileNumber || !newTask.address) {
+      toast.error("Please fill all required fields marked with *");
+      return;
     }
 
+    setProcessingId('creating');
     try {
+      const engineer = users.find(u => u.id === newTask.assignedStaffId);
+      
+      const payload = {
+        clientName: newTask.borrowerName,
+        bankName: newTask.bankName,
+        clientPhone: newTask.mobileNumber,
+        note: newTask.note,
+        locationData: newTask.address,
+        address: newTask.address,
+        inspectionDate: newTask.date,
+        inspectionTime: newTask.time
+      };
+
+      if (engineer) {
+        payload.assignedEngineerId = engineer.id;
+        payload.assignedEngineerName = engineer.name;
+        payload.status = 'Pending';
+      }
+
       let res;
       let createdCase;
 
       if (newTask.id) {
         // Update existing case
-        res = await fetch(`https://gcr-9ys1.onrender.com/api/cases/${newTask.id}`, {
+        res = await fetch(`${API_BASE_URL}/api/cases/${newTask.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -194,7 +225,7 @@ export default function AdminCases({ defaultFilter = '' }) {
         createdCase = await res.json();
       } else {
         // Create new case
-        res = await fetch('https://gcr-9ys1.onrender.com/api/cases', {
+        res = await fetch(`${API_BASE_URL}/api/cases`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -208,7 +239,7 @@ export default function AdminCases({ defaultFilter = '' }) {
 
       // Send Notification to Staff ONLY if newly assigned
       if (engineer) {
-        await fetch('https://gcr-9ys1.onrender.com/api/notifications', {
+        await fetch(`${API_BASE_URL}/api/notifications`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -224,6 +255,7 @@ export default function AdminCases({ defaultFilter = '' }) {
       setNewTask({ id: null, borrowerName: '', bankName: '', mobileNumber: '', note: '', assignedStaffId: '', address: '', date: '', time: '' });
       setIsCreateFormOpen(false); // Close form on success
       fetchData();
+      handleSaveCustomBank(newTask.bankName);
     } catch (err) {
       console.error(err);
       toast.error(err.message || "Failed to save task.");
@@ -236,14 +268,14 @@ export default function AdminCases({ defaultFilter = '' }) {
     setProcessingId(caseId);
     try {
       // 1. Mark Completed
-      await fetch(`https://gcr-9ys1.onrender.com/api/cases/${caseId}`, {
+      await fetch(`${API_BASE_URL}/api/cases/${caseId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'Approved' })
       });
 
       // 2. Notify Staff
-      await fetch('https://gcr-9ys1.onrender.com/api/notifications', {
+      await fetch(`${API_BASE_URL}/api/notifications`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -273,7 +305,7 @@ export default function AdminCases({ defaultFilter = '' }) {
     );
   });
 
-  const filteredBanks = INDIAN_BANKS.filter(b => b.toLowerCase().includes(newTask.bankName.toLowerCase()));
+  const filteredBanks = availableBanks.filter(b => b.toLowerCase().includes(newTask.bankName.toLowerCase()));
 
   const newTasks = filteredCases.filter(c => 
     c.status !== 'Approved' && (!c.assignedEngineerId || c.assignedEngineerId === 'UNASSIGNED')
@@ -415,7 +447,10 @@ export default function AdminCases({ defaultFilter = '' }) {
 
                       {newTask.bankName.trim() !== '' && !filteredBanks.some(b => b.toLowerCase() === newTask.bankName.toLowerCase()) && (
                         <div 
-                          onClick={() => setShowBankDropdown(false)}
+                          onClick={() => {
+                            handleSaveCustomBank(newTask.bankName);
+                            setShowBankDropdown(false);
+                          }}
                           onMouseDown={(e) => e.preventDefault()}
                           style={{ 
                             margin: '8px', padding: '10px', fontSize: '13px', color: '#0346c8', 
@@ -823,7 +858,7 @@ export default function AdminCases({ defaultFilter = '' }) {
                       </div>
                       <button 
                         className="admin-btn-outline"
-                        onClick={() => generateDocxReport(c)}
+                        onClick={() => generateDocxReport(c, systemConfig)}
                       >
                         Download Final Report
                       </button>

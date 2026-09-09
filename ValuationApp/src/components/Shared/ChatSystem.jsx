@@ -31,15 +31,6 @@ export default function ChatSystem({ currentUser, otherUserId, caseId, onBack, i
     return () => clearTimeout(handler);
   }, [chatSearchQuery]);
   
-  const mockContacts = [
-    { id: 1, name: 'Chanikya', phone: '+91 98765 43210' },
-    { id: 2, name: 'John Doe', phone: '+91 91234 56789' },
-    { id: 3, name: 'Alice Smith', phone: '+91 99887 76655' },
-    { id: 4, name: 'Bob Johnson', phone: '+91 98761 23456' },
-    { id: 5, name: 'Emma Wilson', phone: '+91 91234 11223' },
-    { id: 6, name: 'Michael Brown', phone: '+91 99887 33445' },
-  ];
-  
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -297,8 +288,21 @@ export default function ChatSystem({ currentUser, otherUserId, caseId, onBack, i
       }
     }
     
-    // Fallback for Web Testing (Localhost)
-    setContactList(mockContacts);
+    // Load real registered team members as contacts
+    try {
+      const res = await fetch('https://gcr-9ys1.onrender.com/api/users');
+      if (res.ok) {
+        const users = await res.json();
+        const teamContacts = users
+          .filter(u => u.id !== myId)
+          .map(u => ({ id: u.id, name: u.name || u.username, phone: u.phone || 'N/A' }));
+        setContactList(teamContacts);
+      } else {
+        setContactList([]);
+      }
+    } catch (err) {
+      setContactList([]);
+    }
     setShowContactModal(true);
   };
 

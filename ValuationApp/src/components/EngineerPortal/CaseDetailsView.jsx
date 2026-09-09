@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, CheckCircle2, CloudUpload, Loader2, FileText, MapPin, Building, Phone, Calendar, Clock, StickyNote, MessageCircle, Navigation, Map, MessageSquare } from 'lucide-react';
+import { Camera, CheckCircle2, CloudUpload, Loader2, FileText, MapPin, Building, Phone, Calendar, Clock, StickyNote, MessageCircle, Navigation, Map, MessageSquare, Eye, X, HardDrive } from 'lucide-react';
 import toast from 'react-hot-toast';
 import ChatSystem from '../Shared/ChatSystem';
+import { API_BASE_URL } from '../../config/api';
 
 const REQUIRED_DOCS = [
   { id: 'saleDeed', label: '1. Registered Document / Sale Deed' },
-  { id: 'buildingPlan', label: '2. Approved Building Plan' },
-  { id: 'propertyTax', label: '3. Property Tax Assessment' },
-  { id: 'marketValue', label: '4. Market Value Document' },
-  { id: 'layoutPlan', label: '5. Layout / Approval Plan' },
+  { id: 'buildingPlan', label: '2. Approved Building Plan / Permit Order' },
+  { id: 'propertyTax', label: '3. Property Tax Assessment / Receipt' },
+  { id: 'marketValue', label: '4. Market Value / Guideline Certificate' },
+  { id: 'layoutPlan', label: '5. Layout / Approval Plan (Site & Architectural Drawings)' },
 ];
 
 export default function CaseDetailsView({ caseId }) {
@@ -17,7 +18,16 @@ export default function CaseDetailsView({ caseId }) {
   const [isStarted, setIsStarted] = useState(false);
   const [isTracking, setIsTracking] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState(null);
   const watchIdRef = useRef(null);
+
+  const formatFileSize = (bytes) => {
+    if (!bytes || bytes <= 0) return '';
+    const k = 1024;
+    if (bytes < k) return `${bytes} B`;
+    if (bytes < k * k) return `${(bytes / k).toFixed(1)} KB`;
+    return `${(bytes / (k * k)).toFixed(2)} MB`;
+  };
 
   useEffect(() => {
     return () => {
@@ -34,12 +44,12 @@ export default function CaseDetailsView({ caseId }) {
         watchIdRef.current = null;
       }
       setIsTracking(false);
-      fetch(`https://gcr-9ys1.onrender.com/api/cases/${caseId}/track`, {
+      fetch(`${API_BASE_URL}/api/cases/${caseId}/track`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'inactive' })
       });
-      toast.success('Trip Ended. Location tracking stopped.');
+      toast('Trip Paused', { icon: '⏸️' });
       return;
     }
 
@@ -48,7 +58,7 @@ export default function CaseDetailsView({ caseId }) {
       return;
     }
 
-    fetch('https://gcr-9ys1.onrender.com/api/notifications', {
+    fetch(`${API_BASE_URL}/api/notifications`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -59,7 +69,7 @@ export default function CaseDetailsView({ caseId }) {
       })
     });
     
-    fetch(`https://gcr-9ys1.onrender.com/api/cases/${caseId}/track`, {
+    fetch(`${API_BASE_URL}/api/cases/${caseId}/track`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'active' })
@@ -70,7 +80,7 @@ export default function CaseDetailsView({ caseId }) {
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       (position) => {
-        fetch(`https://gcr-9ys1.onrender.com/api/cases/${caseId}/track`, {
+        fetch(`${API_BASE_URL}/api/cases/${caseId}/track`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -84,29 +94,10 @@ export default function CaseDetailsView({ caseId }) {
     );
   };
 
-  const getDocumentPreviewUrl = (docName) => {
-    const name = docName.toLowerCase();
-    if (name.includes('deed') || name.includes('sale')) return '/mock_docs/sale_deed.png';
-    if (name.includes('plan') && !name.includes('layout')) return '/mock_docs/building_plan.png';
-    if (name.includes('tax')) return '/mock_docs/property_tax.png';
-    if (name.includes('market')) return '/mock_docs/market_value.png';
-    if (name.includes('layout')) return '/mock_docs/layout_plan.png';
-    return '/mock_docs/sale_deed.png'; // fallback generic document
-  };
-
   useEffect(() => {
-    fetch(`https://gcr-9ys1.onrender.com/api/cases/${caseId}`)
+    fetch(`${API_BASE_URL}/api/cases/${caseId}`)
       .then(res => res.json())
       .then(data => {
-        if (!data.documents || Object.keys(data.documents).length === 0) {
-          data.documents = {
-             saleDeed: [{ name: 'Sale Deed.pdf', isPdf: true }],
-             buildingPlan: [{ name: 'House plan.pdf', isPdf: true }],
-             propertyTax: [{ name: 'Screenshot 2026-08-01 170942.png', isPdf: false }],
-             marketValue: [{ name: 'Screenshot 2026-07-29 174026.png', isPdf: false }],
-             layoutPlan: [{ name: 'Screenshot 2026-07-29 174022.png', isPdf: false }]
-          };
-        }
         setCaseData(data);
         setLoading(false);
       })
@@ -374,6 +365,63 @@ export default function CaseDetailsView({ caseId }) {
               </div>
             </div>
 
+            {/* Legal & Registration Details */}
+            {(propertyDetails.deedNo || propertyDetails.surveyNo || propertyDetails.assessmentNo || propertyDetails.approvalPlanNo || propertyDetails.khathaNo) && (
+              <div style={{ padding: '16px', borderTop: '1px solid var(--border-color)' }}>
+                <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0 0 12px 0' }}>Legal & Registration</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  {propertyDetails.deedNo && (
+                    <div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Deed Number</div>
+                      <div style={{ fontSize: '13px', fontWeight: '500' }}>{propertyDetails.deedNo} {propertyDetails.deedYear ? `(${propertyDetails.deedYear})` : ''}</div>
+                    </div>
+                  )}
+                  {propertyDetails.netExtent && (
+                    <div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Net Extent</div>
+                      <div style={{ fontSize: '13px', fontWeight: '500' }}>{propertyDetails.netExtent}</div>
+                    </div>
+                  )}
+                  {propertyDetails.surveyNo && (
+                    <div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Survey Number</div>
+                      <div style={{ fontSize: '13px', fontWeight: '500' }}>{propertyDetails.surveyNo}</div>
+                    </div>
+                  )}
+                  {propertyDetails.plotNo && (
+                    <div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Plot Number</div>
+                      <div style={{ fontSize: '13px', fontWeight: '500' }}>{propertyDetails.plotNo}</div>
+                    </div>
+                  )}
+                  {propertyDetails.assessmentNo && (
+                    <div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Property Tax / Assessment No.</div>
+                      <div style={{ fontSize: '13px', fontWeight: '600', color: '#0346c8' }}>{propertyDetails.assessmentNo}</div>
+                    </div>
+                  )}
+                  {propertyDetails.doorNo && (
+                    <div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Door / House Number</div>
+                      <div style={{ fontSize: '13px', fontWeight: '500' }}>{propertyDetails.doorNo}</div>
+                    </div>
+                  )}
+                  {propertyDetails.khathaNo && (
+                    <div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Khatha Number</div>
+                      <div style={{ fontSize: '13px', fontWeight: '500' }}>{propertyDetails.khathaNo}</div>
+                    </div>
+                  )}
+                  {propertyDetails.approvalPlanNo && (
+                    <div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Building Permit / Approval No.</div>
+                      <div style={{ fontSize: '13px', fontWeight: '600', color: '#065f46' }}>{propertyDetails.approvalPlanNo}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div style={{ padding: '16px', borderTop: '1px solid var(--border-color)', backgroundColor: '#f8fafc' }}>
               <h4 style={{ fontSize: '14px', fontWeight: '600', margin: '0 0 12px 0' }}>Boundaries (Document vs Actual)</h4>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
@@ -485,47 +533,81 @@ export default function CaseDetailsView({ caseId }) {
                 </div>
                 
                 {isUploaded && (
-                  <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-color)', display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '4px' }}>
-                    {uploadedPages.map((page, idx) => (
-                      <div key={idx} style={{ 
-                        flexShrink: 0,
-                        width: '90px', 
-                        height: '110px', 
-                        backgroundColor: '#fff',
-                        border: '1px solid var(--border-color)', 
-                        borderRadius: '8px', 
-                        display: 'flex', 
-                        flexDirection: 'column', 
-                        overflow: 'hidden',
-                        position: 'relative',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
-                      }}>
-                        {/* Thumbnail Image Area */}
-                        <div style={{ 
-                          flex: 1, 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          justifyContent: 'center', 
-                          backgroundColor: '#e2e8f0',
-                          backgroundImage: `url(${getDocumentPreviewUrl(page.name)})`,
-                          backgroundSize: 'cover',
-                          backgroundPosition: 'center'
-                        }}>
+                  <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {uploadedPages.map((page, idx) => {
+                      const ext = (page.extension || (page.name && page.name.includes('.') ? page.name.split('.').pop() : (page.isPdf ? 'PDF' : 'JPG'))).toUpperCase();
+                      const size = page.sizeFormatted || (page.size ? formatFileSize(page.size) : '');
+                      return (
+                        <div 
+                          key={idx}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '8px 12px',
+                            backgroundColor: '#ffffff',
+                            borderRadius: '8px',
+                            border: '1px solid #e2e8f0',
+                            gap: '10px'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+                            <span style={{
+                              backgroundColor: page.isPdf || ext === 'PDF' ? '#fee2e2' : '#e0e7ff',
+                              color: page.isPdf || ext === 'PDF' ? '#dc2626' : '#4338ca',
+                              fontWeight: '700',
+                              fontSize: '10px',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              letterSpacing: '0.5px'
+                            }}>
+                              {ext}
+                            </span>
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div style={{ fontSize: '13px', fontWeight: '600', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={page.name}>
+                                {page.name || `Document Page ${idx + 1}`}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                                {size && (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                    <HardDrive size={10} /> {size}
+                                  </span>
+                                )}
+                                {page.uploadedAt && (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                    <Clock size={10} /> {page.uploadedAt}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                            {page.url && (
+                              <button
+                                type="button"
+                                onClick={() => setPreviewDoc(page)}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '4px 8px',
+                                  borderRadius: '6px',
+                                  border: '1px solid #cbd5e1',
+                                  backgroundColor: '#f8fafc',
+                                  color: '#0284c7',
+                                  fontSize: '11px',
+                                  fontWeight: '600',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <Eye size={12} /> View
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        
-                        {/* Label Area */}
-                        <div style={{ height: '36px', backgroundColor: 'white', borderTop: '1px solid var(--border-color)', padding: '4px 6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <span style={{ fontSize: '9px', fontWeight: '600', color: 'var(--text-secondary)', textAlign: 'center', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: '1.2', wordBreak: 'break-word' }}>
-                            {page.name}
-                          </span>
-                        </div>
-                        
-                        {/* Small Badge */}
-                        <div style={{ position: 'absolute', top: '4px', right: '4px', backgroundColor: page.isPdf ? '#ef4444' : '#3b82f6', color: 'white', fontSize: '8px', fontWeight: '800', padding: '2px 4px', borderRadius: '4px', letterSpacing: '0.5px' }}>
-                          {page.isPdf ? 'PDF' : 'IMG'}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -534,6 +616,33 @@ export default function CaseDetailsView({ caseId }) {
         </div>
       </div>
         </>
+      )}
+
+      {/* Preview Modal in CaseDetailsView */}
+      {previewDoc && (
+        <div style={{
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 10000,
+          display: 'flex', flexDirection: 'column', padding: '16px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#fff', marginBottom: '12px' }}>
+            <span style={{ fontWeight: '600', fontSize: '14px', maxWidth: '80%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {previewDoc.name}
+            </span>
+            <button 
+              onClick={() => setPreviewDoc(null)} 
+              style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', cursor: 'pointer', padding: '6px', borderRadius: '6px' }}
+            >
+              <X size={20} />
+            </button>
+          </div>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+            {previewDoc.isPdf ? (
+              <iframe src={previewDoc.url} title={previewDoc.name} style={{ width: '100%', height: '100%', border: 'none', borderRadius: '8px' }} />
+            ) : (
+              <img src={previewDoc.url} alt={previewDoc.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '8px' }} />
+            )}
+          </div>
+        </div>
       )}
 
       {isStarted && signatureDataUrl && (
@@ -551,9 +660,9 @@ export default function CaseDetailsView({ caseId }) {
           <button className="btn-secondary" style={{ flex: 1, backgroundColor: '#f1f5f9', border: '1px solid var(--border-color)' }} onClick={() => window.print()}>
             <FileText size={20} /> Export PDF
           </button>
-          <a href={`https://gcr-9ys1.onrender.com/api/cases/${caseId}/report`} download style={{ flex: 1, textDecoration: 'none' }}>
+          <a href={`${API_BASE_URL}/api/cases/${caseId}/report`} download style={{ flex: 1, textDecoration: 'none' }}>
             <button className="btn-primary" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px', border: 'none', borderRadius: '8px', backgroundColor: 'var(--primary)', color: '#fff', fontWeight: '600' }}>
-              <FileText size={20} /> SBI Report (.docx)
+              <FileText size={20} /> {caseData?.bankName ? `${caseData.bankName} Report (.docx)` : 'Final Report (.docx)'}
             </button>
           </a>
         </div>

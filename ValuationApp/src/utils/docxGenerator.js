@@ -1,15 +1,22 @@
 import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle, UnderlineType } from "docx";
 import { saveAs } from "file-saver";
 
-export const generateDocxReport = async (caseData) => {
+export const generateDocxReport = async (caseData, configData = {}) => {
   const { 
-    clientName, 
-    clientFatherName, 
-    bankName, 
-    bankBranch, 
-    bankDistrict,
+    clientName = 'Client', 
+    clientFatherName = '', 
+    bankName = '', 
+    bankBranch = '', 
+    bankDistrict = '',
+    assignedEngineerName = '',
     propertyDetails = {}
   } = caseData;
+
+  const valuer = configData.valuerProfile || {};
+  const valuerName = assignedEngineerName || valuer.name || "Approved Panel Valuer";
+  const valuerDesignation = valuer.designation || "Civil Engineering Consultant & Approved Panel Valuer";
+  const valuerAddress = valuer.address || [bankDistrict, valuer.district, valuer.state].filter(Boolean).join(', ');
+  const placeText = bankDistrict || valuer.district || "Head Office";
 
   const {
     propertyType = '',
@@ -39,22 +46,23 @@ export const generateDocxReport = async (caseData) => {
         new Paragraph({
           alignment: AlignmentType.CENTER,
           children: [
-            new TextRun({ text: "Sri Gouru. Neelakanta Reddy, ", bold: true, size: 24 }),
-            new TextRun({ text: "B.Tech ., MISTE.", size: 24 })
+            new TextRun({ text: valuerName, bold: true, size: 24 }),
           ]
         }),
         new Paragraph({
           alignment: AlignmentType.CENTER,
           children: [
-            new TextRun({ text: "Civil Engineering Consultant & Approved Panel Valuer", size: 22 })
+            new TextRun({ text: valuerDesignation, size: 22 })
           ]
         }),
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          children: [
-            new TextRun({ text: "Door No:- 21/659, Beside L.G Show Room, 7 Roads, Kadapa, Y.S.R (Dist)", size: 20 })
-          ]
-        }),
+        ...(valuerAddress ? [
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [
+              new TextRun({ text: valuerAddress, size: 20 })
+            ]
+          })
+        ] : []),
         new Paragraph({ text: "", spacing: { after: 200 } }), // blank line
         
         // TITLE
@@ -71,9 +79,17 @@ export const generateDocxReport = async (caseData) => {
         new Paragraph({
           alignment: AlignmentType.CENTER,
           children: [
-            new TextRun({ text: (bankName || "ANDHRA PRADESH GRAMEENA BANK").toUpperCase(), bold: true, size: 28 })
+            new TextRun({ text: (bankName || "BANK VALUATION REPORT").toUpperCase(), bold: true, size: 28 })
           ]
         }),
+        ...(bankBranch || bankDistrict ? [
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [
+              new TextRun({ text: [bankBranch ? `${bankBranch} Branch` : '', bankDistrict].filter(Boolean).join(', '), size: 22 })
+            ]
+          })
+        ] : []),
         new Paragraph({
           alignment: AlignmentType.CENTER,
           children: [
@@ -169,18 +185,18 @@ export const generateDocxReport = async (caseData) => {
         new Paragraph({ text: "", spacing: { after: 600 } }),
         new Paragraph({
           children: [
-            new TextRun({ text: "Place : Kadapa", size: 24 })
+            new TextRun({ text: `Place : ${placeText}`, size: 24 })
           ]
         }),
         new Paragraph({
           children: [
-            new TextRun({ text: `Date  : ${new Date().toLocaleDateString()}`, size: 24 })
+            new TextRun({ text: `Date  : ${new Date().toLocaleDateString('en-IN')}`, size: 24 })
           ]
         }),
         new Paragraph({
           alignment: AlignmentType.RIGHT,
           children: [
-            new TextRun({ text: "Signature (Name and Official seal of the Approved Valuer)", bold: true, size: 24 })
+            new TextRun({ text: `Signature (${valuerName} - Official Seal of Approved Valuer)`, bold: true, size: 24 })
           ]
         })
       ]
@@ -188,7 +204,9 @@ export const generateDocxReport = async (caseData) => {
   });
 
   const blob = await Packer.toBlob(doc);
-  saveAs(blob, `${clientName.replace(/\s+/g, '_')}_Valuation_Report.docx`);
+  const safeClient = (clientName || 'Valuation').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const safeBank = (bankName || 'Bank').replace(/[^a-zA-Z0-9_-]/g, '_');
+  saveAs(blob, `${safeClient}_${safeBank}_Valuation_Report.docx`);
 };
 
 // Helper for aligning text columns

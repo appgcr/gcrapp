@@ -419,6 +419,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
 }
 
@@ -1077,6 +1078,7 @@
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.7);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   display: flex;
   align-items: center;

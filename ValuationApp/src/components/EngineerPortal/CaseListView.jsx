@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, FileText, MapPin, Search, ChevronRight, ChevronDown, X, UploadCloud, Camera, User, Loader2, CheckCircle2, Building, ScanLine, AlertCircle, ShieldAlert, ShieldCheck, PenTool, CheckSquare } from 'lucide-react';
+import { Plus, FileText, MapPin, Search, ChevronRight, ChevronLeft, ChevronDown, X, UploadCloud, Camera, User, Loader2, CheckCircle2, Building, ScanLine, AlertCircle, ShieldAlert, ShieldCheck, PenTool, CheckSquare, Eye, Trash2, Clock, HardDrive } from 'lucide-react';
 import SignatureCanvas from 'react-signature-canvas';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
@@ -7,10 +7,17 @@ import 'react-pdf/dist/Page/TextLayer.css';
 import localforage from 'localforage';
 import toast, { Toaster } from 'react-hot-toast';
 import Tesseract from 'tesseract.js';
+import { API_BASE_URL } from '../../config/api';
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
-const INDIAN_BANKS = [
+const FALLBACK_PROPERTY_TYPES = ['Apartment', 'Independent House', 'Open Agriculture Land', 'Open Site'];
+const FALLBACK_PLOT_TYPES = ['Corner plot', 'Intermediary plot'];
+const FALLBACK_ROAD_TYPES = ['CC Road', 'BT', 'Metal', 'Gravel Road', 'Tar Road'];
+const FALLBACK_STRUCTURE_TYPES = ['Load bearing', 'Framed structure', 'Steel Structure'];
+const FALLBACK_FLOORING_TYPES = ['Granite', 'Tiles', 'Marble', 'Mosaic', 'Cement'];
+
+const DEFAULT_BANKS = [
   "State Bank of India (SBI)",
   "Punjab National Bank (PNB)",
   "Bank of Baroda",
@@ -37,11 +44,698 @@ const INDIAN_BANKS = [
 
 const REQUIRED_DOCS = [
   { id: 'saleDeed', label: '1. Registered Document / Sale Deed' },
-  { id: 'buildingPlan', label: '2. Approved Building Plan' },
-  { id: 'propertyTax', label: '3. Property Tax Assessment' },
-  { id: 'marketValue', label: '4. Market Value Document' },
-  { id: 'layoutPlan', label: '5. Layout / Approval Plan' },
+  { id: 'buildingPlan', label: '2. Approved Building Plan / Permit Order' },
+  { id: 'propertyTax', label: '3. Property Tax Assessment / Receipt' },
+  { id: 'marketValue', label: '4. Market Value / Guideline Certificate' },
+  { id: 'layoutPlan', label: '5. Layout / Approval Plan (Site & Architectural Drawings)' },
 ];
+
+// ── Validation rules per document type ───────────────────────────────────────
+// tier1: highly specific keywords → 1 match = PASS
+// tier2: common / weak keywords  → need ≥ MIN_TIER2 matches to PASS
+const MIN_TIER2 = 2;
+const DOC_VALIDATION_RULES = {
+  saleDeed: {
+    name: 'Registered Sale Deed',
+    tier1: [
+      'sale deed', 'registered document', 'schedule of property', 'sub-registrar', 
+      'vendor and purchaser', 'consideration amount', 'stamp duty paid', 'registration fee', 
+      'document no', 'deed no', 'certified copy', 'book 1', 'volume no', 'stamp value'
+    ],
+    tier2: [
+      'sale', 'deed', 'registration', 'property', 'vendor', 'purchaser', 'stamp', 
+      'witness', 'schedule', 'boundary', 'extent', 'survey', 'pattadar', 'khata', 
+      'transfer', 'registrar', 'andhra', 'telangana', 'kadapa'
+    ]
+  },
+  buildingPlan: {
+    name: 'Approved Building Plan / Permit Order',
+    tier1: [
+      'building permit order', 'town planning section', 'building permission', 'permit no', 
+      'permission sanctioned', 'details of permission sanctioned', 'licensed technical person', 
+      'details of fees paid', 'building license fee', 'kadapa municipal corporation', 
+      'municipal corporation', 'gram panchayat', 'individual residential building', 
+      'residential building', 'building rules', 'construction to be completed before', 
+      'planning permission', 'occupancy certificate', 'architect certificate', 'building plan approval'
+    ],
+    tier2: [
+      'permit', 'order', 'permission', 'sanction', 'sanctioned', 'municipal', 'corporation', 
+      'panchayat', 'technical', 'person', 'premises', 'fees', 'license', 'plinth', 
+      'area', 'floor', 'ground', 'upper', 'height', 'kadapa', 'applicant', 'engineer', 'approval', 'plan'
+    ]
+  },
+  propertyTax: {
+    name: 'Property Tax Assessment / Receipt',
+    tier1: [
+      'property tax', 'tax receipt', 'assessment no', 'assessment number', 'tax assessment', 
+      'amount payable', 'amount paid', 'payment details', 'payment mode', 'computer generated receipt', 
+      'signature is not required', 'signature not required', 'kadapa municipal corporation', 
+      'municipal corporation', 'asking bribe? call 14400', 'call 14400', '14400', 
+      'revenue receipt', 'municipal tax', 'house tax', 'vacant land tax', 'vlt receipt', 'ptin', 
+      'annual tax', 'challan no', 'challan number', 'cheque / dd / bank challan', 'bank challan', 
+      'rebate / waiver', 'paid from', 'revenue ward', 'payee details', 'place of payment', 
+      'demand notice', 'tax demand', 'property tax demand', 'greater hyderabad municipal corporation', 
+      'ghmc', 'vijayawada municipal corporation', 'guntur municipal corporation', 
+      'tirupati municipal corporation', 'visakhapatnam', 'cdma', 
+      'commissioner & director of municipal administration', 'panchayat tax', 
+      'gram panchayat receipt', 'panchayat tax receipt', 'panchayat secretary'
+    ],
+    tier2: [
+      'tax', 'assessment', 'receipt', 'municipal', 'corporation', 'revenue', 'property', 
+      'paid', 'payable', 'amount', 'challan', 'ward', 'owner', 'due', 'penalty', 'demand', 
+      'arrear', 'arrears', 'rebate', 'advance', 'balance', 'online', 'transaction', 
+      'payee', 'kadapa', 'ap', 'andhra', 'telangana', 'chittoor', 'kurnool', 'nellore'
+    ]
+  },
+  marketValue: {
+    name: 'Market Value / Guideline Certificate',
+    tier1: [
+      'market value assistance', 'duty & fee calculator', 'fee calculator', 'market value', 
+      'guideline value', 'guideline rate', 'sub-registrar office', 'sro name', 'sub-registrar', 
+      'registrations & stamps department', 'registrations & stamps', 'stamps department', 
+      'valuation details', 'structure details', 'property details', 'land cost', 
+      'structure cost', 'ready reckoner', 'circle rate', 'unit rate', 'basic value', 
+      'lpm no/survey no', 'consideration value of the property', 'nature of the document', 
+      'nature of the document: sale deed', 'plinth unit', 'ec certificate', 'encumbrance certificate', 
+      'igrs', 'card system'
+    ],
+    tier2: [
+      'market', 'value', 'guideline', 'rate', 'sq.yd', 'sq.ft', 'sq. yards', 'sq. feet', 
+      'valuation', 'land', 'cost', 'structure', 'plinth', 'floor', 'plot', 'per sq', 
+      'locality', 'zone', 'area', 'registrar', 'certificate', 'kadapa', 'mydukur', 
+      'andhra', 'sro', 'residential', 'habitation', 'nature', 'document'
+    ]
+  },
+  layoutPlan: {
+    name: 'Layout / Approval Plan (Site & Architectural Drawings)',
+    tier1: [
+      'site plan', 'key plan', 'floor plan', 'ground floor plan', 'first floor plan', 
+      'second floor plan', 'elevation', 'section-aa', 'section-a', 'road widening', 
+      'built up area', 'built-up area', 'bua check', 'coverage check', 'prop. site', 
+      'scale 1:100', 'scale 1:', 'layout approval', 'layout plan', 'dtcp approval', 
+      'hmda approval', 'crda approval', 'huda approval', 'plot layout', 'iso_a1', 
+      'drawing', 'subdivision'
+    ],
+    tier2: [
+      'layout', 'plan', 'drawing', 'site', 'plot', 'key', 'floor', 'elevation', 
+      'section', 'scale', 'road', 'widening', 'boundaries', 'terrace', 'verandah', 
+      'kitchen', 'hall', 'bedroom', 'toilet', 'bua', 'area', 'structure', 'cadapa', 'kadapa'
+    ]
+  }
+};
+
+// ── Compute a fast hash of an ArrayBuffer for deduplication ──────────────────
+const computeBufferHash = async (arrayBuffer) => {
+  try {
+    const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
+  } catch {
+    // Fallback: sum of bytes mod prime
+    const bytes = new Uint8Array(arrayBuffer);
+    let h = 0;
+    for (let i = 0; i < Math.min(bytes.length, 4096); i++) h = ((h << 5) - h + bytes[i]) | 0;
+    return String(h);
+  }
+};
+
+// ── Extract text from a PDF file using pdfjs ─────────────────────────────────
+// Also renders pages to canvas and OCRs them when embedded text is empty (scanned PDFs)
+const extractPdfText = async (file) => {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+    let fullText = '';
+    const maxPages = Math.min(pdf.numPages, 8); // scan up to 8 pages
+    for (let i = 1; i <= maxPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      fullText += content.items.map(item => item.str).join(' ') + ' ';
+    }
+    const embedded = fullText.trim();
+    if (embedded.length > 20) return embedded.toLowerCase();
+
+    // ── Scanned / image-only PDF: render each page to canvas → Tesseract OCR ──
+    let ocrText = '';
+    const ocrPages = Math.min(pdf.numPages, 5);
+    for (let i = 1; i <= ocrPages; i++) {
+      try {
+        const page = await pdf.getPage(i);
+        const scale = 2.0; // higher scale = better OCR accuracy
+        const viewport = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(viewport.width);
+        canvas.height = Math.round(viewport.height);
+        const ctx = canvas.getContext('2d');
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+        const result = await Promise.race([
+          Tesseract.recognize(dataUrl, 'eng', { logger: () => {} }),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('OCR_TIMEOUT')), 15000))
+        ]);
+        ocrText += (result?.data?.text || '') + '\n';
+      } catch (pageErr) {
+        console.warn(`PDF page ${i} OCR failed:`, pageErr);
+      }
+    }
+    return ocrText.toLowerCase();
+  } catch (err) {
+    console.warn('PDF text extraction failed:', err);
+    return '';
+  }
+};
+
+// ── Fast client-side image downscaler for lightning-fast OCR ────────────────
+const optimizeImageForOCR = async (dataUrl) => {
+  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) return dataUrl;
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const maxDim = 1800; // increased for better OCR
+        let width = img.width;
+        let height = img.height;
+        if (width <= maxDim && height <= maxDim) {
+          resolve(dataUrl);
+          return;
+        }
+        if (width > height) {
+          height = Math.round((height * maxDim) / width);
+          width = maxDim;
+        } else {
+          width = Math.round((width * maxDim) / height);
+          height = maxDim;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.92));
+      } catch {
+        resolve(dataUrl);
+      }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+};
+
+// ── Master metadata extractor — runs on full OCR text for any doc type ────────
+const extractAllMetadata = (text, docId) => {
+  const meta = {};
+  if (!text || text.length < 5) return meta;
+  const t = text; // already lowercased by caller
+
+  // ── DEED NUMBER & DATE (from Sale Deed / Rectification Deed) ─────────────
+  if (docId === 'saleDeed') {
+    // Pattern: "Doct No 8859/2018" / "Doct No. 8859 / 2018" / "Document No 8859/2018"
+    const deedPatterns = [
+      /doct(?:ument)?\s*no\.?\s*:?\s*(\d{3,6})\s*\/\s*(20\d{2}|19\d{2})/i,
+      /deed\s*no\.?\s*:?\s*(\d{3,6})\s*\/\s*(20\d{2}|19\d{2})/i,
+      /deed\s*number\s*:?\s*(\d{3,6})\s*\/\s*(20\d{2}|19\d{2})/i,
+      /cs\s*no\s*(\d{3,6})\s*[&,]?\s*doct\s*no\s*(\d{3,6})/i,
+      /bk\s*[-–]?\s*1[^\n]*?doct\s*no\s*(\d{3,6})/i,
+      /document\s*no\.?\s*(\d{4,6})/i,
+      /(\d{3,6})\s*\/\s*(20\d{2}|19\d{2})/,
+    ];
+    for (const pat of deedPatterns) {
+      const m = t.match(pat);
+      if (m) {
+        if (m[2] && /^(19|20)\d{2}$/.test(m[2])) {
+          meta.deedNo = `${m[1]}/${m[2]}`;
+          meta.deedYear = m[2];
+        } else if (m[1] && m[1].length >= 4) {
+          meta.deedNo = m[1];
+        }
+        if (meta.deedNo) break;
+      }
+    }
+    // Deed date: "17th day of DEC, 2018" / "17-12-2018" / "17/12/2018"
+    if (!meta.deedYear) {
+      const dateMatch = t.match(/(\d{1,2})(?:st|nd|rd|th)?\s*(?:day\s*of\s*)?([a-z]+)\s*,?\s*(20\d{2}|19\d{2})/i)
+        || t.match(/(\d{1,2})[\-\/](\d{1,2})[\-\/](20\d{2}|19\d{2})/);
+      if (dateMatch) {
+        const yr = dateMatch[3];
+        if (yr) { meta.deedYear = yr; }
+      }
+    }
+    // Survey Number from sale deed (Telugu: డి.నెం. / D.No. / Survey No)
+    const survPatterns = [
+      /(?:survey\s*no\.?|s\.\s*no\.?|d\.?\s*no\.?)\s*:?\s*(\d{1,4}(?:\/\d{1,4})?)/i,
+      /(?:\u0c21\u0c3f\u002e\u0c28\u0c46\u0c02\u002e|\u0c38\u0c30\u0c4d\u0c35\u0c47\u0c28\u0c41)\s*(\d{1,4}(?:\/\d{1,4})?)/,
+      /(?:survey|s\.no)\s*(\d{1,4}(?:\/\d{1,4})?)/i,
+    ];
+    for (const sp of survPatterns) {
+      const sm = t.match(sp);
+      if (sm && sm[1] && /^\d{1,4}(\/\d{1,4})?$/.test(sm[1])) {
+        meta.surveyNo = sm[1];
+        break;
+      }
+    }
+    // Net Extent (square yards / cents / links) — patterns ordered from most to least specific
+    const extPatterns = [
+      /net\s*extent\s*:?\s*([0-9]+\.?[0-9]*\s*(?:sq\.?\s*yards?|cents?|acres?))/i,
+      /extent\s*:?\s*([0-9]+\.?[0-9]*\s*(?:sq\.?\s*yards?|cents?|sq\.?\s*ft))/i,
+      /([0-9]+\.?[0-9]*)\s*(?:sq\.?\s*(?:yards?|yds?|gaz|gajams?))/i,
+      /([0-9]+\.?[0-9]*)\s*(?:cents?)/i,
+    ];
+    for (const ep of extPatterns) {
+      const em = t.match(ep);
+      if (em && em[1]) {
+        const raw = em[1].trim();
+        const numPart = parseFloat(raw.split(/\s/)[0]);
+        // Must be > 10 to avoid matching page numbers or small stray values
+        if (!isNaN(numPart) && numPart > 10) {
+          const hasUnit = /sq|cent|acre|yard/i.test(raw);
+          meta.extent = hasUnit ? raw : `${raw} Sq. Yards`;
+          break;
+        }
+      }
+    }
+    // Boundaries
+    const boundaryMap = {
+      north: [/north\s*:?\s*([^\n\r,;.]{3,60})/i, /\u0c09\u0c24\u0c4d\u0c24\u0c30\u0c02\s*:?\s*([^\n\r\u0c2c]{3,60})/],
+      south: [/south\s*:?\s*([^\n\r,;.]{3,60})/i, /\u0c26\u0c15\u0c4d\u0c37\u0c23\u0c02\s*:?\s*([^\n\r\u0c2c]{3,60})/],
+      east:  [/east\s*:?\s*([^\n\r,;.]{3,60})/i, /\u0c24\u0c42\u0c30\u0c4d\u0c2a\u0c41\s*:?\s*([^\n\r\u0c2c]{3,60})/],
+      west:  [/west\s*:?\s*([^\n\r,;.]{3,60})/i, /\u0c2a\u0c21\u0c2e\u0c30\s*:?\s*([^\n\r\u0c2c]{3,60})/],
+    };
+    const boundaries = {};
+    for (const [dir, pats] of Object.entries(boundaryMap)) {
+      for (const bp of pats) {
+        const bm = t.match(bp);
+        if (bm && bm[1] && bm[1].trim().length > 2) {
+          boundaries[dir] = bm[1].trim().replace(/[\r\n]+/g, ' ').substring(0, 80);
+          break;
+        }
+      }
+    }
+    // Flat No and Floor (from sale deed for Apartment type)
+    const flatPatterns = [
+      /flat\s*no\.?\s*:?\s*([A-Za-z0-9\-]{1,10})/i,
+      /apartment\s*no\.?\s*:?\s*([A-Za-z0-9\-]{1,10})/i,
+      /unit\s*no\.?\s*:?\s*([A-Za-z0-9\-]{1,10})/i,
+    ];
+    for (const fp of flatPatterns) {
+      const fm = t.match(fp);
+      if (fm && fm[1]) { meta.flatNo = fm[1].trim(); break; }
+    }
+    const floorPatterns = [
+      /(ground|first|second|third|fourth|fifth|sixth|seventh)\s*floor/i,
+      /(\d+(?:st|nd|rd|th))\s*floor/i,
+    ];
+    for (const flp of floorPatterns) {
+      const flm = t.match(flp);
+      if (flm && flm[1]) {
+        const floorMap = { ground: 'Ground Floor', first: 'First Floor', second: 'Second Floor',
+          third: 'Third Floor', fourth: 'Fourth Floor', fifth: 'Fifth Floor', sixth: 'Sixth Floor', seventh: 'Seventh Floor' };
+        meta.floorNo = floorMap[flm[1].toLowerCase()] || `${flm[1]} Floor`;
+        break;
+      }
+    }
+  } // end saleDeed
+
+  // ── PROPERTY TAX ────────────────────────────────────────────────────────────
+  if (docId === 'propertyTax') {
+    const assessPatterns = [
+      /assessment\s*no\.?\s*:?\s*([0-9]{6,12})/i,
+      /ptin\s*:?\s*([0-9]{6,12})/i,
+      /property\s*id\s*:?\s*([0-9]{6,12})/i,
+      /tax\s*id\s*:?\s*([0-9]{6,12})/i,
+      /\b(1013\d{6,8})\b/,
+      /assessment\s*no\.?[\s\S]{0,30}?([0-9]{7,12})/i,
+    ];
+    for (const ap of assessPatterns) {
+      const am = t.match(ap);
+      if (am && am[1] && am[1].length >= 6) {
+        meta.assessmentNo = am[1].trim();
+        break;
+      }
+    }
+    // Door / House number
+    const doorPatterns = [
+      /door\s*no\.?\s*:?\s*([0-9][0-9\/\-a-z]{2,20})/i,
+      /house\s*no\.?\s*:?\s*([0-9][0-9\/\-a-z]{2,20})/i,
+      /h\.?\s*no\.?\s*:?\s*([0-9][0-9\/\-a-z]{2,20})/i,
+      /d\.?\s*no\.?\s*:?\s*([0-9][0-9\/\-]{2,20})/i,
+      /\b(\d+\/\d+[-\w\/]{2,18})\b/,
+    ];
+    for (const dp of doorPatterns) {
+      const dm = t.match(dp);
+      if (dm && dm[1] && /\d/.test(dm[1])) {
+        meta.doorNo = dm[1].trim();
+        break;
+      }
+    }
+    // Survey/extent from tax receipt
+    const taxSurvMatch = t.match(/(?:survey\s*no|s\.?\s*no)\s*:?\s*(\d{1,4}(?:\/\d{1,4})?)/i);
+    if (taxSurvMatch && taxSurvMatch[1] && /^\d+(\/\d+)?$/.test(taxSurvMatch[1])) {
+      meta.surveyNo = taxSurvMatch[1];
+    }
+  }
+
+  // ── BUILDING PLAN / PERMIT ORDER ─────────────────────────────────────────────
+  if (docId === 'buildingPlan') {
+    // ─ Permit number (with lenient spaces between segments) ────────────────────
+    const permitPatterns = [
+      // Exact format: 1013/0099/B/KAD/AP/2026 (with optional spaces around slashes)
+      /(\d{4}\s*\/\s*\d{4}\s*\/\s*[a-z]\s*\/\s*[a-z]{2,6}\s*\/\s*[a-z]{2,4}\s*\/\s*20\d{2})/i,
+      /permit\s*(?:no|number|order)\.?\s*:?\s*([0-9][0-9a-z\/\-]{4,40})/i,
+      /permission\s*no\.?\s*:?\s*([0-9][0-9a-z\/\-]{4,40})/i,
+      /(?:approval|sanction)\s*no\.?\s*:?\s*([0-9][0-9a-z\/\-]{4,40})/i,
+    ];
+    for (const pp of permitPatterns) {
+      const pm = t.match(pp);
+      if (pm && pm[1] && pm[1].replace(/\s/g, '').length >= 5) {
+        // Clean up spaces that OCR may insert around slashes
+        meta.approvalPlanNo = pm[1].replace(/\s*\/\s*/g, '/').trim().toUpperCase();
+        break;
+      }
+    }
+    // ─ Approval date (validate month name to avoid OCR month errors) ─────────
+    const MONTHS = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+    const dateMatch1 = t.match(/(\d{1,2})(?:st|nd|rd|th)?\s*(january|february|march|april|may|june|july|august|september|october|november|december)\s*,?\s*(20\d{2})/i);
+    const dateMatch2 = t.match(/(\d{1,2})[\-\/](\d{1,2})[\-\/](20\d{2})/);
+    if (dateMatch1 && MONTHS.includes(dateMatch1[2].toLowerCase())) {
+      meta.approvalPlanDate = `${dateMatch1[1]} ${dateMatch1[2]}, ${dateMatch1[3]}`;
+    } else if (dateMatch2) {
+      meta.approvalPlanDate = `${dateMatch2[1]}/${dateMatch2[2]}/${dateMatch2[3]}`;
+    }
+    // ─ Survey / T.S. No / R.S. No ───────────────────────────────────────
+    const bpSurvMatch = t.match(/(?:t\.?s\.?\s*no|r\.?s\.?\s*no|survey\s*no|s\.?\s*no|lpm\s*no)\s*\.?\s*\/?\.?\s*(?:r\.?s\.?\s*no\.?)?\s*:?\s*(\d{1,4}(?:\/\d{1,4})?)/i);
+    if (bpSurvMatch && bpSurvMatch[1] && /^\d+(\/\d+)?$/.test(bpSurvMatch[1])) {
+      meta.surveyNo = bpSurvMatch[1];
+    }
+    // ─ Property type from permit ─────────────────────────────────────────────
+    if (/apartment|multi[\s-]*dwelling|multi[\s-]*story|flats/i.test(t)) {
+      meta.propertyType = 'Apartment';
+    } else if (/individual\s*residential|single\s*family|independent\s*house|residential\s*building/i.test(t)) {
+      meta.propertyType = 'Independent House';
+    } else if (/commercial|office|shop/i.test(t)) {
+      // skip — not in our standard list
+    }
+    // ─ Structure type ───────────────────────────────────────────────────────
+    if (/load\s*bearing/i.test(t)) {
+      meta.structureType = 'Load bearing';
+    } else if (/steel\s*structure/i.test(t)) {
+      meta.structureType = 'Steel Structure';
+    } else if (/framed\s*structure|rcc\s*frame|r\.c\.c|reinforced\s*concrete/i.test(t)) {
+      meta.structureType = 'Framed structure';
+    } else {
+      // If upper floors exist (ground + more), it's framed
+      const upperFloorM = t.match(/upper\s*floors?\s*:?\s*(\d+)/i) || t.match(/no\.?\s*of\s*floors?\s*:?\s*(\d+)/i);
+      if (upperFloorM && parseInt(upperFloorM[1]) > 0) meta.structureType = 'Framed structure';
+    }
+    // ─ Premises No / Door No (from building permit Site Details) ──────────────
+    const premisesMatch = t.match(/premises\s*no\.?\s*:?\s*([0-9][0-9\/\-a-z]{2,25})/i)
+      || t.match(/house\s*no\.?\s*:?\s*([0-9][0-9\/\-a-z]{2,25})/i)
+      || t.match(/door\s*no\.?\s*:?\s*([0-9][0-9\/\-a-z]{2,25})/i);
+    if (premisesMatch && premisesMatch[1]) meta.doorNo = premisesMatch[1].trim();
+    // ─ Plot No ────────────────────────────────────────────────────────────
+    const plotMatch = t.match(/plot\s*no\.?\s*:?\s*([A-Za-z0-9]{1,10})/i);
+    if (plotMatch && plotMatch[1] && !/^na$/i.test(plotMatch[1])) meta.plotNo = plotMatch[1].trim();
+    // ─ Road width (from setback/road info) ────────────────────────────────────
+    const rwMatch = t.match(/road\s*(?:width|wide)\s*:?\s*([0-9.]+)\s*(?:m|meter|ft|feet)?/i)
+      || t.match(/width\s*of\s*road\s*:?\s*([0-9.]+)/i);
+    if (rwMatch && rwMatch[1]) meta.roadWidth = rwMatch[1].trim();
+    // ─ Builder / Developer name ────────────────────────────────────────────
+    const builderMatch = t.match(/(?:developer|builder)\s*\/?\.?\s*(?:builder)?\s*:?\s*([A-Za-z][A-Za-z\s\.&\/]{2,40}?)(?:\n|lic|$)/i);
+    if (builderMatch && builderMatch[1] && !/^na$/i.test(builderMatch[1].trim())) {
+      meta.builderName = builderMatch[1].trim();
+    }
+    // Applicant name as fallback builder name
+    if (!meta.builderName) {
+      const applicantMatch = t.match(/applicant\s*:?\s*([A-Za-z][A-Za-z\s\.]{2,40}?)(?:\n|\d|$)/i);
+      if (applicantMatch && applicantMatch[1]) meta.builderName = applicantMatch[1].trim();
+    }
+  }
+
+  // ── MARKET VALUE / GUIDELINE CERTIFICATE ─────────────────────────────────────
+  if (docId === 'marketValue') {
+    // Survey / LPM No
+    const mvSurvPatterns = [
+      /lpm\s*no\s*\/\s*survey\s*no\s*:?\s*([0-9\/]+)/i,
+      /lpm\s*no\.?\s*:?\s*([0-9\/]+)/i,
+      /survey\s*no\.?\s*:?\s*([0-9\/]+)/i,
+      /s\.?\s*no\.?\s*:?\s*([0-9]{2,}(?:\/[0-9]+)?)/i,
+    ];
+    for (const sp of mvSurvPatterns) {
+      const sm = t.match(sp);
+      if (sm && sm[1] && /^\d{2,}(\/\d+)?$/.test(sm[1])) {
+        meta.surveyNo = sm[1];
+        break;
+      }
+    }
+    // Market value amount
+    const mvPatterns = [
+      /(?:total\s*)?market\s*value\s*(?:of\s*(?:the\s*)?property)?\s*:?\s*(?:rs\.?\s*)?([0-9,]+)/i,
+      /(?:consideration|property)\s*value\s*:?\s*(?:rs\.?\s*)?([0-9,]+)/i,
+      /(?:land\s*cost\s*\+?\s*structure\s*cost|total\s*value)\s*:?\s*(?:rs\.?\s*)?([0-9,]+)/i,
+    ];
+    for (const mp of mvPatterns) {
+      const mm = t.match(mp);
+      if (mm && mm[1]) {
+        const num = mm[1].replace(/,/g, '');
+        if (parseInt(num) > 10000) { meta.marketValue = num; break; }
+      }
+    }
+    // Net extent from market value doc — always has unit in label
+    const mvExtPatterns = [
+      /extent\s*:?\s*([0-9]+\.?[0-9]*\s*(?:sq\.?\s*yards?|sq\.?\s*ft|cents?|acres?))/i,
+      /area\s*:?\s*([0-9]+\.?[0-9]*\s*(?:sq\.?\s*yards?|sq\.?\s*ft))/i,
+    ];
+    for (const ep of mvExtPatterns) {
+      const em = t.match(ep);
+      if (em && em[1]) {
+        const numPart = parseFloat(em[1]);
+        // Must be > 10 to avoid matching stray small values
+        if (!isNaN(numPart) && numPart > 10) {
+          meta.extent = em[1].trim();
+          break;
+        }
+      }
+    }
+    // Property type from market value
+    if (/urban\s*vacant\s*land|vacant\s*land|open\s*plot|open\s*site/i.test(t)) {
+      meta.propertyType = 'Open Site';
+    } else if (/agriculture|agricultural|farm\s*land/i.test(t)) {
+      meta.propertyType = 'Open Agriculture Land';
+    } else if (/apartment|flat/i.test(t)) {
+      meta.propertyType = 'Apartment';
+    } else if (/residential\s*(?:house|building|dwelling)/i.test(t)) {
+      meta.propertyType = 'Independent House';
+    }
+    // Boundaries from market value (if non-zero / non-empty values)
+    const mvBound = {};
+    const mvEast = t.match(/east\s*:\s*([^\n\r,;0]{2,60})/i);
+    const mvWest = t.match(/west\s*:\s*([^\n\r,;0]{2,60})/i);
+    const mvNorth = t.match(/north\s*:\s*([^\n\r,;0]{2,60})/i);
+    const mvSouth = t.match(/south\s*:\s*([^\n\r,;0]{2,60})/i);
+    if (mvEast && mvEast[1].trim() !== '0' && mvEast[1].trim().length > 1) mvBound.east = mvEast[1].trim();
+    if (mvWest && mvWest[1].trim() !== '0' && mvWest[1].trim().length > 1) mvBound.west = mvWest[1].trim();
+    if (mvNorth && mvNorth[1].trim() !== '0' && mvNorth[1].trim().length > 1) mvBound.north = mvNorth[1].trim();
+    if (mvSouth && mvSouth[1].trim() !== '0' && mvSouth[1].trim().length > 1) mvBound.south = mvSouth[1].trim();
+    if (Object.keys(mvBound).length > 0) meta.boundaries = mvBound;
+    // Door No from market value (Door No field)
+    const mvDoor = t.match(/door\s*no\.?\s*:?\s*([0-9][0-9\/\-a-z]{2,25})/i);
+    if (mvDoor && mvDoor[1]) meta.doorNo = mvDoor[1].trim();
+  }
+
+  return meta;
+};
+
+// ── Core validation function (shared by file upload + camera capture) ─────────
+const validateDocOCR = async (imageUrlOrFile, docId, isPdf = false, rawFile = null) => {
+  const rules = DOC_VALIDATION_RULES[docId];
+  if (!rules) return { passed: true }; // unknown doc type — skip validation
+
+  let text = '';
+
+  if (isPdf) {
+    // For PDF files: try embedded text first; if empty, render pages to canvas + OCR
+    // rawFile is the original File object needed by extractPdfText
+    const fileForOcr = rawFile instanceof File ? rawFile : imageUrlOrFile;
+    text = await extractPdfText(fileForOcr);
+    if (!text.trim()) {
+      // extractPdfText already tried canvas OCR internally; if still empty, allow with warning
+      return { passed: true, warning: `Could not extract text from PDF. Please verify visually that it is the correct ${rules.name}.` };
+    }
+  } else {
+    // For images, optimize dimensions and run Tesseract OCR with 12-second safety timeout
+    try {
+      const src = await optimizeImageForOCR(imageUrlOrFile);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('OCR_TIMEOUT')), 12000)
+      );
+      const result = await Promise.race([
+        Tesseract.recognize(src, 'eng', { logger: () => {} }),
+        timeoutPromise
+      ]);
+      text = (result?.data?.text || '').toLowerCase();
+    } catch (err) {
+      console.warn('OCR error or timeout on image:', err);
+      return { 
+        passed: true, 
+        warning: `OCR scan took longer than usual. Please confirm visually that it is the correct ${rules.name}.` 
+      };
+    }
+  }
+
+  // ── Extract all metadata from OCR text ──────────────────────────────────────
+  const extractedMeta = extractAllMetadata(text, docId);
+
+  // Tier-1 check: any single highly-specific phrase = instant PASS
+  const tier1Hit = rules.tier1.some(kw => text.includes(kw.toLowerCase()));
+  if (tier1Hit) return { passed: true, extractedMeta };
+
+  // Tier-2 check: need at least MIN_TIER2 matching keywords
+  const tier2Hits = rules.tier2.filter(kw => text.includes(kw.toLowerCase()));
+  if (tier2Hits.length >= MIN_TIER2) return { passed: true, extractedMeta };
+
+  // 3. Reject obviously unrelated text documents
+  if (isPdf && text.trim().length > 60 && tier2Hits.length === 0) {
+    return {
+      passed: false,
+      reason: `Mahe AI detected an unrelated text document. The content does not contain required legal/technical keywords for a ${rules.name}. Please upload the correct ${rules.name}.`
+    };
+  }
+
+  const distinctWords = new Set((text.match(/\b[a-zA-Z]{4,}\b/g) || []).map(w => w.toLowerCase()));
+  if (!isPdf && distinctWords.size > 15 && tier2Hits.length === 0) {
+    return {
+      passed: false,
+      reason: `Mahe AI scanned readable text but could not find keywords matching a ${rules.name}. The document appears to be unrelated. Please upload the correct ${rules.name}.`
+    };
+  }
+
+  // 4. Partial match
+  if (tier2Hits.length >= 1) {
+    return {
+      passed: true,
+      extractedMeta,
+      warning: `Partial match detected (${tier2Hits.join(', ')}). Please verify that this is the correct ${rules.name}.`
+    };
+  }
+
+  // 5. Architectural drawings / blueprints
+  if (docId === 'buildingPlan' || docId === 'layoutPlan') {
+    return {
+      passed: true,
+      extractedMeta,
+      warning: `Architectural blueprint detected. Low text density — verified as architectural drawing.`
+    };
+  }
+
+  // 6. Regional / Telugu scanned documents
+  return {
+    passed: true,
+    extractedMeta,
+    warning: `Scanned / regional document detected. Please verify visually that it is the correct ${rules.name}.`
+  };
+};
+
+// ── Apply all extracted metadata to propertyDetails state ─────────────────────
+// currentDetails = the current propertyDetails value (to compute diffs outside updater)
+const applyExtractedMeta = (meta, currentDetails, setPropertyDetails, toastFn) => {
+  if (!meta || typeof meta !== 'object') return;
+
+  // Helper: is this value clearly garbage (OCR noise)?
+  const isGarbage = (val) => !val || val.trim().length <= 2 || /^[a-zA-Z]$/.test(val.trim());
+
+  const notifications = [];
+  const next = { ...currentDetails };
+  const boundaries = next.boundariesDoc
+    ? { ...next.boundariesDoc }
+    : { north: '', south: '', east: '', west: '' };
+
+  if (meta.deedNo && (isGarbage(currentDetails.deedNo))) {
+    next.deedNo = meta.deedNo;
+    notifications.push(`Deed No. ${meta.deedNo} detected & auto-filled!`);
+  }
+  if (meta.deedYear && isGarbage(currentDetails.deedYear)) {
+    next.deedYear = meta.deedYear;
+  }
+  if (meta.surveyNo && /^\d{1,4}(\/\d{1,4})?$/.test(meta.surveyNo) &&
+      (isGarbage(currentDetails.surveyNo) || !/^\d/.test(currentDetails.surveyNo))) {
+    next.surveyNo = meta.surveyNo;
+    notifications.push(`Survey No. ${meta.surveyNo} detected & auto-filled!`);
+  }
+  if (meta.extent && isGarbage(currentDetails.netExtent)) {
+    next.netExtent = meta.extent;
+    notifications.push(`Net Extent ${meta.extent} detected & auto-filled!`);
+  }
+  if (meta.assessmentNo && meta.assessmentNo.length >= 6 && isGarbage(currentDetails.assessmentNo)) {
+    next.assessmentNo = meta.assessmentNo;
+    notifications.push(`Assessment No. ${meta.assessmentNo} detected & auto-filled!`);
+  }
+  if (meta.doorNo && isGarbage(currentDetails.doorNo)) {
+    next.doorNo = meta.doorNo;
+  }
+  if (meta.approvalPlanNo && isGarbage(currentDetails.approvalPlanNo)) {
+    next.approvalPlanNo = meta.approvalPlanNo;
+    notifications.push(`Permit No. ${meta.approvalPlanNo} detected & auto-filled!`);
+  }
+  if (meta.approvalPlanDate && isGarbage(currentDetails.approvalPlanDate)) {
+    next.approvalPlanDate = meta.approvalPlanDate;
+  }
+  // ─ Select / dropdown fields ──────────────────────────────────────────────────
+  if (meta.propertyType && isGarbage(currentDetails.propertyType)) {
+    next.propertyType = meta.propertyType;
+    notifications.push(`Property Type → ${meta.propertyType} (auto-detected!)`);
+  }
+  if (meta.structureType && isGarbage(currentDetails.structureType)) {
+    next.structureType = meta.structureType;
+    notifications.push(`Structure Type → ${meta.structureType} (auto-detected!)`);
+  }
+  if (meta.roadWidth && isGarbage(currentDetails.roadWidth)) {
+    next.roadWidth = meta.roadWidth;
+  }
+  if (meta.plotNo && meta.plotNo !== 'NA' && isGarbage(currentDetails.plotNo)) {
+    next.plotNo = meta.plotNo;
+  }
+  // ─ Builder & Flat Details ──────────────────────────────────────────────────────
+  if (meta.builderName && isGarbage(currentDetails.builderName)) {
+    next.builderName = meta.builderName;
+    notifications.push(`Builder/Applicant: ${meta.builderName} auto-filled!`);
+  }
+  if (meta.flatNo && isGarbage(currentDetails.flatNo)) {
+    next.flatNo = meta.flatNo;
+    notifications.push(`Flat No. ${meta.flatNo} auto-filled!`);
+  }
+  if (meta.floorNo && isGarbage(currentDetails.floorNo)) {
+    next.floorNo = meta.floorNo;
+  }
+  if (meta.boundaries) {
+    let anyBoundary = false;
+    for (const dir of ['north', 'south', 'east', 'west']) {
+      if (meta.boundaries[dir] && isGarbage(boundaries[dir])) {
+        boundaries[dir] = meta.boundaries[dir];
+        anyBoundary = true;
+      }
+    }
+    if (anyBoundary) {
+      next.boundariesDoc = boundaries;
+      notifications.push('Property boundaries auto-filled from deed!');
+    }
+  }
+
+  // Only update if something changed
+  const hasChanges = Object.keys(next).some(k => {
+    if (k === 'boundariesDoc') return JSON.stringify(next[k]) !== JSON.stringify(currentDetails[k]);
+    return next[k] !== currentDetails[k];
+  });
+  if (hasChanges) setPropertyDetails(next);
+
+  // Staggered toast notifications
+  notifications.forEach((msg, i) => {
+    setTimeout(() => toastFn.success(msg, { icon: '\u2705', duration: 4500 }), 300 + i * 600);
+  });
+  if (meta.marketValue) {
+    setTimeout(() => {
+      toastFn.success(`Market Value: \u20B9${Number(meta.marketValue).toLocaleString('en-IN')}`, { icon: '\uD83D\uDCB0', duration: 4500 });
+    }, 300 + notifications.length * 600);
+  }
+};
 
 const FLOOR_LABELS = [
   'Ground Floor (GF)', 'First Floor (FF)', 'Second Floor (SF)', 
@@ -57,11 +751,37 @@ export default function CaseListView({ onOpenCase, currentUser }) {
   const [clientName, setClientName] = useState('');
   const [clientFatherName, setClientFatherName] = useState('');
   
-  // Bank State
+  // Bank & District State (Dynamic)
+  const [availableBanks, setAvailableBanks] = useState(() => {
+    try {
+      const saved = localStorage.getItem('valuation_custom_banks');
+      const custom = saved ? JSON.parse(saved) : [];
+      return Array.from(new Set([...DEFAULT_BANKS, ...custom]));
+    } catch {
+      return DEFAULT_BANKS;
+    }
+  });
+  const [availableDistricts, setAvailableDistricts] = useState(() => {
+    try {
+      const saved = localStorage.getItem('valuation_custom_districts');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
   const [bankName, setBankName] = useState('');
   const [bankBranch, setBankBranch] = useState('');
-  const [bankDistrict, setBankDistrict] = useState('Y.S.R');
+  const [bankDistrict, setBankDistrict] = useState('');
   const [showBankDropdown, setShowBankDropdown] = useState(false);
+
+  // Dynamic dropdown options loaded from DB config
+  const [propertyTypes, setPropertyTypes] = useState(FALLBACK_PROPERTY_TYPES);
+  const [plotTypes, setPlotTypes] = useState(FALLBACK_PLOT_TYPES);
+  const [roadTypes, setRoadTypes] = useState(FALLBACK_ROAD_TYPES);
+  const [structureTypes, setStructureTypes] = useState(FALLBACK_STRUCTURE_TYPES);
+  const [flooringTypes, setFlooringTypes] = useState(FALLBACK_FLOORING_TYPES);
+  const [_dynamicConfig, setDynamicConfig] = useState(null);
   
   const [extractedData, setExtractedData] = useState(null);
   const [isDocumentVerified, setIsDocumentVerified] = useState(false);
@@ -79,7 +799,8 @@ export default function CaseListView({ onOpenCase, currentUser }) {
             setLocationData(`Lat: ${position.coords.latitude.toFixed(6)}, Long: ${position.coords.longitude.toFixed(6)}`);
           },
           (error) => {
-            setLocationData('Lat: 17.4065° N, Long: 78.4772° E (Simulated)');
+            console.warn('Geolocation failed or denied:', error);
+            setLocationData('Location Unavailable (Check GPS Permissions)');
           }
         );
       } else {
@@ -88,13 +809,60 @@ export default function CaseListView({ onOpenCase, currentUser }) {
     }
   }, [modalStep]);
 
+  // ── Auto-restore in-progress draft on mount ───────────────────────────────
+  // If the user refreshes mid-session, this picks up where they left off
+  // without requiring them to click + and choose "Resume Draft" manually.
+  useEffect(() => {
+    const autoRestoreDraft = async () => {
+      try {
+        const draft = await localforage.getItem('caseDraft');
+        if (!draft || !draft.modalStep || draft.modalStep <= 0) return;
+
+        // Restore all state directly
+        setClientName(draft.clientName || '');
+        setClientFatherName(draft.clientFatherName || '');
+        setBankName(draft.bankName || '');
+        setBankBranch(draft.bankBranch || '');
+        setBankDistrict(draft.bankDistrict || '');
+        setPropertyDetails({
+          boundariesDoc: { north: '', south: '', east: '', west: '' },
+          boundariesActual: { north: '', south: '', east: '', west: '' },
+          buildingAge: '', flooringType: '', structureType: '', roadWidth: '',
+          propertyType: '', roadType: '', plotType: '',
+          deedNo: '', deedYear: '', netExtent: '', surveyNo: '', plotNo: '', khathaNo: '',
+          assessmentNo: '', doorNo: '', approvalPlanNo: '', approvalPlanDate: '', builderName: '', managingPartner: '',
+          flatNo: '', floorNo: '', additionsWork: [],
+          siteValue: { plinthArea: '', floors: [{ id: 'gf', label: 'Ground Floor (GF)', value: '' }] },
+          ...(draft.propertyDetails || {})
+        });
+        setLocationData(draft.locationData || 'Fetching location...');
+        setUploadedDocs(draft.uploadedDocs || { saleDeed: [], buildingPlan: [], propertyTax: [], marketValue: [], layoutPlan: [] });
+        setSiteImages(draft.siteImages || []);
+
+        // Restore duplicate-check hashes
+        const allHashes = new Set(
+          Object.values(draft.uploadedDocs || {}).flat().map(p => p.id).filter(Boolean)
+        );
+        setUploadedFileHashes(allHashes);
+
+        // Reopen the modal on the exact step the user was on
+        setModalStep(draft.modalStep);
+        toast('📋 Session restored — continuing where you left off.', { duration: 3000, icon: '✅' });
+      } catch (e) {
+        console.warn('Auto-restore draft failed:', e);
+      }
+    };
+    autoRestoreDraft();
+  }, []); // runs once on mount only
+
+
   const handleNewCaseClick = async () => {
     // Check if clocked in via API
     try {
-      const res = await fetch(`https://gcr-9ys1.onrender.com/api/attendance?userId=${currentUser?.id || 'ENG-001'}`);
+      const res = await fetch(`${API_BASE_URL}/api/attendance?userId=${currentUser?.id || 'ENG-001'}`);
       const data = await res.json();
       const today = new Date().toLocaleDateString();
-      const todayLogs = data.filter(log => new Date(log.timestamp).toLocaleDateString() === today);
+      const todayLogs = Array.isArray(data) ? data.filter(log => new Date(log.timestamp).toLocaleDateString() === today) : [];
       const sortedLogs = [...todayLogs].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
       const lastLog = sortedLogs.length > 0 ? sortedLogs[0] : null;
       const lastAction = lastLog ? lastLog.attendanceType : null;
@@ -122,41 +890,33 @@ export default function CaseListView({ onOpenCase, currentUser }) {
   };
 
   const handleResumeDraft = (draft) => {
-    const restoredDocs = { ...draft.uploadedDocs };
-    for (const key in restoredDocs) {
-      if (restoredDocs[key]) {
-        restoredDocs[key] = restoredDocs[key].map(page => ({
-          ...page,
-          url: page.rawFile ? URL.createObjectURL(page.rawFile) : page.url
-        }));
-      }
-    }
-    const restoredImages = (draft.siteImages || []).map(img => ({
-      ...img,
-      url: img.rawFile ? URL.createObjectURL(img.rawFile) : img.url
-    }));
-
+    // Pages are stored as data URLs — use them directly, they survive refresh
     setClientName(draft.clientName || '');
     setClientFatherName(draft.clientFatherName || '');
     setBankName(draft.bankName || '');
     setBankBranch(draft.bankBranch || '');
-    setBankDistrict(draft.bankDistrict || 'Y.S.R');
+    setBankDistrict(draft.bankDistrict || '');
     setPropertyDetails({
       boundariesDoc: { north: '', south: '', east: '', west: '' },
       boundariesActual: { north: '', south: '', east: '', west: '' },
       buildingAge: '', flooringType: '', structureType: '', roadWidth: '',
       propertyType: '', roadType: '', plotType: '',
-      deedNo: '', deedYear: '', netExtent: '', surveyNo: '', plotNo: '', khathaNo: '', approvalPlanNo: '', approvalPlanDate: '',
-      builderName: '', managingPartner: '', flatNo: '', floorNo: '', additionsWork: [],
+      deedNo: '', deedYear: '', netExtent: '', surveyNo: '', plotNo: '', khathaNo: '',
+      assessmentNo: '', doorNo: '', approvalPlanNo: '', approvalPlanDate: '', builderName: '', managingPartner: '',
+      flatNo: '', floorNo: '', additionsWork: [],
       siteValue: { plinthArea: '', floors: [{ id: 'gf', label: 'Ground Floor (GF)', value: '' }] },
       ...(draft.propertyDetails || {})
     });
     setLocationData(draft.locationData || 'Fetching location...');
-    setUploadedDocs(restoredDocs);
-    setSiteImages(restoredImages);
-
+    setUploadedDocs(draft.uploadedDocs || { saleDeed: [], buildingPlan: [], propertyTax: [], marketValue: [], layoutPlan: [] });
+    setSiteImages(draft.siteImages || []);
+    // Restore upload hashes so the duplicate check still works
+    const allHashes = new Set(
+      Object.values(draft.uploadedDocs || {}).flat().map(p => p.id).filter(Boolean)
+    );
+    setUploadedFileHashes(allHashes);
     setShowDraftPrompt(null);
-    setModalStep(1);
+    setModalStep(draft.modalStep || 1);
   };
 
   const handleDiscardDraft = async () => {
@@ -168,8 +928,8 @@ export default function CaseListView({ onOpenCase, currentUser }) {
     setClientFatherName('');
     setBankName('');
     setBankBranch('');
-    setBankDistrict('Y.S.R');
-    setPropertyDetails({ boundariesDoc: { north: '', south: '', east: '', west: '' }, boundariesActual: { north: '', south: '', east: '', west: '' }, buildingAge: '', flooringType: '', structureType: '', roadWidth: '', propertyType: '', roadType: '', plotType: '', deedNo: '', deedYear: '', netExtent: '', surveyNo: '', plotNo: '', khathaNo: '', approvalPlanNo: '', approvalPlanDate: '', builderName: '', managingPartner: '', flatNo: '', floorNo: '', additionsWork: [], siteValue: { plinthArea: '', floors: [{ id: 'gf', label: 'Ground Floor (GF)', value: '' }] } });
+    setBankDistrict('');
+    setPropertyDetails({ boundariesDoc: { north: '', south: '', east: '', west: '' }, boundariesActual: { north: '', south: '', east: '', west: '' }, buildingAge: '', flooringType: '', structureType: '', roadWidth: '', propertyType: '', roadType: '', plotType: '', deedNo: '', deedYear: '', netExtent: '', surveyNo: '', plotNo: '', khathaNo: '', assessmentNo: '', doorNo: '', approvalPlanNo: '', approvalPlanDate: '', builderName: '', managingPartner: '', flatNo: '', floorNo: '', additionsWork: [], siteValue: { plinthArea: '', floors: [{ id: 'gf', label: 'Ground Floor (GF)', value: '' }] } });
     setUploadedDocs({ saleDeed: [], buildingPlan: [], propertyTax: [], marketValue: [], layoutPlan: [] });
     setSiteImages([]);
     setEditingCaseId(null);
@@ -179,10 +939,10 @@ export default function CaseListView({ onOpenCase, currentUser }) {
   const handleResumeAssignedTask = async (c) => {
     // Check if clocked in via API
     try {
-      const res = await fetch(`https://gcr-9ys1.onrender.com/api/attendance?userId=${currentUser?.id || 'ENG-001'}`);
+      const res = await fetch(`${API_BASE_URL}/api/attendance?userId=${currentUser?.id || 'ENG-001'}`);
       const data = await res.json();
       const today = new Date().toLocaleDateString();
-      const todayLogs = data.filter(log => new Date(log.timestamp).toLocaleDateString() === today);
+      const todayLogs = Array.isArray(data) ? data.filter(log => new Date(log.timestamp).toLocaleDateString() === today) : [];
       const sortedLogs = [...todayLogs].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
       const lastLog = sortedLogs.length > 0 ? sortedLogs[0] : null;
       const lastAction = lastLog ? lastLog.attendanceType : null;
@@ -199,20 +959,21 @@ export default function CaseListView({ onOpenCase, currentUser }) {
 
     try {
       // Fetch full details of the assigned case
-      const res = await fetch(`https://gcr-9ys1.onrender.com/api/cases/${c.id}`);
+      const res = await fetch(`${API_BASE_URL}/api/cases/${c.id}`);
       const fullCase = await res.json();
       
       setClientName(fullCase.clientName || fullCase.borrowerName || '');
       setClientFatherName(fullCase.clientFatherName || '');
       setBankName(fullCase.bankName || '');
       setBankBranch(fullCase.bankBranch || '');
-      setBankDistrict(fullCase.bankDistrict || 'Y.S.R');
+      setBankDistrict(fullCase.bankDistrict || '');
       setPropertyDetails({
         boundariesDoc: { north: '', south: '', east: '', west: '' },
         boundariesActual: { north: '', south: '', east: '', west: '' },
         buildingAge: '', flooringType: '', structureType: '', roadWidth: '',
         propertyType: '', roadType: '', plotType: '',
-        deedNo: '', deedYear: '', netExtent: '', surveyNo: '', plotNo: '', khathaNo: '', approvalPlanNo: '', approvalPlanDate: '',
+        deedNo: '', deedYear: '', netExtent: '', surveyNo: '', plotNo: '', khathaNo: '',
+        assessmentNo: '', doorNo: '', approvalPlanNo: '', approvalPlanDate: '',
         builderName: '', managingPartner: '', flatNo: '', floorNo: '', additionsWork: [],
         siteValue: { plinthArea: '', floors: [{ id: 'gf', label: 'Ground Floor (GF)', value: '' }] },
         ...(fullCase.propertyDetails || {})
@@ -237,7 +998,8 @@ export default function CaseListView({ onOpenCase, currentUser }) {
     buildingAge: '',
     flooringType: '', structureType: '', roadWidth: '',
     propertyType: '', roadType: '', plotType: '',
-    deedNo: '', deedYear: '', netExtent: '', surveyNo: '', plotNo: '', khathaNo: '', approvalPlanNo: '', approvalPlanDate: '',
+    deedNo: '', deedYear: '', netExtent: '', surveyNo: '', plotNo: '', khathaNo: '',
+    assessmentNo: '', doorNo: '', approvalPlanNo: '', approvalPlanDate: '',
     builderName: '', managingPartner: '', flatNo: '', floorNo: '', additionsWork: [],
     siteValue: { plinthArea: '', floors: [{ id: 'gf', label: 'Ground Floor (GF)', value: '' }] }
   });
@@ -252,8 +1014,9 @@ export default function CaseListView({ onOpenCase, currentUser }) {
   });
   
   const [scanningDocs, setScanningDocs] = useState({});
-  const [uploadedFileSignatures, setUploadedFileSignatures] = useState([]);
+  const [uploadedFileHashes, setUploadedFileHashes] = useState(new Set()); // content-hash dedup
   const [activeDocUpload, setActiveDocUpload] = useState(null);
+  const activeDocUploadRef = useRef(null);
   
   // Preview Modal State
   const [previewImage, setPreviewImage] = useState(null);
@@ -276,21 +1039,16 @@ export default function CaseListView({ onOpenCase, currentUser }) {
   const [numPdfPages, setNumPdfPages] = useState(null);
   const [showDraftPrompt, setShowDraftPrompt] = useState(false);
 
-  // Auto-Save Draft
+  // Auto-Save Draft — data URLs are already permanent, just save directly
   useEffect(() => {
-    if (modalStep > 0 && modalStep < 7) { // Don't save if closed or on final submission
+    if (modalStep > 0 && modalStep < 7) {
       const draft = {
-        clientName,
-        clientFatherName,
-        bankName,
-        bankBranch,
-        bankDistrict,
-        propertyDetails,
-        locationData,
-        uploadedDocs,
+        clientName, clientFatherName, bankName, bankBranch, bankDistrict,
+        propertyDetails, locationData, modalStep,
+        uploadedDocs, // already contains data URLs — no conversion needed
         siteImages
       };
-      localforage.setItem('caseDraft', draft).catch(err => console.error("Auto-save failed", err));
+      localforage.setItem('caseDraft', draft).catch(err => console.error('Auto-save failed', err));
     }
   }, [clientName, clientFatherName, bankName, bankBranch, bankDistrict, propertyDetails, locationData, uploadedDocs, siteImages, modalStep]);
 
@@ -306,13 +1064,34 @@ export default function CaseListView({ onOpenCase, currentUser }) {
 
   const [casesList, setCasesList] = useState([]);
 
-  // Fetch Cases from Backend API
+  // Fetch Cases and dynamic AppConfig from Backend API
   useEffect(() => {
-    fetch('https://gcr-9ys1.onrender.com/api/cases')
+    // Fetch system dynamic config
+    fetch(`${API_BASE_URL}/api/config`)
+      .then(res => res.json())
+      .then(cfg => {
+        if (!cfg) return;
+        setDynamicConfig(cfg);
+        if (Array.isArray(cfg.propertyTypes) && cfg.propertyTypes.length > 0) setPropertyTypes(cfg.propertyTypes);
+        if (Array.isArray(cfg.plotTypes) && cfg.plotTypes.length > 0) setPlotTypes(cfg.plotTypes);
+        if (Array.isArray(cfg.roadTypes) && cfg.roadTypes.length > 0) setRoadTypes(cfg.roadTypes);
+        if (Array.isArray(cfg.structureTypes) && cfg.structureTypes.length > 0) setStructureTypes(cfg.structureTypes);
+        if (Array.isArray(cfg.flooringTypes) && cfg.flooringTypes.length > 0) setFlooringTypes(cfg.flooringTypes);
+        if (Array.isArray(cfg.banks) && cfg.banks.length > 0) {
+          setAvailableBanks(prev => Array.from(new Set([...prev, ...cfg.banks])));
+        }
+        if (Array.isArray(cfg.districts) && cfg.districts.length > 0) {
+          setAvailableDistricts(prev => Array.from(new Set([...prev, ...cfg.districts])));
+        }
+      })
+      .catch(err => console.warn("Could not load dynamic config:", err));
+
+    fetch(`${API_BASE_URL}/api/cases`)
       .then(res => res.json())
       .then(data => {
+        const casesArr = Array.isArray(data) ? data : [];
         // Filter to this engineer's assigned cases (broadened to catch older cases by name)
-        const myCases = data.filter(c => 
+        const myCases = casesArr.filter(c => 
           c.assignedEngineerId === currentUser?.id || 
           c.assignedEngineerName === currentUser?.name ||
           c.assignedEngineerName === currentUser?.username
@@ -327,6 +1106,16 @@ export default function CaseListView({ onOpenCase, currentUser }) {
           status: c.status
         }));
         setCasesList(formatted);
+
+        // Dynamically harvest banks and districts from cases in database
+        const dbBanks = casesArr.map(c => c.bankName).filter(Boolean);
+        if (dbBanks.length > 0) {
+          setAvailableBanks(prev => Array.from(new Set([...prev, ...dbBanks])));
+        }
+        const dbDistricts = casesArr.map(c => c.bankDistrict).filter(Boolean);
+        if (dbDistricts.length > 0) {
+          setAvailableDistricts(prev => Array.from(new Set([...prev, ...dbDistricts])));
+        }
       })
       .catch(err => console.error("Error fetching cases:", err));
   }, [currentUser]);
@@ -336,7 +1125,33 @@ export default function CaseListView({ onOpenCase, currentUser }) {
     c.id.toLowerCase().includes(search.toLowerCase())
   );
 
-  const filteredBanks = INDIAN_BANKS.filter(b => b.toLowerCase().includes(bankName.toLowerCase()));
+  const filteredBanks = availableBanks.filter(b => b.toLowerCase().includes(bankName.toLowerCase()));
+
+  const handleAddCustomBank = async (name) => {
+    const trimmed = (name || '').trim();
+    if (!trimmed) return;
+    setBankName(trimmed);
+    setShowBankDropdown(false);
+    try {
+      await fetch(`${API_BASE_URL}/api/config/banks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bank: trimmed })
+      });
+    } catch (_) {}
+    setAvailableBanks(prev => {
+      if (prev.some(b => b.toLowerCase() === trimmed.toLowerCase())) return prev;
+      const updated = [...prev, trimmed];
+      try {
+        const saved = localStorage.getItem('valuation_custom_banks');
+        const custom = saved ? JSON.parse(saved) : [];
+        if (!custom.some(b => b.toLowerCase() === trimmed.toLowerCase())) {
+          localStorage.setItem('valuation_custom_banks', JSON.stringify([...custom, trimmed]));
+        }
+      } catch {}
+      return updated;
+    });
+  };
 
   const formatCurrency = (val) => {
     if (!val) return '';
@@ -345,148 +1160,196 @@ export default function CaseListView({ onOpenCase, currentUser }) {
     return new Intl.NumberFormat('en-IN').format(num);
   };
 
+  const formatFileSize = (bytes) => {
+    if (!bytes || bytes <= 0) return '';
+    const k = 1024;
+    if (bytes < k) return `${bytes} B`;
+    if (bytes < k * k) return `${(bytes / k).toFixed(1)} KB`;
+    return `${(bytes / (k * k)).toFixed(2)} MB`;
+  };
+
+  const getPageDisplayInfo = (page, idx) => {
+    if (!page) return { name: `Document_${idx + 1}`, ext: 'FILE', size: '', uploadedAt: '', isPdf: false };
+    const rawName = page.name || `Document_Page_${idx + 1}`;
+    let ext = page.extension;
+    if (!ext) {
+      if (rawName && rawName.includes('.')) {
+        ext = rawName.split('.').pop();
+      } else {
+        ext = page.isPdf ? 'PDF' : 'JPG';
+      }
+    }
+    ext = (ext || (page.isPdf ? 'PDF' : 'FILE')).toUpperCase().replace(/^\./, '');
+
+    let size = page.sizeFormatted;
+    if (!size && page.size) {
+      size = formatFileSize(page.size);
+    } else if (!size && page.url && page.url.startsWith('data:')) {
+      const approx = Math.round((page.url.length * 3) / 4);
+      size = formatFileSize(approx);
+    }
+
+    return {
+      name: rawName,
+      ext,
+      size: size || '',
+      uploadedAt: page.uploadedAt || '',
+      isPdf: Boolean(page.isPdf || ext === 'PDF')
+    };
+  };
+
   const handleNextToUpload = () => {
     if (clientName.trim() === '' || bankName.trim() === '') {
       toast.error("Please enter both the client's name and the bank name.");
       return;
     }
+    // Dynamically persist any new bank name or district
+    handleAddCustomBank(bankName.trim());
+    if (bankDistrict.trim()) {
+      setAvailableDistricts(prev => {
+        if (prev.includes(bankDistrict.trim())) return prev;
+        const updated = [...prev, bankDistrict.trim()];
+        try {
+          localStorage.setItem('valuation_custom_districts', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+    }
     setModalStep(2);
   };
 
-  const handleSimulateUpload = async (e) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const files = Array.from(e.target.files);
-      const docId = activeDocUpload;
-      
-      setScanningDocs(prev => ({ ...prev, [docId]: true }));
-      setActiveDocUpload(null);
+  const showValidationError = (msg) => {
+    toast((t) => (
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+        <div style={{ flex: 1, fontSize: '14px', color: '#0f172a' }}>
+          {msg.split('\n').map((line, i) => (
+            <div key={i} style={{
+              marginBottom: line === '' ? '8px' : '4px',
+              fontWeight: (line.includes('REJECTION') || line.includes('DUPLICATE')) ? '700' : '400',
+              color: (line.includes('REJECTION') || line.includes('DUPLICATE')) ? '#ef4444' : 'inherit'
+            }}>{line}</div>
+          ))}
+        </div>
+        <button
+          onClick={() => toast.dismiss(t.id)}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px' }}
+          onMouseOver={e => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+          onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
+        ><X size={16} /></button>
+      </div>
+    ), { duration: 9000, style: { minWidth: '320px', borderLeft: '4px solid #ef4444', padding: '16px' } });
+  };
 
-      let newPages = [];
-      let errorMsg = null;
-      
-      for (let file of files) {
-        const fileSignature = `${file.name}-${file.size}`;
-        
-        if (uploadedFileSignatures.includes(fileSignature)) {
-          errorMsg = `🚫 DUPLICATE DETECTED: Page "${file.name}" has already been uploaded in this session.\n\nSystem strictly rejects duplicate files.`;
+  const handleSimulateUpload = async (e) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+
+    const files = Array.from(e.target.files);
+    const docId = activeDocUploadRef.current || activeDocUpload;
+    if (!docId) {
+      console.error("Upload error: active docId is missing");
+      return;
+    }
+
+    setScanningDocs(prev => ({ ...prev, [docId]: true }));
+    setActiveDocUpload(null);
+    activeDocUploadRef.current = null;
+
+    const newPages = [];
+    let errorMsg = null;
+    const newHashes = [];
+
+    try {
+      for (const file of files) {
+        // ── 0. FILE FORMAT VALIDATION (PDF & Images Only) ───────────────────
+        const fileExt = (file.name.split('.').pop() || '').toLowerCase();
+        const isPdf = file.type === 'application/pdf' || fileExt === 'pdf';
+        const isImage = file.type.startsWith('image/') || ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'tiff'].includes(fileExt);
+
+        if (!isPdf && !isImage) {
+          errorMsg = `⚠️ UNSUPPORTED FILE FORMAT: "${file.name}"\n\nLegal documents and building plans must be uploaded as PDF or Images (JPG, PNG).\n\nWord documents (.docx, .doc) cannot be verified or previewed as certified legal paperwork. Please upload your document as a PDF or high-resolution image.`;
           break;
         }
-        
-        const isPdf = file.type === 'application/pdf';
 
-        // REAL OCR Document Verification (For non-PDF images)
-        if (!isPdf) {
-          try {
-            toast('Mahe AI is scanning document text...', { icon: '🔍', duration: 2000 });
-            const result = await Tesseract.recognize(file, 'eng');
-            const extractedText = result.data.text.toLowerCase();
-            
-            let legalKeywords = [];
-            let docName = '';
-
-            switch(docId) {
-              case 'saleDeed':
-                legalKeywords = ['sale', 'deed', 'registration', 'schedule', 'property', 'vendor', 'purchaser', 'stamp', 'witness'];
-                docName = 'Sale Deed';
-                break;
-              case 'buildingPlan':
-                legalKeywords = ['plan', 'approval', 'municipal', 'corporation', 'panchayat', 'engineer', 'architect', 'drawing', 'scale', 'plot', 'floor'];
-                docName = 'Building Plan';
-                break;
-              case 'propertyTax':
-                legalKeywords = ['tax', 'assessment', 'receipt', 'municipal', 'revenue', 'property', 'paid', 'amount', 'challan'];
-                docName = 'Property Tax';
-                break;
-              case 'marketValue':
-                legalKeywords = ['market', 'value', 'guideline', 'sub-registrar', 'rate', 'sq.yd', 'sq.ft', 'valuation', 'sro'];
-                docName = 'Market Value Document';
-                break;
-              case 'layoutPlan':
-                legalKeywords = ['layout', 'plan', 'approval', 'survey', 'dtcp', 'huda', 'plot', 'boundaries', 'road', 'master'];
-                docName = 'Layout Plan';
-                break;
-              default:
-                legalKeywords = [];
-            }
-            
-            if (legalKeywords.length > 0) {
-              const foundCount = legalKeywords.filter(kw => extractedText.includes(kw)).length;
-              
-              // STRCITER VALIDATION: We want to make sure it's actually the right document
-              // For sale deed and building plan, let's require at least 1 very strong keyword or 2 weak ones
-              if (foundCount < 2) {
-                // If it only found 1 keyword, it might be a false positive (like just the word "floor" or "sale")
-                // Let's be strict and reject if < 2, UNLESS it's a very specific keyword like "schedule of property" or "sub-registrar"
-                const strongMatch = extractedText.includes('sub-registrar') || extractedText.includes('schedule of property') || extractedText.includes('building permission');
-                if (!strongMatch) {
-                  errorMsg = `⚠️ MAHE AI REJECTION: Mahe AI scanned the image and could not confidently verify it as a ${docName}. It appears to be an irrelevant document or photo.\n\nPlease upload the correct legal paperwork.`;
-                  break;
-                }
-              }
-              toast.success(`Mahe AI Scan Passed! Verified as ${docName}.`);
-            }
-          } catch (err) {
-            console.error("OCR Scan Failed", err);
-            errorMsg = `⚠️ MAHE AI REJECTION: The image quality is too poor or the document is unreadable. Please upload a clear scan of the ${docName}.`;
-            break;
-          }
-        } else if (isPdf) {
-           // We allow PDFs directly as we aren't running PDF.js text extraction here in pre-scan yet
+        // ── 1. CONTENT-HASH DUPLICATE CHECK ─────────────────────────────────
+        let fileHash;
+        try {
+          const buf = await file.arrayBuffer();
+          fileHash = await computeBufferHash(buf);
+        } catch {
+          fileHash = `${file.name}-${file.size}-${file.lastModified}`;
         }
 
-        const objectUrl = URL.createObjectURL(file);
+        if (uploadedFileHashes.has(fileHash)) {
+          errorMsg = `🚫 DUPLICATE DETECTED: The file "${file.name}" is identical to a document already uploaded in this session.\n\nThe system uses content-hash verification — renaming a file does not bypass detection.`;
+          break;
+        }
 
-        newPages.push({ 
-          id: fileSignature, 
-          url: objectUrl, 
-          name: file.name,
-          isPdf,
-          rawFile: file
+        // ── 2. READ FILE AS DATA URL FIRST (reliable for OCR and UI preview) ────────
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
         });
+
+        // ── 3. OCR / PDF TEXT VALIDATION ────────────────────────────────────
+        const scanMsg = isPdf ? 'Mahe AI is scanning PDF (may take a few seconds)...' : 'Mahe AI is scanning document...';
+        toast(scanMsg, { icon: '🔍', duration: 3000 });
+
+        const validation = await validateDocOCR(dataUrl, docId, isPdf, file);
+
+        if (!validation.passed) {
+          errorMsg = `⚠️ MAHE AI REJECTION:\n${validation.reason}\n\nPlease upload the correct document.`;
+          break;
+        }
+
+        if (validation.warning) {
+          toast(validation.warning, { icon: '⚠️', duration: 5000 });
+        } else {
+          const rules = DOC_VALIDATION_RULES[docId];
+          toast.success(`Mahe AI Verified ✓ — ${rules?.name || 'Document'} accepted.`);
+        }
+
+        // Auto-fill ALL extracted metadata into propertyDetails
+        if (validation.extractedMeta) {
+          applyExtractedMeta(validation.extractedMeta, propertyDetails, setPropertyDetails, toast);
+        }
+
+        const ext = (file.name.split('.').pop() || (isPdf ? 'pdf' : 'jpg')).toUpperCase();
+        newPages.push({ 
+          id: fileHash, 
+          url: dataUrl, 
+          name: file.name, 
+          isPdf, 
+          rawFile: null,
+          size: file.size,
+          sizeFormatted: formatFileSize(file.size),
+          extension: ext,
+          uploadedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+        newHashes.push(fileHash);
       }
 
       if (errorMsg) {
-        toast((t) => (
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-            <div style={{ flex: 1, fontSize: '14px', color: '#0f172a' }}>
-              {errorMsg.split('\n').map((line, i) => <div key={i} style={{ marginBottom: line === '' ? '8px' : '4px', fontWeight: line.includes('REJECTION') || line.includes('DETECTED') ? '700' : '400', color: line.includes('REJECTION') || line.includes('DETECTED') ? '#ef4444' : 'inherit' }}>{line}</div>)}
-            </div>
-            <button 
-              onClick={() => toast.dismiss(t.id)} 
-              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px' }}
-              onMouseOver={e => e.currentTarget.style.backgroundColor = '#f1f5f9'}
-              onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
-            >
-              <X size={16} />
-            </button>
-          </div>
-        ), { duration: 8000, style: { minWidth: '300px', borderLeft: '4px solid #ef4444', padding: '16px' } });
-        
-        setScanningDocs(prev => ({ ...prev, [docId]: false }));
+        showValidationError(errorMsg);
         newPages.forEach(p => p.url && URL.revokeObjectURL(p.url));
-        // clear input
-        e.target.value = null;
         return;
       }
 
-      setUploadedFileSignatures(prev => [...prev, ...newPages.map(p => p.id)]);
-      setUploadedDocs(prev => ({ 
-        ...prev, 
-        [docId]: [...prev[docId], ...newPages] 
-      }));
+      setUploadedFileHashes(prev => { const s = new Set(prev); newHashes.forEach(h => s.add(h)); return s; });
+      setUploadedDocs(prev => ({ ...prev, [docId]: [...prev[docId], ...newPages] }));
+    } catch (err) {
+      console.error('File upload validation failed:', err);
+      toast.error('An error occurred during file upload. Please try again.');
+    } finally {
       setScanningDocs(prev => ({ ...prev, [docId]: false }));
-      
-      e.target.value = null; 
+      if (e.target) e.target.value = null;
     }
   };
 
   const handleDeletePage = (docId, pageId, e) => {
     e.stopPropagation();
-    const page = uploadedDocs[docId].find(p => p.id === pageId);
-    if (page && page.url && page.url.startsWith('blob:')) {
-      URL.revokeObjectURL(page.url);
-    }
-    setUploadedFileSignatures(prev => prev.filter(sig => sig !== pageId));
+    setUploadedFileHashes(prev => { const s = new Set(prev); s.delete(pageId); return s; });
     setUploadedDocs(prev => ({ ...prev, [docId]: prev[docId].filter(p => p.id !== pageId) }));
   };
 
@@ -628,75 +1491,71 @@ export default function CaseListView({ onOpenCase, currentUser }) {
         setScanningDocs(prev => ({ ...prev, [docId]: true }));
         setActiveDocUpload(null);
 
-        // Run Real Pre-Scan for Camera capture
+        // ── Validate camera-captured document via shared OCR validator ────
         try {
-          const { data: { text } } = await window.Tesseract.recognize(frameUrl, 'eng');
-          const extractedText = text.toLowerCase();
-          
-          let legalKeywords = [];
-          let docName = '';
+          toast('Mahe AI is scanning captured document...', { icon: '🔍', duration: 2500 });
 
-          switch(docId) {
-            case 'saleDeed':
-              legalKeywords = ['sale', 'deed', 'registration', 'schedule', 'property', 'vendor', 'purchaser', 'stamp', 'witness'];
-              docName = 'Sale Deed';
-              break;
-            case 'buildingPlan':
-              legalKeywords = ['plan', 'approval', 'municipal', 'corporation', 'panchayat', 'engineer', 'architect', 'drawing', 'scale', 'plot', 'floor'];
-              docName = 'Building Plan';
-              break;
-            case 'propertyTax':
-              legalKeywords = ['tax', 'assessment', 'receipt', 'municipal', 'revenue', 'property', 'paid', 'amount', 'challan'];
-              docName = 'Property Tax';
-              break;
-            case 'marketValue':
-              legalKeywords = ['market', 'value', 'guideline', 'sub-registrar', 'rate', 'sq.yd', 'sq.ft', 'valuation', 'sro'];
-              docName = 'Market Value Document';
-              break;
-            case 'layoutPlan':
-              legalKeywords = ['layout', 'plan', 'approval', 'survey', 'dtcp', 'huda', 'plot', 'boundaries', 'road', 'master'];
-              docName = 'Layout Plan';
-              break;
-            default:
-              legalKeywords = [];
+          const validation = await validateDocOCR(frameUrl, docId, false);
+
+          if (!validation.passed) {
+            showValidationError(`⚠️ MAHE AI REJECTION:\n${validation.reason}`);
+            setScanningDocs(prev => ({ ...prev, [docId]: false }));
+            return;
           }
 
-          if (legalKeywords.length > 0) {
-            const foundCount = legalKeywords.filter(kw => extractedText.includes(kw)).length;
-            if (foundCount < 2) {
-              const strongMatch = extractedText.includes('sub-registrar') || extractedText.includes('schedule of property') || extractedText.includes('building permission');
-              if (!strongMatch) {
-                toast.error(`⚠️ MAHE AI REJECTION: Mahe AI scanned the image and could not confidently verify it as a ${docName}. It appears to be an irrelevant document or photo.`, { duration: 8000 });
-                setScanningDocs(prev => ({ ...prev, [docId]: false }));
-                return;
-              }
-            }
-            toast.success(`Mahe AI Scan Passed! Verified as ${docName}.`);
+          if (validation.warning) {
+            toast(validation.warning, { icon: '⚠️', duration: 5000 });
+          } else {
+            const rules = DOC_VALIDATION_RULES[docId];
+            toast.success(`Mahe AI Verified ✓ — ${rules?.name || 'Document'} accepted.`);
           }
 
-          const dummyCameraSignature = `camera_capture_${Date.now()}`;
-          const newPage = { 
-            id: dummyCameraSignature, 
-            url: frameUrl, 
-            name: `Camera Capture ${uploadedDocs[docId].length + 1}`,
+          // Auto-fill ALL extracted metadata into propertyDetails
+          if (validation.extractedMeta) {
+            applyExtractedMeta(validation.extractedMeta, propertyDetails, setPropertyDetails, toast);
+          }
+
+          const captureHash = `camera_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+          const byteSize = Math.round((frameUrl.length * 3) / 4);
+          const newPage = {
+            id: captureHash,
+            url: frameUrl,
+            name: `Camera_Scan_Page_${uploadedDocs[docId].length + 1}.jpg`,
             isPdf: false,
-            rawFile: null // Camera captures are data URLs
+            rawFile: null,
+            size: byteSize,
+            sizeFormatted: formatFileSize(byteSize),
+            extension: 'JPG',
+            uploadedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           };
-          
-          setUploadedFileSignatures(prev => [...prev, dummyCameraSignature]);
-          setUploadedDocs(prev => ({ 
-            ...prev, 
-            [docId]: [...prev[docId], newPage] 
-          }));
-          setScanningDocs(prev => ({ ...prev, [docId]: false }));
 
+          setUploadedFileHashes(prev => { const s = new Set(prev); s.add(captureHash); return s; });
+          setUploadedDocs(prev => ({ ...prev, [docId]: [...prev[docId], newPage] }));
         } catch (err) {
-          console.error("Camera OCR Scan Failed", err);
-          toast.error(`⚠️ MAHE AI REJECTION: The image quality is too poor or the document is unreadable. Please upload a clear scan of the document.`, { duration: 8000 });
+          console.error('Camera OCR Scan Failed', err);
+          showValidationError('⚠️ MAHE AI REJECTION:\nThe image quality is too poor or the document is unreadable. Please retake the photo with better lighting.');
+        } finally {
           setScanningDocs(prev => ({ ...prev, [docId]: false }));
         }
       }
     }
+  };
+
+  const handleNextToPropertyDetails = () => {
+    // Sanitize any garbage OCR values before showing Step 3
+    setPropertyDetails(prev => {
+      const cleaned = { ...prev };
+      // Clear single-character or obviously invalid OCR artifacts
+      const isGarbageVal = (v) => !v || v.trim().length <= 2 || /^[a-zA-Z]{1,2}$/.test(v.trim());
+      if (isGarbageVal(cleaned.surveyNo)) cleaned.surveyNo = '';
+      if (isGarbageVal(cleaned.deedNo)) cleaned.deedNo = '';
+      if (isGarbageVal(cleaned.netExtent)) cleaned.netExtent = '';
+      if (isGarbageVal(cleaned.assessmentNo)) cleaned.assessmentNo = '';
+      if (isGarbageVal(cleaned.doorNo)) cleaned.doorNo = '';
+      if (isGarbageVal(cleaned.approvalPlanNo)) cleaned.approvalPlanNo = '';
+      return cleaned;
+    });
+    setModalStep(3);
   };
 
   const handleNextToSiteImages = () => {
@@ -748,9 +1607,7 @@ export default function CaseListView({ onOpenCase, currentUser }) {
       }
 
       // Call Backend OCR API
-      // Note: Make sure the URL matches where your backend is actually deployed.
-      const backendUrl = window.location.hostname === 'localhost' ? 'http://localhost:5001' : 'https://gcr-9ys1.onrender.com';
-      const res = await fetch(`${backendUrl}/api/extract`, {
+      const res = await fetch(`${API_BASE_URL}/api/extract`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -835,7 +1692,15 @@ export default function CaseListView({ onOpenCase, currentUser }) {
     const payloadDocs = {};
     for (const key in uploadedDocs) {
       if (uploadedDocs[key].length > 0) {
-        payloadDocs[key] = uploadedDocs[key].map(p => ({ name: p.name, isPdf: p.isPdf }));
+        payloadDocs[key] = uploadedDocs[key].map(p => ({ 
+          name: p.name, 
+          isPdf: p.isPdf,
+          url: p.url,
+          size: p.size,
+          sizeFormatted: p.sizeFormatted,
+          extension: p.extension,
+          uploadedAt: p.uploadedAt
+        }));
       }
     }
 
@@ -858,13 +1723,13 @@ export default function CaseListView({ onOpenCase, currentUser }) {
     try {
       let response;
       if (editingCaseId) {
-        response = await fetch(`https://gcr-9ys1.onrender.com/api/cases/${editingCaseId}`, {
+        response = await fetch(`${API_BASE_URL}/api/cases/${editingCaseId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
       } else {
-        response = await fetch('https://gcr-9ys1.onrender.com/api/cases', {
+        response = await fetch(`${API_BASE_URL}/api/cases`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -893,7 +1758,7 @@ export default function CaseListView({ onOpenCase, currentUser }) {
         toast.success(`Task successfully submitted for Review!`);
         
         // Notify Admin
-        fetch('https://gcr-9ys1.onrender.com/api/notifications', {
+        fetch(`${API_BASE_URL}/api/notifications`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -926,12 +1791,12 @@ export default function CaseListView({ onOpenCase, currentUser }) {
     setClientFatherName('');
     setBankName('');
     setBankBranch('');
-    setBankDistrict('Y.S.R');
+    setBankDistrict('');
     setShowBankDropdown(false);
     setExtractedData(null);
     setSiteImages([]);
     setLocationData('Fetching location...');
-    setPropertyDetails({ boundariesDoc: { north: '', south: '', east: '', west: '' }, boundariesActual: { north: '', south: '', east: '', west: '' }, buildingAge: '', flooringType: '', structureType: '', roadWidth: '', propertyType: '', roadType: '', plotType: '', deedNo: '', deedYear: '', netExtent: '', surveyNo: '', plotNo: '', khathaNo: '', approvalPlanNo: '', approvalPlanDate: '', builderName: '', managingPartner: '', flatNo: '', floorNo: '', additionsWork: [], siteValue: { plinthArea: '', floors: [{ id: 'gf', label: 'Ground Floor (GF)', value: '' }] } });
+    setPropertyDetails({ boundariesDoc: { north: '', south: '', east: '', west: '' }, boundariesActual: { north: '', south: '', east: '', west: '' }, buildingAge: '', flooringType: '', structureType: '', roadWidth: '', propertyType: '', roadType: '', plotType: '', deedNo: '', deedYear: '', netExtent: '', surveyNo: '', plotNo: '', khathaNo: '', assessmentNo: '', doorNo: '', approvalPlanNo: '', approvalPlanDate: '', builderName: '', managingPartner: '', flatNo: '', floorNo: '', additionsWork: [], siteValue: { plinthArea: '', floors: [{ id: 'gf', label: 'Ground Floor (GF)', value: '' }] } });
     setUploadedFileSignatures([]);
     setUploadedDocs({
       saleDeed: [],
@@ -1021,19 +1886,45 @@ export default function CaseListView({ onOpenCase, currentUser }) {
         )}
 
       {/* Full Screen Image Preview Modal */}
-      {previewImage && (
-        <div style={{
-          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 9999,
-          display: 'flex', flexDirection: 'column', animation: 'fadeIn 0.2s ease-out'
-        }}>
-          <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'white', backgroundColor: 'rgba(0,0,0,0.5)' }}>
-            <span style={{ fontWeight: '600', fontSize: '14px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '80%' }}>
-              {previewImage.name}
-            </span>
-            <button onClick={() => { setPreviewImage(null); setNumPdfPages(null); }} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: '4px' }}>
-              <X size={24} />
-            </button>
-          </div>
+      {previewImage && (() => {
+        const previewInfo = getPageDisplayInfo(previewImage, 0);
+        return (
+          <div style={{
+            position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.92)', zIndex: 9999,
+            display: 'flex', flexDirection: 'column', animation: 'fadeIn 0.2s ease-out'
+          }}>
+            <div style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'white', backgroundColor: 'rgba(15, 23, 42, 0.9)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, maxWidth: '85%' }}>
+                <span style={{
+                  backgroundColor: previewInfo.isPdf ? '#ef4444' : '#3b82f6',
+                  color: 'white',
+                  fontWeight: '700',
+                  fontSize: '11px',
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  letterSpacing: '0.5px'
+                }}>
+                  {previewInfo.ext}
+                </span>
+                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                  <span style={{ fontWeight: '600', fontSize: '14px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={previewInfo.name}>
+                    {previewInfo.name}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: '#94a3b8', flexWrap: 'wrap' }}>
+                    {previewInfo.size && <span>{previewInfo.size}</span>}
+                    {previewInfo.uploadedAt && <span>• Uploaded: {previewInfo.uploadedAt}</span>}
+                    {previewInfo.isPdf && numPdfPages && <span>• {numPdfPages} Page{numPdfPages > 1 ? 's' : ''}</span>}
+                  </div>
+                </div>
+              </div>
+              <button 
+                onClick={() => { setPreviewImage(null); setNumPdfPages(null); }} 
+                style={{ background: 'rgba(255,255,255,0.12)', border: 'none', color: 'white', cursor: 'pointer', padding: '6px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                title="Close"
+              >
+                <X size={20} />
+              </button>
+            </div>
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', overflow: 'hidden' }}>
             {previewImage.isPdf ? (
               <div style={{ width: '100%', height: '100%', overflow: 'auto', backgroundColor: '#222', borderRadius: '8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', padding: '16px 0' }}>
@@ -1053,9 +1944,10 @@ export default function CaseListView({ onOpenCase, currentUser }) {
             ) : (
               <img src={previewImage.url} alt="Preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '8px' }} />
             )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Multi-Step Modal */}
       {modalStep > 0 && (
@@ -1070,7 +1962,28 @@ export default function CaseListView({ onOpenCase, currentUser }) {
           }}>
             
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexShrink: 0 }}>
-              <h2 style={{ fontSize: '18px', fontWeight: '700', margin: 0 }}>
+              {/* Back button — left side */}
+              {modalStep > 1 ? (
+                <button
+                  onClick={() => setModalStep(prev => prev - 1)}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: '4px',
+                    color: 'var(--primary)', fontWeight: '600', fontSize: '14px',
+                    padding: '4px 8px', borderRadius: '8px',
+                    transition: 'background 0.15s'
+                  }}
+                  onMouseOver={e => e.currentTarget.style.backgroundColor = 'rgba(3,70,200,0.08)'}
+                  onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                >
+                  <ChevronLeft size={20} /> Back
+                </button>
+              ) : (
+                <div style={{ width: '72px' }} />
+              )}
+
+              {/* Step title — center */}
+              <h2 style={{ fontSize: '18px', fontWeight: '700', margin: 0, textAlign: 'center', flex: 1 }}>
                 {modalStep === 1 && "New Case Setup"}
                 {modalStep === 2 && "Official Legal Documents"}
                 {modalStep === 3 && "Property Details"}
@@ -1079,7 +1992,9 @@ export default function CaseListView({ onOpenCase, currentUser }) {
                 {modalStep === 6 && "Extracted Data"}
                 {modalStep === 7 && "Final Review & Digital Signature"}
               </h2>
-              <button onClick={closeModal} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+
+              {/* Close button — right side */}
+              <button onClick={closeModal} style={{ background: 'none', border: 'none', cursor: 'pointer', width: '72px', display: 'flex', justifyContent: 'flex-end' }}>
                 <X size={24} color="var(--text-muted)" />
               </button>
             </div>
@@ -1163,7 +2078,7 @@ export default function CaseListView({ onOpenCase, currentUser }) {
 
                       {bankName.trim() !== '' && !filteredBanks.some(b => b.toLowerCase() === bankName.toLowerCase()) && (
                         <div 
-                          onClick={() => setShowBankDropdown(false)}
+                          onClick={() => handleAddCustomBank(bankName)}
                           onMouseDown={(e) => e.preventDefault()}
                           style={{ 
                             margin: '8px', padding: '12px', fontSize: '13px', color: '#0346c8', 
@@ -1196,11 +2111,19 @@ export default function CaseListView({ onOpenCase, currentUser }) {
                     <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '8px' }}>District</label>
                     <input 
                       type="text" 
-                      placeholder="e.g. Y.S.R"
+                      placeholder="Enter district (e.g. Kadapa, Y.S.R, Chittoor...)"
                       value={bankDistrict}
                       onChange={e => setBankDistrict(e.target.value)}
+                      list="district-suggestions"
                       style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '2px solid var(--border-color)', fontSize: '14px', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
                     />
+                    {availableDistricts.length > 0 && (
+                      <datalist id="district-suggestions">
+                        {availableDistricts.map(d => (
+                          <option key={d} value={d} />
+                        ))}
+                      </datalist>
+                    )}
                   </div>
                 </div>
                 
@@ -1213,14 +2136,14 @@ export default function CaseListView({ onOpenCase, currentUser }) {
             {/* STEP 2 */}
             {modalStep === 2 && (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-                <input type="file" ref={fileInputRef} onChange={handleSimulateUpload} multiple accept=".pdf,.doc,.docx,image/*" style={{ display: 'none' }} />
+                <input type="file" ref={fileInputRef} onChange={handleSimulateUpload} multiple accept=".pdf,image/png,image/jpeg,image/jpg,image/webp" style={{ display: 'none' }} />
 
                 {!isCameraActive ? (
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                     <div style={{ padding: '12px', backgroundColor: 'rgba(234, 179, 8, 0.1)', border: '1px solid #eab308', borderRadius: '8px', display: 'flex', gap: '8px', marginBottom: '16px' }}>
-                      <ShieldAlert size={20} color="#ca8a04" style={{ flexShrink: 0 }} />
+                      <ShieldAlert size={20} color="#ca8a04" style={{ flexShrink: 0, marginTop: '2px' }} />
                       <span style={{ fontSize: '13px', color: '#854d0e', lineHeight: '1.4' }}>
-                        <strong>Strict Validation Active:</strong> Uploads are pre-scanned. Duplicates or irrelevant documents will be immediately rejected. You can add multiple pages per document.
+                        <strong>Strict Validation Active:</strong> Every upload is scanned by Mahe AI using OCR text analysis. Images and PDFs are both verified. Duplicate files are detected via content-hash — renaming a file will not bypass this. Irrelevant documents are rejected immediately. You can add multiple pages per document.
                       </span>
                     </div>
 
@@ -1246,8 +2169,8 @@ export default function CaseListView({ onOpenCase, currentUser }) {
                               <div style={{ fontSize: '14px', fontWeight: '600', color: pageCount > 0 ? '#065f46' : 'var(--text-primary)', marginBottom: '8px', lineHeight: '1.4' }}>{doc.label}</div>
                               
                               {isScanning ? (
-                                <span style={{ backgroundColor: 'rgba(0,82,204,0.1)', color: 'var(--primary)', border: '1px solid rgba(0,82,204,0.2)', padding: '4px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                  <Loader2 size={12} className="spin" /> Scanning...
+                                <span style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                  <ScanLine size={13} className="spin" /> Scanning...
                                 </span>
                               ) : pageCount > 0 ? (
                                 <span style={{ backgroundColor: '#d1fae5', color: '#065f46', border: '1px solid #a7f3d0', padding: '4px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
@@ -1268,7 +2191,7 @@ export default function CaseListView({ onOpenCase, currentUser }) {
                                 <Camera size={16} />
                               </button>
                               <button 
-                                onClick={() => { setActiveDocUpload(doc.id); fileInputRef.current.click(); }}
+                                onClick={() => { activeDocUploadRef.current = doc.id; setActiveDocUpload(doc.id); fileInputRef.current.click(); }}
                                 style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#fff', border: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#475569', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
                               >
                                 <UploadCloud size={16} />
@@ -1276,65 +2199,281 @@ export default function CaseListView({ onOpenCase, currentUser }) {
                             </div>
                           </div>
 
-                          {/* Image Thumbnails Previews */}
+                          {/* High-Tech Laser Scanning Animation Box */}
+                          {isScanning && (
+                            <div style={{
+                              marginTop: '14px',
+                              padding: '16px',
+                              borderRadius: '10px',
+                              border: '1.5px dashed #60a5fa',
+                              position: 'relative',
+                              overflow: 'hidden',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '8px',
+                              background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+                              boxShadow: '0 2px 8px rgba(37, 99, 235, 0.08)'
+                            }}>
+                              <style>{`
+                                @keyframes scanLaser {
+                                  0% { top: 6px; opacity: 0.7; }
+                                  50% { top: calc(100% - 8px); opacity: 1; }
+                                  100% { top: 6px; opacity: 0.7; }
+                                }
+                              `}</style>
+                              {/* Laser Beam */}
+                              <div style={{
+                                position: 'absolute',
+                                left: '8px',
+                                right: '8px',
+                                height: '3px',
+                                background: 'linear-gradient(90deg, transparent, #2563eb, #38bdf8, #2563eb, transparent)',
+                                boxShadow: '0 0 10px #3b82f6',
+                                animation: 'scanLaser 1.8s ease-in-out infinite'
+                              }} />
+                              
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', zIndex: 1 }}>
+                                <Loader2 size={18} className="spin" color="#2563eb" />
+                                <span style={{ fontSize: '13px', fontWeight: '700', color: '#1e40af' }}>
+                                  Mahe AI OCR Scanning in Progress...
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '11px', color: '#64748b', textAlign: 'center', zIndex: 1 }}>
+                                Analyzing document structure, municipal seals & sanction details
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setScanningDocs(prev => ({ ...prev, [doc.id]: false }));
+                                }}
+                                style={{
+                                  marginTop: '4px',
+                                  fontSize: '11px',
+                                  color: '#dc2626',
+                                  background: '#fee2e2',
+                                  border: '1px solid #fecaca',
+                                  borderRadius: '6px',
+                                  padding: '3px 10px',
+                                  cursor: 'pointer',
+                                  zIndex: 2,
+                                  fontWeight: '600'
+                                }}
+                              >
+                                Cancel / Reset Scan
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Uploaded Files Detailed List */}
                           {pageCount > 0 && (
-                            <div style={{ display: 'flex', gap: '8px', marginTop: '16px', overflowX: 'auto', paddingBottom: '4px' }}>
-                              {pages.map((page, idx) => (
-                                <div 
-                                  key={page.id}
-                                  onClick={() => setPreviewImage(page)}
-                                  style={{ 
-                                    width: '48px', height: '48px', borderRadius: '8px', 
-                                    border: '1px solid #a7f3d0', overflow: 'hidden', flexShrink: 0,
-                                    cursor: 'pointer', position: 'relative', backgroundColor: '#fff',
-                                    boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
-                                  }}
-                                >
-                                  {page.isPdf ? (
-                                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444', fontSize: '10px', fontWeight: 'bold' }}>PDF</div>
-                                  ) : (
-                                    <img src={page.url} alt={page.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                  )}
-                                  <button
-                                    onClick={(e) => handleDeletePage(doc.id, page.id, e)}
-                                    style={{
-                                      position: 'absolute', top: 0, right: 0,
-                                      backgroundColor: 'rgba(239, 68, 68, 0.95)', color: 'white',
-                                      border: 'none', width: '16px', height: '16px',
-                                      borderBottomLeftRadius: '4px', display: 'flex',
-                                      alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                                      padding: 0
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '14px' }}>
+                              {pages.map((page, idx) => {
+                                const info = getPageDisplayInfo(page, idx);
+                                return (
+                                  <div 
+                                    key={page.id || idx}
+                                    style={{ 
+                                      display: 'flex', 
+                                      alignItems: 'center', 
+                                      gap: '12px',
+                                      padding: '10px 12px',
+                                      backgroundColor: '#ffffff',
+                                      border: '1px solid #d1fae5',
+                                      borderRadius: '10px',
+                                      boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+                                      transition: 'all 0.15s ease'
                                     }}
                                   >
-                                    <X size={10} strokeWidth={3} />
-                                  </button>
-                                  <div style={{ position: 'absolute', bottom: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: '9px', padding: '1px 4px', borderTopLeftRadius: '4px' }}>
-                                    {idx + 1}
+                                    {/* Thumbnail Preview or PDF Badge */}
+                                    <div 
+                                      onClick={() => setPreviewImage(page)}
+                                      title="Click to preview"
+                                      style={{ 
+                                        width: '46px', 
+                                        height: '46px', 
+                                        borderRadius: '8px', 
+                                        border: '1px solid #e2e8f0', 
+                                        overflow: 'hidden', 
+                                        flexShrink: 0,
+                                        cursor: 'pointer', 
+                                        position: 'relative', 
+                                        backgroundColor: info.isPdf ? '#fef2f2' : '#f8fafc',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                      }}
+                                    >
+                                      {info.isPdf ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                                          <FileText size={18} color="#dc2626" />
+                                          <span style={{ fontSize: '9px', fontWeight: '800', color: '#dc2626', letterSpacing: '0.5px' }}>PDF</span>
+                                        </div>
+                                      ) : page.url ? (
+                                        <img src={page.url} alt={info.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                      ) : (
+                                        <FileText size={20} color="#059669" />
+                                      )}
+                                      <div style={{ 
+                                        position: 'absolute', 
+                                        bottom: 0, 
+                                        right: 0, 
+                                        backgroundColor: 'rgba(15, 23, 42, 0.75)', 
+                                        color: '#ffffff', 
+                                        fontSize: '9px', 
+                                        fontWeight: '700', 
+                                        padding: '1px 4px', 
+                                        borderTopLeftRadius: '4px' 
+                                      }}>
+                                        #{idx + 1}
+                                      </div>
+                                    </div>
+
+                                    {/* File Metadata */}
+                                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                      {/* File Name */}
+                                      <div 
+                                        title={info.name}
+                                        style={{ 
+                                          fontSize: '13px', 
+                                          fontWeight: '600', 
+                                          color: '#0f172a', 
+                                          whiteSpace: 'nowrap', 
+                                          overflow: 'hidden', 
+                                          textOverflow: 'ellipsis' 
+                                        }}
+                                      >
+                                        {info.name}
+                                      </div>
+                                      
+                                      {/* Extension badge, size, uploaded time, verified badge */}
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', fontSize: '11px' }}>
+                                        <span style={{ 
+                                          backgroundColor: info.isPdf ? '#fee2e2' : '#e0e7ff', 
+                                          color: info.isPdf ? '#dc2626' : '#4338ca', 
+                                          fontWeight: '700', 
+                                          fontSize: '10px', 
+                                          padding: '1px 6px', 
+                                          borderRadius: '4px',
+                                          letterSpacing: '0.5px'
+                                        }}>
+                                          {info.ext}
+                                        </span>
+
+                                        {info.size && (
+                                          <span style={{ color: '#64748b', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: '500' }}>
+                                            <HardDrive size={11} color="#94a3b8" />
+                                            {info.size}
+                                          </span>
+                                        )}
+
+                                        {info.uploadedAt && (
+                                          <span style={{ color: '#94a3b8', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                            <Clock size={11} />
+                                            {info.uploadedAt}
+                                          </span>
+                                        )}
+
+                                        <span style={{ 
+                                          display: 'inline-flex', 
+                                          alignItems: 'center', 
+                                          gap: '3px', 
+                                          color: '#059669', 
+                                          backgroundColor: '#ecfdf5', 
+                                          padding: '1px 6px', 
+                                          borderRadius: '4px', 
+                                          fontWeight: '600',
+                                          fontSize: '10px'
+                                        }}>
+                                          <CheckCircle2 size={10} /> Verified
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    {/* Action Buttons: Preview & Delete */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                                      <button 
+                                        type="button"
+                                        onClick={() => setPreviewImage(page)}
+                                        title="Preview file"
+                                        style={{ 
+                                          width: '32px', 
+                                          height: '32px', 
+                                          borderRadius: '6px', 
+                                          border: '1px solid #e2e8f0', 
+                                          backgroundColor: '#f8fafc', 
+                                          color: '#0284c7', 
+                                          display: 'flex', 
+                                          alignItems: 'center', 
+                                          justifyContent: 'center', 
+                                          cursor: 'pointer',
+                                          transition: 'background 0.15s'
+                                        }}
+                                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#e0f2fe'}
+                                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
+                                      >
+                                        <Eye size={15} />
+                                      </button>
+                                      <button 
+                                        type="button"
+                                        onClick={(e) => handleDeletePage(doc.id, page.id, e)}
+                                        title="Delete file"
+                                        style={{ 
+                                          width: '32px', 
+                                          height: '32px', 
+                                          borderRadius: '6px', 
+                                          border: '1px solid #fee2e2', 
+                                          backgroundColor: '#fff1f2', 
+                                          color: '#e11d48', 
+                                          display: 'flex', 
+                                          alignItems: 'center', 
+                                          justifyContent: 'center', 
+                                          cursor: 'pointer',
+                                          transition: 'background 0.15s'
+                                        }}
+                                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#ffe4e6'}
+                                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#fff1f2'}
+                                      >
+                                        <Trash2 size={15} />
+                                      </button>
+                                    </div>
                                   </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
                         </div>
                       )})}
                     </div>
 
-                    <button 
-                      className="btn-primary" 
-                      onClick={() => setModalStep(3)}
-                      disabled={!isDocumentVerified}
-                      style={{ 
-                        opacity: !isDocumentVerified ? 0.5 : 1,
-                        marginTop: 'auto',
-                        backgroundColor: !isDocumentVerified ? '#94a3b8' : ''
-                      }}
-                    >
-                      {isDocumentVerified ? (
-                        <>Next: Property Details <ChevronRight size={18} /></>
-                      ) : (
-                        <>Complete AI Verification First (Auto-Extract)</>
-                      )}
-                    </button>
+                    {(() => {
+                      const allUploaded = REQUIRED_DOCS.every(doc => uploadedDocs[doc.id]?.length > 0);
+                      const anyScanningNow = Object.values(scanningDocs).some(Boolean);
+                      const canProceed = allUploaded && !anyScanningNow;
+                      return (
+                        <button
+                          className="btn-primary"
+                          onClick={handleNextToPropertyDetails}
+                          disabled={!canProceed}
+                          style={{
+                            opacity: !canProceed ? 0.5 : 1,
+                            marginTop: 'auto',
+                            backgroundColor: !canProceed ? '#94a3b8' : '',
+                            cursor: !canProceed ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          {anyScanningNow ? (
+                            <><Loader2 size={16} className="spin" /> Mahe AI Scanning...</>
+                          ) : allUploaded ? (
+                            <>Next: Property Details <ChevronRight size={18} /></>
+                          ) : (
+                            <>Upload All 5 Documents to Continue ({REQUIRED_DOCS.filter(d => uploadedDocs[d.id]?.length > 0).length}/5 Done)</>
+                          )}
+                        </button>
+                      );
+                    })()}
                   </div>
                 ) : (
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -1376,10 +2515,9 @@ export default function CaseListView({ onOpenCase, currentUser }) {
                   <label style={{ display: 'block', fontSize: '14px', fontWeight: '700', color: '#0369a1', marginBottom: '12px' }}>Report Category <span style={{ color: '#ef4444' }}>*</span></label>
                   <select value={propertyDetails.propertyType} onChange={e => setPropertyDetails({...propertyDetails, propertyType: e.target.value})} style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '2px solid #bae6fd', fontSize: '14px', outline: 'none', backgroundColor: 'white', fontWeight: '600' }}>
                     <option value="">Select Category...</option>
-                    <option value="Apartment">Apartment</option>
-                    <option value="Independent House">Independent House</option>
-                    <option value="Open Agriculture Land">Open Agriculture Land</option>
-                    <option value="Open Site">Open Site</option>
+                    {propertyTypes.map(pt => (
+                      <option key={pt} value={pt}>{pt}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -1414,6 +2552,16 @@ export default function CaseListView({ onOpenCase, currentUser }) {
                     <div>
                       <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '4px' }}>Plot Number</label>
                       <input type="text" value={propertyDetails.plotNo} onChange={e => setPropertyDetails({...propertyDetails, plotNo: e.target.value})} style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none' }} placeholder="Optional" />
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '4px' }}>Property Tax / Assessment No</label>
+                      <input type="text" value={propertyDetails.assessmentNo || ''} onChange={e => setPropertyDetails({...propertyDetails, assessmentNo: e.target.value})} style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none' }} placeholder="e.g. 1013104872" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '4px' }}>Door / House Number</label>
+                      <input type="text" value={propertyDetails.doorNo || ''} onChange={e => setPropertyDetails({...propertyDetails, doorNo: e.target.value})} style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none' }} placeholder="e.g. 58/384-2-1-2" />
                     </div>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
@@ -1515,8 +2663,9 @@ export default function CaseListView({ onOpenCase, currentUser }) {
                     <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '4px' }}>Plot Type <span style={{ color: '#ef4444' }}>*</span></label>
                     <select value={propertyDetails.plotType} onChange={e => setPropertyDetails({...propertyDetails, plotType: e.target.value})} style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none', backgroundColor: 'white' }}>
                       <option value="">Select...</option>
-                      <option value="Corner plot">Corner plot</option>
-                      <option value="Intermediary plot">Intermediary plot</option>
+                      {plotTypes.map(pt => (
+                        <option key={pt} value={pt}>{pt}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -1526,17 +2675,18 @@ export default function CaseListView({ onOpenCase, currentUser }) {
                     <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '4px' }}>Type of Road <span style={{ color: '#ef4444' }}>*</span></label>
                     <select value={propertyDetails.roadType} onChange={e => setPropertyDetails({...propertyDetails, roadType: e.target.value})} style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none', backgroundColor: 'white' }}>
                       <option value="">Select...</option>
-                      <option value="CC Road">CC Road</option>
-                      <option value="BT">BT</option>
-                      <option value="Metal">Metal</option>
+                      {roadTypes.map(rt => (
+                        <option key={rt} value={rt}>{rt}</option>
+                      ))}
                     </select>
                   </div>
                   <div style={{ flex: 1 }}>
                     <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '4px' }}>Type of Structure <span style={{ color: '#ef4444' }}>*</span></label>
                     <select value={propertyDetails.structureType} onChange={e => setPropertyDetails({...propertyDetails, structureType: e.target.value})} style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none', backgroundColor: 'white' }}>
                       <option value="">Select...</option>
-                      <option value="Load bearing">Load bearing</option>
-                      <option value="Framed structure">Framed structure</option>
+                      {structureTypes.map(st => (
+                        <option key={st} value={st}>{st}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -1545,8 +2695,9 @@ export default function CaseListView({ onOpenCase, currentUser }) {
                   <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '4px' }}>Type of Flooring <span style={{ color: '#ef4444' }}>*</span></label>
                   <select value={propertyDetails.flooringType} onChange={e => setPropertyDetails({...propertyDetails, flooringType: e.target.value})} style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none', backgroundColor: 'white' }}>
                     <option value="">Select...</option>
-                    <option value="Granite">Granite</option>
-                    <option value="Tiles">Tiles</option>
+                    {flooringTypes.map(ft => (
+                      <option key={ft} value={ft}>{ft}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -1830,16 +2981,46 @@ export default function CaseListView({ onOpenCase, currentUser }) {
                         </div>
                       </div>
                       {showSummaryDocs && Object.values(uploadedDocs).flat().length > 0 && (
-                        <div style={{ display: 'flex', gap: '8px', marginTop: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
-                          {Object.values(uploadedDocs).flat().map((page, idx) => (
-                            <div key={page.id} onClick={() => setPreviewImage(page)} style={{ width: '40px', height: '40px', borderRadius: '6px', border: '1px solid var(--border-color)', overflow: 'hidden', flexShrink: 0, cursor: 'pointer', backgroundColor: '#fff' }}>
-                              {page.isPdf ? (
-                                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444', fontSize: '9px', fontWeight: 'bold' }}>PDF</div>
-                              ) : (
-                                <img src={page.url} alt={page.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              )}
-                            </div>
-                          ))}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' }}>
+                          {Object.values(uploadedDocs).flat().map((page, idx) => {
+                            const info = getPageDisplayInfo(page, idx);
+                            return (
+                              <div 
+                                key={page.id || idx} 
+                                onClick={() => setPreviewImage(page)} 
+                                style={{ 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'space-between',
+                                  padding: '6px 10px',
+                                  backgroundColor: '#f8fafc',
+                                  border: '1px solid var(--border-color)',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+                                  <span style={{ 
+                                    backgroundColor: info.isPdf ? '#fee2e2' : '#e0e7ff',
+                                    color: info.isPdf ? '#dc2626' : '#4338ca',
+                                    fontSize: '9px',
+                                    fontWeight: '700',
+                                    padding: '1px 5px',
+                                    borderRadius: '3px'
+                                  }}>
+                                    {info.ext}
+                                  </span>
+                                  <span style={{ fontSize: '12px', fontWeight: '500', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {info.name}
+                                  </span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, fontSize: '11px', color: '#64748b' }}>
+                                  {info.size && <span>{info.size}</span>}
+                                  <Eye size={13} color="var(--primary)" />
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
