@@ -32,6 +32,8 @@ jobs:
 
       - name: Build Frontend (Web)
         working-directory: ./ValuationApp
+        env:
+          VITE_API_URL: https://gcrapp.onrender.com
         run: npm run build
 
       - name: Zip Frontend Build
