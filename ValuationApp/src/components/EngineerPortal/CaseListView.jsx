@@ -847,7 +847,7 @@ export default function CaseListView({ onOpenCase, currentUser }) {
 
         // Reopen the modal on the exact step the user was on
         setModalStep(draft.modalStep);
-        toast('📋 Session restored — continuing where you left off.', { duration: 3000, icon: '✅' });
+        toast('📋 Session restored — continuing where you left off.', { id: 'session-restored', duration: 3000, icon: '✅' });
       } catch (e) {
         console.warn('Auto-restore draft failed:', e);
       }
