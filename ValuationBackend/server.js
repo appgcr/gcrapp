@@ -69,6 +69,21 @@ mongoose.connect(MONGODB_URI, { family: 4 })
     app.listen(PORT, () => {
       console.log(`🚀 SBI Valuation Backend Server running on http://localhost:${PORT}`);
       console.log(`📡 API Health Check available at http://localhost:${PORT}/api/health`);
+      // Pre-warm fast local OCR engine
+      try {
+        const { spawn } = require('child_process');
+        const fs = require('fs');
+        const venvPy = 'd:\\gcr\\venv_ocr\\Scripts\\python.exe';
+        const pythonExe = fs.existsSync(venvPy) ? venvPy : 'python';
+        const ocrScript = path.join(__dirname, 'ocr_service', 'ocr_server.py');
+        if (fs.existsSync(ocrScript)) {
+          const ocrProc = spawn(pythonExe, [ocrScript], { stdio: 'ignore' });
+          ocrProc.unref();
+          console.log('⚡ Fast Local OCR Engine initialized on port 5002');
+        }
+      } catch (ocrStartErr) {
+        console.warn('OCR daemon start note:', ocrStartErr.message);
+      }
     });
   })
   .catch(err => {

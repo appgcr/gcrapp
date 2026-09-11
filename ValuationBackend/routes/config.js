@@ -68,7 +68,7 @@ router.put('/', async (req, res) => {
 // POST /api/config/banks
 router.post('/banks', async (req, res) => {
   try {
-    const { name } = req.body;
+    const name = req.body.name || req.body.bank;
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Bank name is required' });
     }
@@ -90,7 +90,7 @@ router.post('/banks', async (req, res) => {
 // POST /api/config/districts
 router.post('/districts', async (req, res) => {
   try {
-    const { name } = req.body;
+    const name = req.body.name || req.body.district;
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'District name is required' });
     }

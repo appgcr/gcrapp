@@ -40,65 +40,6 @@ export default function App() {
   useEffect(() => {
     if (!currentUser || currentUser.role === 'SUPER_ADMIN') return;
     
-    // Request permission natively
-    if (Capacitor.isNativePlatform()) {
-      LocalNotifications.requestPermissions();
-    }
-
-    const checkMessages = async () => {
-      try {
-        const res = await fetch(`https://gcr-9ys1.onrender.com/api/chat/${currentUser.id}/ADMIN`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.length > 0) {
-            const latestMsg = data[data.length - 1];
-            
-            if (
-              lastMessageIdRef.current && 
-              lastMessageIdRef.current !== latestMsg._id && 
-              latestMsg.senderId === 'ADMIN' && 
-              activeTabRef.current !== 'chat'
-            ) {
-              // Fire Native Notification
-              if (Capacitor.isNativePlatform()) {
-                LocalNotifications.schedule({
-                  notifications: [{
-                    title: 'New Message from Admin',
-                    body: latestMsg.text.substring(0, 60) + (latestMsg.text.length > 60 ? '...' : ''),
-                    id: new Date().getTime(),
-                    schedule: { at: new Date(Date.now() + 100) },
-                    smallIcon: 'ic_stat_icon_config_sample'
-                  }]
-                });
-              } else if ('Notification' in window && Notification.permission === 'granted') {
-                // Web Fallback
-                new Notification('New Message from Admin', { body: latestMsg.text });
-              }
-            }
-            lastMessageIdRef.current = latestMsg._id;
-          }
-        }
-      } catch (err) {
-        console.error("Global Chat Poller Error:", err);
-      }
-    };
-
-    // Poll every 3 seconds for new background messages
-    const interval = setInterval(checkMessages, 3000);
-    
-    // Web Notification Permission
-    if (!Capacitor.isNativePlatform() && 'Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-
-    return () => clearInterval(interval);
-  }, [currentUser]);
-
-
-
-  useEffect(() => {
-    if (!currentUser) return;
-    
     const listener = CapacitorApp.addListener('appStateChange', ({ isActive }) => {
       if (!isActive) {
         setIsAppLocked(true);

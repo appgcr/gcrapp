@@ -295,37 +295,37 @@ export default function SettingsView({ currentUser, handleLogout }) {
         
         <div 
           onClick={handleRegisterBiometrics}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', borderBottom: '1px solid var(--border-color)', cursor: 'pointer' }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', borderBottom: '1px solid var(--border-color)', cursor: 'pointer', gap: '12px' }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <Shield size={20} color="var(--primary)" />
-            <div>
-              <div style={{ fontSize: '15px', fontWeight: '500' }}>Register Biometrics (Passkey)</div>
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Setup Fingerprint or Face ID for login</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
+            <Shield size={20} color="var(--primary)" style={{ flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '15px', fontWeight: '500', wordBreak: 'break-word' }}>Register Biometrics (Passkey)</div>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', wordBreak: 'break-word' }}>Setup Fingerprint or Face ID for login</div>
             </div>
           </div>
-          <ChevronRight size={20} color="var(--text-muted)" />
+          <ChevronRight size={20} color="var(--text-muted)" style={{ flexShrink: 0 }} />
         </div>
 
         {currentUser?.role === 'SUPER_ADMIN' && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', borderBottom: '1px solid var(--border-color)', cursor: 'pointer' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <Shield size={20} color="var(--primary)" />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', borderBottom: '1px solid var(--border-color)', cursor: 'pointer', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
+              <Shield size={20} color="var(--primary)" style={{ flexShrink: 0 }} />
               <span style={{ fontSize: '15px', fontWeight: '500' }}>Change Password</span>
             </div>
-            <ChevronRight size={20} color="var(--text-muted)" />
+            <ChevronRight size={20} color="var(--text-muted)" style={{ flexShrink: 0 }} />
           </div>
         )}
 
         <div 
           onClick={() => setShowHelpModal(true)}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', cursor: 'pointer' }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', cursor: 'pointer', gap: '12px' }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <HelpCircle size={20} color="var(--primary)" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
+            <HelpCircle size={20} color="var(--primary)" style={{ flexShrink: 0 }} />
             <span style={{ fontSize: '15px', fontWeight: '500' }}>Help & Support</span>
           </div>
-          <ChevronRight size={20} color="var(--text-muted)" />
+          <ChevronRight size={20} color="var(--text-muted)" style={{ flexShrink: 0 }} />
         </div>
       </div>
 

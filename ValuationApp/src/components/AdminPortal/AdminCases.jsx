@@ -67,7 +67,7 @@ export default function AdminCases({ defaultFilter = '' }) {
       await fetch(`${API_BASE_URL}/api/config/banks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bank: trimmed })
+        body: JSON.stringify({ name: trimmed, bank: trimmed })
       });
     } catch (_) {}
     const saved = localStorage.getItem('gcr_valuation_custom_banks');
@@ -576,24 +576,24 @@ export default function AdminCases({ defaultFilter = '' }) {
                   )}
                 </div>
 
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: '1 1 130px' }}>
                     <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Inspection Date *</label>
                     <input 
                       type="date" 
                       required
                       min={new Date().toISOString().split('T')[0]}
-                      style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px' }}
+                      style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', width: '100%' }}
                       value={newTask.date}
                       onChange={e => setNewTask({...newTask, date: e.target.value})}
                     />
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: '1 1 130px' }}>
                     <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Inspection Time *</label>
                     <input 
                       type="time" 
                       required
-                      style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px' }}
+                      style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', width: '100%' }}
                       value={newTask.time}
                       onChange={e => setNewTask({...newTask, time: e.target.value})}
                     />
@@ -670,17 +670,17 @@ export default function AdminCases({ defaultFilter = '' }) {
                   ) : (
                     newTasks.map(c => (
                       <div key={c.id} className="admin-card" style={{ borderTop: `3px solid #3b82f6` }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
-                            <div style={{ background: '#eff6ff', color: '#3b82f6', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'flex-start' }}>
+                          <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flex: 1, minWidth: 0 }}>
+                            <div style={{ background: '#eff6ff', color: '#3b82f6', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                               <FileText size={16} />
                             </div>
-                            <div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b' }}>#{c.id}</div>
-                              <div style={{ fontSize: '18px', fontWeight: '700' }}>{c.clientName || c.borrowerName || 'Unknown Client'}</div>
+                              <div style={{ fontSize: '16px', fontWeight: '700', wordBreak: 'break-word' }}>{c.clientName || c.borrowerName || 'Unknown Client'}</div>
                             </div>
                           </div>
-                          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', flexShrink: 0 }}>
                             <button 
                               onClick={() => {
                                 setNewTask({
@@ -705,7 +705,10 @@ export default function AdminCases({ defaultFilter = '' }) {
                           </div>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px', color: '#334155', marginBottom: '16px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><MapPin size={14} /> Location: {c.locationData || c.bankName || 'Unknown'}</div>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', wordBreak: 'break-word' }}>
+                            <MapPin size={14} style={{ flexShrink: 0, marginTop: '3px' }} />
+                            <span>Location: {c.locationData || c.bankName || 'Unknown'}</span>
+                          </div>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
                           <select
@@ -758,27 +761,30 @@ export default function AdminCases({ defaultFilter = '' }) {
                   const addressText = c.locationData || c.bankName || 'Unknown Address';
                   return (
                     <div key={c.id} className="admin-card" style={{ borderTop: `3px solid #f59e0b` }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
-                          <div style={{ background: '#fef3c7', color: '#f59e0b', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'flex-start' }}>
+                        <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flex: 1, minWidth: 0 }}>
+                          <div style={{ background: '#fef3c7', color: '#f59e0b', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                             <FileText size={16} />
                           </div>
-                          <div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b' }}>#{c.id}</div>
-                            <div style={{ fontSize: '18px', fontWeight: '700' }}>{c.clientName || 'Unknown Client'}</div>
+                            <div style={{ fontSize: '16px', fontWeight: '700', wordBreak: 'break-word' }}>{c.clientName || 'Unknown Client'}</div>
                           </div>
                         </div>
-                        <div className="activity-badge badge-pending" style={{ height: 'fit-content' }}>Reviewing</div>
+                        <div className="activity-badge badge-pending" style={{ height: 'fit-content', flexShrink: 0 }}>Reviewing</div>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px', color: '#334155', marginBottom: '16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>👤 Assigned to: <strong style={{color: '#0f172a'}}>{c.assignedEngineerName}</strong></div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><MapPin size={14} /> Location: {addressText}</div>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', wordBreak: 'break-word' }}>
+                          <MapPin size={14} style={{ flexShrink: 0, marginTop: '3px' }} />
+                          <span>Location: {addressText}</span>
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button className="admin-btn-outline" style={{ flex: 1 }}>View Report</button>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button className="admin-btn-outline" style={{ flex: '1 1 120px' }}>View Report</button>
                         <button 
                           className="admin-btn-primary" 
-                          style={{ flex: 1, background: '#10b981', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
+                          style={{ flex: '1 1 140px', background: '#10b981', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
                           onClick={() => handleApprove(c.id, c.assignedEngineerId)}
                           disabled={processingId === c.id}
                         >

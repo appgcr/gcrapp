@@ -293,3 +293,115 @@ body.dark-theme .top-header {
   flex-direction: column;
   gap: 12px;
 }
+
+/* =========================================
+   ANIMATIONS (Spin, ScanLaser)
+========================================= */
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes scanLaser {
+  0% { top: 0; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+/* =========================================
+   RESPONSIVE UTILITIES & MOBILE OPTIMIZATIONS
+========================================= */
+.responsive-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.responsive-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.responsive-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.badge-pill-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+@media (max-width: 480px) {
+  .top-header {
+    padding: 0 12px;
+    height: 52px;
+  }
+  
+  .header-title {
+    font-size: 15px;
+    gap: 8px;
+  }
+
+  .main-content {
+    padding: 64px 12px 84px;
+  }
+
+  .bottom-tab-bar {
+    height: 60px;
+  }
+
+  .tab-item {
+    font-size: 10px;
+    width: 56px;
+    gap: 2px;
+  }
+
+  .tab-item svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .responsive-grid-4 {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .native-card {
+    padding: 14px 12px;
+    border-radius: 10px;
+  }
+}
+
+@media (max-width: 360px) {
+  .responsive-grid-2 {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  
+  .header-title span {
+    font-size: 14px;
+  }
+}

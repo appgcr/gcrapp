@@ -343,17 +343,18 @@ export default function AttendanceView({ currentUser: initialUser }) {
         display: 'flex',
         backgroundColor: '#f1f5f9',
         padding: '4px',
-        borderRadius: '14px',
-        marginBottom: '20px'
+        borderRadius: '12px',
+        marginBottom: '16px',
+        gap: '2px'
       }}>
         <button
           onClick={() => setActiveView('MARK')}
           style={{
             flex: 1,
-            padding: '9px',
+            padding: '8px 4px',
             border: 'none',
-            borderRadius: '10px',
-            fontSize: '13px',
+            borderRadius: '8px',
+            fontSize: 'clamp(11px, 3.1vw, 13px)',
             fontWeight: '700',
             backgroundColor: activeView === 'MARK' ? '#ffffff' : 'transparent',
             color: activeView === 'MARK' ? '#0052cc' : '#64748b',
@@ -362,21 +363,22 @@ export default function AttendanceView({ currentUser: initialUser }) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '6px',
-            transition: 'all 0.2s ease'
+            gap: '4px',
+            transition: 'all 0.2s ease',
+            whiteSpace: 'nowrap'
           }}
         >
-          <Camera size={15} /> Mark Attendance
+          <Camera size={14} /> Mark
         </button>
 
         <button
           onClick={() => setActiveView('CALENDAR')}
           style={{
             flex: 1,
-            padding: '9px',
+            padding: '8px 4px',
             border: 'none',
-            borderRadius: '10px',
-            fontSize: '13px',
+            borderRadius: '8px',
+            fontSize: 'clamp(11px, 3.1vw, 13px)',
             fontWeight: '700',
             backgroundColor: activeView === 'CALENDAR' ? '#ffffff' : 'transparent',
             color: activeView === 'CALENDAR' ? '#0052cc' : '#64748b',
@@ -385,21 +387,22 @@ export default function AttendanceView({ currentUser: initialUser }) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '6px',
-            transition: 'all 0.2s ease'
+            gap: '4px',
+            transition: 'all 0.2s ease',
+            whiteSpace: 'nowrap'
           }}
         >
-          <Calendar size={15} /> Calendar View
+          <Calendar size={14} /> Calendar
         </button>
 
         <button
           onClick={() => setActiveView('LOGS')}
           style={{
             flex: 1,
-            padding: '9px',
+            padding: '8px 4px',
             border: 'none',
-            borderRadius: '10px',
-            fontSize: '13px',
+            borderRadius: '8px',
+            fontSize: 'clamp(11px, 3.1vw, 13px)',
             fontWeight: '700',
             backgroundColor: activeView === 'LOGS' ? '#ffffff' : 'transparent',
             color: activeView === 'LOGS' ? '#0052cc' : '#64748b',
@@ -408,11 +411,12 @@ export default function AttendanceView({ currentUser: initialUser }) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '6px',
-            transition: 'all 0.2s ease'
+            gap: '4px',
+            transition: 'all 0.2s ease',
+            whiteSpace: 'nowrap'
           }}
         >
-          <History size={15} /> Today Logs
+          <History size={14} /> Logs
         </button>
       </div>
 
@@ -422,10 +426,10 @@ export default function AttendanceView({ currentUser: initialUser }) {
           {/* Hero Attendance Dashboard Card */}
           <div style={{
             background: 'linear-gradient(135deg, #001233 0%, #002855 50%, #023e8a 100%)',
-            borderRadius: '20px',
-            padding: '24px 20px',
+            borderRadius: '18px',
+            padding: 'clamp(16px, 4vw, 22px) clamp(14px, 3.5vw, 18px)',
             color: '#ffffff',
-            marginBottom: '20px',
+            marginBottom: '16px',
             boxShadow: '0 10px 25px -5px rgba(0, 18, 51, 0.3)',
             position: 'relative',
             overflow: 'hidden'

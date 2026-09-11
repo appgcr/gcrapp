@@ -1,0 +1,18 @@
+{
+  "venvPath": "d:\\gcr",
+  "venv": "venv_ocr",
+  "extraPaths": [
+    "d:\\gcr\\venv_ocr\\Lib\\site-packages",
+    "C:\\Users\\busar\\AppData\\Roaming\\Python\\Python313\\site-packages"
+  ],
+  "exclude": [
+    "**/__pyrefly_virtual__/**",
+    "**/venv*/**",
+    "**/node_modules/**"
+  ],
+  "ignore": [
+    "**/__pyrefly_virtual__/**"
+  ],
+  "reportMissingImports": "none",
+  "reportMissingModuleSource": "none"
+}

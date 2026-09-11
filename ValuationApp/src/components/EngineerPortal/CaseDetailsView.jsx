@@ -656,13 +656,13 @@ export default function CaseDetailsView({ caseId }) {
 
       {/* Sticky Bottom Action Bar - Only show when started */}
       {isStarted && (
-        <div style={{ position: 'fixed', bottom: '70px', left: 0, right: 0, padding: '12px 16px', backgroundColor: '#fff', borderTop: '1px solid var(--border-color)', display: 'flex', gap: '12px', zIndex: 90, boxShadow: '0 -4px 12px rgba(0,0,0,0.05)' }}>
-          <button className="btn-secondary" style={{ flex: 1, backgroundColor: '#f1f5f9', border: '1px solid var(--border-color)' }} onClick={() => window.print()}>
-            <FileText size={20} /> Export PDF
+        <div style={{ position: 'fixed', bottom: '66px', left: 0, right: 0, padding: '10px 14px', backgroundColor: '#fff', borderTop: '1px solid var(--border-color)', display: 'flex', gap: '8px', zIndex: 90, boxShadow: '0 -4px 12px rgba(0,0,0,0.05)' }}>
+          <button className="btn-secondary" style={{ flex: 1, backgroundColor: '#f1f5f9', border: '1px solid var(--border-color)', padding: '10px 8px', fontSize: '13px', fontWeight: '600', minWidth: 0, whiteSpace: 'nowrap' }} onClick={() => window.print()}>
+            <FileText size={16} /> Export PDF
           </button>
-          <a href={`${API_BASE_URL}/api/cases/${caseId}/report`} download style={{ flex: 1, textDecoration: 'none' }}>
-            <button className="btn-primary" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px', border: 'none', borderRadius: '8px', backgroundColor: 'var(--primary)', color: '#fff', fontWeight: '600' }}>
-              <FileText size={20} /> {caseData?.bankName ? `${caseData.bankName} Report (.docx)` : 'Final Report (.docx)'}
+          <a href={`${API_BASE_URL}/api/cases/${caseId}/report`} download style={{ flex: 1.2, textDecoration: 'none', minWidth: 0 }}>
+            <button className="btn-primary" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '10px 8px', fontSize: '13px', border: 'none', borderRadius: '8px', backgroundColor: 'var(--primary)', color: '#fff', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <FileText size={16} /> Report (.docx)
             </button>
           </a>
         </div>

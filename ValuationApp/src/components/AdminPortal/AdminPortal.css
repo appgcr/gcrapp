@@ -351,3 +351,34 @@
 .admin-toggle.active .admin-toggle-knob {
   left: 22px;
 }
+
+@media (max-width: 480px) {
+  .admin-header {
+    padding: 12px 14px;
+  }
+  .admin-header-title {
+    font-size: 17px;
+  }
+  .admin-main-content {
+    padding: 12px 10px;
+    padding-bottom: 85px;
+  }
+  .admin-dashboard-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .admin-stat-card {
+    padding: 12px;
+  }
+  .admin-stat-value {
+    font-size: 24px;
+  }
+  .admin-card {
+    padding: 14px;
+    border-radius: 10px;
+  }
+  .admin-tab {
+    padding: 10px 12px;
+    font-size: 11px;
+  }
+}

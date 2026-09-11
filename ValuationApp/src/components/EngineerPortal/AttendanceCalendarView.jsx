@@ -34,7 +34,7 @@ export default function AttendanceCalendarView({ currentUser }) {
     setLoading(true);
     try {
       const userId = currentUser?.id || 'ENG-001';
-      const res = await fetch(`https://gcr-9ys1.onrender.com/api/attendance/calendar-summary?userId=${userId}&year=${year}&month=${month}`);
+      const res = await fetch(`${API_BASE_URL}/api/attendance/calendar-summary?userId=${userId}&year=${year}&month=${month}`);
       if (res.ok) {
         const data = await res.json();
         setSummaryData(data);
@@ -236,10 +236,7 @@ export default function AttendanceCalendarView({ currentUser }) {
       </div>
 
       {/* Monthly Statistics Overview Cards */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: '8px',
+      <div className="responsive-grid-4" style={{
         marginBottom: '16px'
       }}>
         <div style={{
