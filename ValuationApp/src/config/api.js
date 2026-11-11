@@ -9,7 +9,7 @@ function getApiBaseUrl() {
   if (typeof window !== 'undefined' && window.location && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
     // If running in Capacitor native Android wrapper
     if (window?.Capacitor?.isNativePlatform?.()) {
-      return envUrl || 'https://gcrapp-1.onrender.com';
+      return envUrl || 'https://gcrapp-api.onrender.com';
     }
     // Browser testing on laptop
     return envUrl || 'http://localhost:5001';

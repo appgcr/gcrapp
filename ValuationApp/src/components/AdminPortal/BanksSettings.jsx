@@ -4,6 +4,7 @@ import { Plus, Loader2, Landmark, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../../config/api';
 import { banksChanged } from '../../utils/banks';
+import { BANKS } from '../../config/site';
 
 const TYPES = [
   ['house', 'Independent House'],
@@ -19,6 +20,13 @@ const badge = (b) => {
   const words = b.name.replace(/\(.*?\)/g, '').split(/\s+/).filter((w) => w && !/^(of|&|and|the)$/i.test(w));
   if (words.length === 1 || (words.length === 2 && /^bank$/i.test(words[1]))) return words[0].slice(0, 4).toUpperCase();
   return words.map((w) => w[0]).join('').slice(0, 4).toUpperCase();
+};
+
+// Official logo (public/bank-logos/<key>.png) for the 13 built-in banks — matched by the bank's format key or name.
+const logoFor = (b) => {
+  const name = (b.name || '').trim().toLowerCase();
+  const hit = BANKS.find((k) => k.logo && (k.key === b.format || k.name.toLowerCase() === name));
+  return hit ? `/bank-logos/${hit.key}.png` : null;
 };
 
 const isSet = (p) => p && p.realizable != null && p.distress != null;
@@ -69,7 +77,11 @@ export default function BanksSettings() {
           {list.length === 0 && <div className="bk-empty">No banks match “{q}”.</div>}
           {list.map((b) => (
             <button key={b.id} type="button" className="ios-row is-link bk-row" onClick={() => setEditing(b)}>
-              <span className={`bk-logo ${b.status === 'Inactive' ? 'off' : ''}`} aria-hidden="true">{badge(b)}</span>
+              <span className="bk-slot" aria-hidden="true">
+                {logoFor(b)
+                  ? <span className={`bk-img ${b.status === 'Inactive' ? 'off' : ''}`}><img src={logoFor(b)} alt="" loading="lazy" /></span>
+                  : <span className={`bk-logo ${b.status === 'Inactive' ? 'off' : ''}`}>{badge(b)}</span>}
+              </span>
               <span className="bk-text">
                 <span className="bk-name">{b.name}{b.status === 'Inactive' && <em> · Hidden</em>}</span>
                 <span className="bk-sub">
@@ -108,6 +120,10 @@ export default function BanksSettings() {
         .bk-row { gap: 12px; }
         .bk-logo { width: 38px; height: 38px; flex-shrink: 0; border-radius: 9px; display: grid; place-items: center; background: linear-gradient(160deg,#2f6bff,#1d4ed8); color: #fff; font-size: 10.5px; font-weight: 800; letter-spacing: .3px; }
         .bk-logo.off { background: #c7c7cc; }
+        .bk-slot { width: 96px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+        .bk-img { width: 96px; height: 44px; overflow: hidden; border-radius: 9px; background: #fff; border: 1px solid #e5e5ea; display: grid; place-items: center; padding: 4px 6px; box-sizing: border-box; }
+        .bk-img img { max-width: 84px; max-height: 34px; width: auto; height: auto; object-fit: contain; display: block; }
+        .bk-img.off img { filter: grayscale(1); opacity: .5; }
         .bk-text { flex: 1; min-width: 0; display: flex; flex-direction: column; text-align: left; }
         .bk-name { font-size: 15.5px; color: #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .bk-name em { color: #8e8e93; font-style: normal; font-size: 13px; }
