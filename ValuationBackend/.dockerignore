@@ -1,0 +1,12 @@
+# Never copy secrets, local data or test output into the server image
+.env
+.env.*
+!.env.example
+secrets/
+backups/
+uploads/
+node_modules/
+services/reports/*_source/
+tests/
+*.log
+.DS_Store

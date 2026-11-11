@@ -19,7 +19,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=5001
 
-# Install LibreOffice headless (no-GUI), Python 3, python3-docx, and Microsoft-compatible metrics fonts
+# Install LibreOffice headless (no-GUI), Python 3 + the bank-report libraries (python-docx, Pillow, lxml)
+# and Microsoft-compatible metrics fonts
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice-writer-nogui \
     libreoffice-calc-nogui \
@@ -28,6 +29,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-noto-core \
     python3 \
     python3-docx \
+    python3-pil \
+    python3-lxml \
+    ca-certificates \
     python3-pip \
     wget \
     curl \
