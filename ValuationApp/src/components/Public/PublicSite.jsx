@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import {
   ShieldCheck, MapPin, Camera, FileCheck2, PenTool, Landmark, Building2, Home, Trees, Factory, Store,
-  Phone, Mail, ArrowRight, LogIn, Send, UserCheck, ClipboardCheck, Download, Lock, Smartphone, Menu, X,
+  Phone, Mail, ArrowRight, ArrowUp, LogIn, Send, UserCheck, ClipboardCheck, Download, Lock, Smartphone, Menu, X,
 } from 'lucide-react';
 import { SITE, BANKS, BANKS_SERVED } from '../../config/site';
 import './PublicSite.css';
@@ -25,6 +25,7 @@ export default function PublicSite({ page = 'home', onNavigate, loggedIn = false
     document.title = titles[page] || titles.home;
   }, [page]);
 
+  const scrolled = useScrollFx();
   const go = (path) => (e) => { e.preventDefault(); onNavigate(path); };
   const anchor = (id) => (e) => {
     e.preventDefault();
@@ -35,7 +36,8 @@ export default function PublicSite({ page = 'home', onNavigate, loggedIn = false
 
   return (
     <div className="ps">
-      <header className="ps-nav">
+      <div className="ps-progress" aria-hidden="true"><span /></div>
+      <header className={`ps-nav ${scrolled ? 'scrolled' : ''}`}>
         <a href="/" onClick={go('/')} className="ps-logo">
           <img src="/gcr_logo.png" alt="" width="36" height="36" />
           <span>{SITE.brand}</span>
@@ -82,6 +84,8 @@ export default function PublicSite({ page = 'home', onNavigate, loggedIn = false
         </div>
         <div className="ps-copy">© {new Date().getFullYear()} {SITE.brand}. All rights reserved.</div>
       </footer>
+      <button type="button" className={`ps-top ${scrolled ? 'show' : ''}`} aria-label="Back to top"
+        onClick={() => window.scrollTo({ top: 0, behavior: reduceMotion() ? 'auto' : 'smooth' })}><ArrowUp size={20} /></button>
     </div>
   );
 }
@@ -108,6 +112,76 @@ function useReveal() {
     mo.observe(document.body, { childList: true, subtree: true });
     return () => { io.disconnect(); mo.disconnect(); };
   }, []);
+}
+
+const finePointer = () => typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+/** Scroll effects for every public page: reading-progress bar (--ps-p) and the "scrolled" nav state. */
+function useScrollFx() {
+  const [scrolled, setScrolled] = React.useState(false);
+  useEffect(() => {
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      document.documentElement.style.setProperty('--ps-p', max > 0 ? (window.scrollY / max).toFixed(4) : '0');
+      document.documentElement.style.setProperty('--ps-y', `${Math.min(window.scrollY, 900)}px`);
+      setScrolled(window.scrollY > 24);
+    };
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(update); };
+    update();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => { window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll); cancelAnimationFrame(raf); };
+  }, []);
+  return scrolled;
+}
+
+/** Pointer effects (mouse only): a soft light that follows the cursor over cards ([data-glow]),
+ *  3D tilt on [data-tilt] and a gentle magnetic pull on [data-magnet] buttons. */
+function usePointerFx() {
+  useEffect(() => {
+    if (reduceMotion() || !finePointer()) return undefined;
+    let tiltEl = null; let magEl = null;
+    const onMove = (e) => {
+      const glow = e.target.closest?.('[data-glow]');
+      if (glow) {
+        const r = glow.getBoundingClientRect();
+        glow.style.setProperty('--mx', `${e.clientX - r.left}px`);
+        glow.style.setProperty('--my', `${e.clientY - r.top}px`);
+      }
+      const tilt = e.target.closest?.('[data-tilt]');
+      if (tiltEl && tiltEl !== tilt) { tiltEl.style.removeProperty('--rx'); tiltEl.style.removeProperty('--ry'); }
+      tiltEl = tilt;
+      if (tilt) {
+        const r = tilt.getBoundingClientRect();
+        const x = (e.clientX - r.left) / r.width - 0.5; const y = (e.clientY - r.top) / r.height - 0.5;
+        tilt.style.setProperty('--ry', `${(x * 10).toFixed(2)}deg`);
+        tilt.style.setProperty('--rx', `${(-y * 10).toFixed(2)}deg`);
+      }
+      const mag = e.target.closest?.('[data-magnet]');
+      if (magEl && magEl !== mag) magEl.style.removeProperty('--tx');
+      magEl = mag;
+      if (mag) {
+        const r = mag.getBoundingClientRect();
+        mag.style.setProperty('--tx', `${((e.clientX - r.left - r.width / 2) * 0.18).toFixed(1)}px, ${((e.clientY - r.top - r.height / 2) * 0.25).toFixed(1)}px`);
+      }
+    };
+    const onLeave = () => {
+      if (tiltEl) { tiltEl.style.removeProperty('--rx'); tiltEl.style.removeProperty('--ry'); tiltEl = null; }
+      if (magEl) { magEl.style.removeProperty('--tx'); magEl = null; }
+    };
+    document.addEventListener('pointermove', onMove, { passive: true });
+    document.addEventListener('pointerleave', onLeave);
+    return () => { document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerleave', onLeave); };
+  }, []);
+}
+
+/** Splits a phrase into words that rise in one after another. */
+function Words({ text, start = 0, className = '' }) {
+  return text.split(' ').map((w, i) => (
+    <React.Fragment key={i}><span className={`ps-word ${className}`} style={{ '--i': start + i }}>{w}</span>{' '}</React.Fragment>
+  ));
 }
 
 /** Number that counts up when it first appears. */
@@ -171,6 +245,7 @@ function BankMark({ bank, size = 40, wide = false }) {
 /* ------------------------------------------------------------------ Home */
 function HomePage({ go }) {
   useReveal();
+  usePointerFx();
   const steps = [
     { icon: Send, t: 'Bank sends the request', d: 'The bank officer logs in and sends the customer, property and loan details to the GCR branch.', c: 'c1' },
     { icon: UserCheck, t: 'Branch assigns an engineer', d: 'The GCR branch admin picks a field engineer and fixes the site visit.', c: 'c2' },
@@ -200,14 +275,18 @@ function HomePage({ go }) {
         <div className="ps-grid-bg" aria-hidden="true" />
         <div className="ps-hero-text">
           <span className="ps-eyebrow">Approved panel valuer · Andhra Pradesh</span>
-          <h1>Property valuations, <span className="ps-grad">from site visit to signature</span> — in one app.</h1>
+          <h1 className="ps-h1">
+            <Words text="Property valuations," />
+            <span className="ps-word ps-grad" style={{ '--i': 2 }}>from site visit to signature</span>{' '}
+            <Words text="— in one app." start={3} />
+          </h1>
           <p>
             GCR Valuation connects banks, branch offices and field engineers. Requests, AI-checked documents,
             geo-tagged photos and digitally signed reports — in each bank’s own format.
           </p>
           <div className="ps-cta">
-            <a className="ps-btn ps-primary" href="/login" onClick={go('/login')}><LogIn size={18} /> Bank / staff login <ArrowRight size={18} className="ps-arrow" /></a>
-            <a className="ps-btn ps-ghost" href="/#how" onClick={scrollTo('how')}>See how it works</a>
+            <a className="ps-btn ps-primary" data-magnet href="/login" onClick={go('/login')}><LogIn size={18} /> Bank / staff login <ArrowRight size={18} className="ps-arrow" /></a>
+            <a className="ps-btn ps-ghost" data-magnet href="/#how" onClick={scrollTo('how')}>See how it works</a>
           </div>
           <div className="ps-trust">
             <span>Role-based security</span>
@@ -215,7 +294,8 @@ function HomePage({ go }) {
             <span>Digitally signed</span>
           </div>
         </div>
-        <LiveTracker />
+        <div className="ps-hero-stage" data-tilt><LiveTracker /></div>
+        <a href="/#how" className="ps-scroll-cue" onClick={scrollTo('how')} aria-label="Scroll down"><span /></a>
       </section>
 
       <section className="ps-stats" data-reveal>
@@ -241,9 +321,9 @@ function HomePage({ go }) {
           <h2>One clear path for every valuation</h2>
           <p className="ps-lead">Everyone sees exactly what they need — nothing more.</p>
         </div>
-        <ol className="ps-steps">
+        <ol className="ps-steps" data-reveal="line">
           {steps.map((s, i) => (
-            <li key={s.t} data-reveal style={{ '--d': `${i * 90}ms` }} className={s.c}>
+            <li key={s.t} data-reveal data-glow style={{ '--d': `${150 + i * 120}ms` }} className={s.c}>
               <span className="ps-step-n">0{i + 1}</span>
               <span className="ps-chip"><s.icon size={22} /></span>
               <h3>{s.t}</h3><p>{s.d}</p>
@@ -259,7 +339,7 @@ function HomePage({ go }) {
         </div>
         <div className="ps-feat">
           {features.map((f, i) => (
-            <div key={f.t} className="ps-feat-card" data-reveal style={{ '--d': `${i * 90}ms` }}>
+            <div key={f.t} className="ps-feat-card" data-reveal="zoom" data-glow style={{ '--d': `${i * 90}ms` }}>
               <span className="ps-feat-icon"><f.icon size={22} /></span>
               <h3>{f.t}</h3><p>{f.d}</p>
             </div>
@@ -275,7 +355,7 @@ function HomePage({ go }) {
         </div>
         <div className="ps-grid3">
           {services.map((s, i) => (
-            <div key={s.t} className={`ps-tile ${s.c}`} data-reveal style={{ '--d': `${(i % 3) * 90}ms` }}>
+            <div key={s.t} className={`ps-tile ${s.c}`} data-reveal data-glow style={{ '--d': `${(i % 3) * 90}ms` }}>
               <span className="ps-chip"><s.icon size={22} /></span><h3>{s.t}</h3><p>{s.d}</p>
             </div>
           ))}
@@ -290,7 +370,7 @@ function HomePage({ go }) {
         </div>
         <div className="ps-banks">
           {BANKS.map((b, i) => (
-            <div key={b.key} className="ps-bank-card" data-reveal style={{ '--d': `${(i % 4) * 70}ms` }}>
+            <div key={b.key} className="ps-bank-card" data-reveal="zoom" data-glow style={{ '--d': `${(i % 4) * 70}ms` }}>
               <BankMark bank={b} size={b.wordmark ? 64 : 52} wide />
               {!(b.logo && b.wordmark) && <span>{b.name}</span>}
             </div>
@@ -310,19 +390,20 @@ function HomePage({ go }) {
             { icon: Smartphone, t: 'Field engineers', d: 'Mobile app at the site: documents, measurements, GPS photos, signature.', c: 'c3' },
             { icon: ShieldCheck, t: 'Head office', d: 'Every branch, bank formats, letterheads and valuation percentages.', c: 'c4' },
           ].map((r, i) => (
-            <div key={r.t} className={`ps-tile ps-role ${r.c}`} data-reveal style={{ '--d': `${(i % 2) * 90}ms` }}>
+            <div key={r.t} className={`ps-tile ps-role ${r.c}`} data-reveal={i % 2 ? 'right' : 'left'} data-glow style={{ '--d': `${(i % 2) * 90}ms` }}>
               <span className="ps-chip"><r.icon size={22} /></span><div><h3>{r.t}</h3><p>{r.d}</p></div>
             </div>
           ))}
         </div>
       </section>
 
-      <section className="ps-cta-band" data-reveal>
+      <section className="ps-cta-band" data-reveal="zoom">
+        <div className="ps-sparks" aria-hidden="true">{Array.from({ length: 14 }, (_, i) => <i key={i} style={{ '--k': i }} />)}</div>
         <div>
           <h2>Ready to send your next valuation?</h2>
           <p>Bank officers and GCR staff sign in with the login given by GCR.</p>
         </div>
-        <a className="ps-btn ps-white" href="/login" onClick={go('/login')}><LogIn size={18} /> Login now <ArrowRight size={18} className="ps-arrow" /></a>
+        <a className="ps-btn ps-white" data-magnet href="/login" onClick={go('/login')}><LogIn size={18} /> Login now <ArrowRight size={18} className="ps-arrow" /></a>
       </section>
 
       <section className="ps-section" id="contact">
