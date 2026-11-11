@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Accent used for push notification icon tint -->
+    <color name="gcr_notification_accent">#007AFF</color>
+    <!-- Launch screen background (white; black in dark mode, see values-night) -->
+    <color name="gcr_splash_bg">#FFFFFF</color>
+</resources>

@@ -1,6 +1,16 @@
 import { API_BASE_URL } from '../../config/api';
 import React, { useState } from 'react';
-import { LogOut, Bell, Shield, Edit2, HelpCircle, X, Mail, PhoneCall } from 'lucide-react';
+import { Bell, HelpCircle, X, Mail, Phone, ChevronRight, ChevronLeft, Clock, BarChart3, Fingerprint, KeyRound, Landmark, FileImage } from 'lucide-react';
+import LetterheadSettings from '../Shared/LetterheadSettings';
+import BanksSettings from './BanksSettings';
+import pkg from '../../../package.json';
+import { isSuperAdmin, roleLabel } from '../../utils/session';
+import IconTile, { AssistiveGlyph } from '../Shared/IconTile';
+import ReminderSettingsCard from './ReminderSettingsCard';
+import NotificationPrefsCard from '../Shared/NotificationPrefsCard';
+import NotificationInsightsCard from './NotificationInsightsCard';
+import { Row, Switch, IosSettingsStyles } from '../Shared/IosSettings';
+import { authHeaders } from '../Shared/authHeaders';
 import { startRegistration } from '@simplewebauthn/browser';
 import toast from 'react-hot-toast';
 export default function AdminSettings({ currentUser, handleLogout }) {
@@ -15,6 +25,18 @@ export default function AdminSettings({ currentUser, handleLogout }) {
     if (newState && window.Notification && Notification.permission !== 'granted') {
       Notification.requestPermission();
     }
+  };
+
+  const [showWhatsappFloat, setShowWhatsappFloat] = useState(() => {
+    return localStorage.getItem('gcr_whatsapp_float_enabled') !== 'false';
+  });
+
+  const handleToggleWhatsapp = () => {
+    const newState = !showWhatsappFloat;
+    setShowWhatsappFloat(newState);
+    localStorage.setItem('gcr_whatsapp_float_enabled', newState.toString());
+    window.dispatchEvent(new CustomEvent('gcr_whatsapp_toggle', { detail: newState }));
+    toast.success(newState ? 'Assistive Touch button turned ON' : 'Assistive Touch button turned OFF');
   };
 
   const [showHelpModal, setShowHelpModal] = useState(false);
@@ -62,8 +84,8 @@ export default function AdminSettings({ currentUser, handleLogout }) {
   };
 
   const handleUpdatePassword = async () => {
-    if (!newPassword || newPassword.length < 4) {
-      toast.error('Password must be at least 4 characters long');
+    if (!newPassword || newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters long');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -73,9 +95,9 @@ export default function AdminSettings({ currentUser, handleLogout }) {
 
     setIsUpdatingPassword(true);
     try {
-      const res = await fetch(`https://gcr-9ys1.onrender.com/api/users/${currentUser.username}`, {
+      const res = await fetch(`${API_BASE_URL}/api/users/${currentUser.username}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({ password: newPassword })
       });
       
@@ -103,9 +125,9 @@ export default function AdminSettings({ currentUser, handleLogout }) {
 
     setIsUpdatingProfile(true);
     try {
-      const res = await fetch(`https://gcr-9ys1.onrender.com/api/users/${currentUser.username}`, {
+      const res = await fetch(`${API_BASE_URL}/api/users/${currentUser.username}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({ name: editName, phone: editPhone })
       });
       
@@ -131,98 +153,117 @@ export default function AdminSettings({ currentUser, handleLogout }) {
     }
   };
 
+  // iOS Settings navigation: main list → detail pages
+  const [page, setPage] = useState('main'); // 'main' | 'notifications' | 'reminders' | 'insights'
+  const open = (p) => { setPage(p); document.querySelector('.admin-main-content')?.scrollTo({ top: 0 }); window.scrollTo({ top: 0 }); };
+
+  const name = currentUser?.name || 'Admin User';
+  const initials = name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || 'A';
+
+  const titles = { notifications: 'Notifications', reminders: 'Automatic Reminders', insights: 'Alert Insights', banks: 'Banks', letterhead: 'Letterhead & Valuer' };
+
+  if (page !== 'main') {
+    return (
+      <div className="ios-settings ios-subpage" key={page}>
+        <button type="button" className="ios-back" onClick={() => setPage('main')}>
+          <ChevronLeft size={22} strokeWidth={2.4} /> Settings
+        </button>
+        <h1 className="ios-large-title">{titles[page]}</h1>
+
+        {page === 'notifications' && (
+          <>
+            <div className="ios-group">
+              <div className="ios-row">
+                <IconTile icon={Bell} color="red" size={30} />
+                <span className="ios-row-label">Browser notifications</span>
+                <Switch on={pushNotes} onChange={handleTogglePush} label="Browser notifications" />
+              </div>
+            </div>
+            <p className="ios-footnote">Shows alerts on this computer's desktop while the portal is open.</p>
+            <NotificationPrefsCard currentUser={currentUser} />
+          </>
+        )}
+        {page === 'reminders' && <ReminderSettingsCard currentUser={currentUser} embedded />}
+        {page === 'insights' && <NotificationInsightsCard currentUser={currentUser} />}
+        {page === 'banks' && <BanksSettings />}
+        {page === 'letterhead' && <LetterheadSettings branchId={currentUser?.branchId} branchName={currentUser?.branchInfo?.name} />}
+        <IosSettingsStyles />
+      </div>
+    );
+  }
+
   return (
-    <div className="animate-fade-in">
-      {/* ... previous JSX up to Security section ... */}
-      <div className="admin-profile-card">
-        <div className="admin-profile-header"></div>
-        <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser?.name || "Admin User")}&background=0346c8&color=ffffff`} alt="Profile" className="admin-profile-avatar" />
-        <h2 style={{ fontSize: '20px', fontWeight: '800', margin: '0 0 4px' }}>{currentUser?.name || "Admin User"}</h2>
-        <p style={{ fontSize: '13px', color: '#64748b', margin: '0 0 16px' }}>Senior Admin {currentUser?.phone ? `• ${currentUser.phone}` : ''}</p>
-        <div style={{ padding: '0 24px' }}>
-          <button 
-            onClick={() => setShowEditProfileModal(true)}
-            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: '#0346c8', color: 'white', border: 'none', padding: '10px', borderRadius: '8px', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}
-          >
-            <Edit2 size={14} /> Edit Profile
-          </button>
-        </div>
+    <div className="ios-settings animate-fade-in">
+      {/* Profile (like the Apple ID row) */}
+      <div className="ios-group">
+        <button type="button" className="ios-row ios-profile is-link" onClick={() => setShowEditProfileModal(true)}>
+          <span className="ios-avatar" aria-hidden="true">{initials}</span>
+          <span className="ios-profile-text">
+            <span className="ios-profile-name">{name}</span>
+            <span className="ios-profile-sub">{roleLabel(currentUser)}{currentUser?.branchInfo ? ` · ${currentUser.branchInfo.name}` : ''}{currentUser?.phone ? ` · ${currentUser.phone}` : ''}</span>
+          </span>
+          <ChevronRight size={18} className="ios-chev" aria-hidden="true" />
+        </button>
       </div>
 
-      <h2 style={{ fontSize: '18px', fontWeight: '700', margin: '24px 0 16px' }}>Settings</h2>
+      {isSuperAdmin(currentUser) && (
+        <>
+          <div className="ios-section">Organisation</div>
+          <div className="ios-group">
+            <Row icon={Landmark} color="blue" label="Banks" onClick={() => open('banks')} />
+          </div>
+          <p className="ios-footnote">Add or rename banks and set each bank’s report format and valuation percentages.</p>
+        </>
+      )}
 
-      <div className="admin-card" style={{ padding: '0', overflow: 'hidden' }}>
-        <div style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '700', fontSize: '16px', borderBottom: '1px solid #f1f5f9' }}>
-          <Bell size={18} color="#0346c8" /> Notifications
-        </div>
-        <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ flex: 1, paddingRight: '16px' }}>
-            <div style={{ fontWeight: '700', fontSize: '13px', marginBottom: '4px' }}>System Push Notifications</div>
-            <div style={{ fontSize: '11px', color: '#64748b', lineHeight: '1.4' }}>Real-time alerts for incoming chats and updates.</div>
+      {!isSuperAdmin(currentUser) && currentUser?.branchId && (
+        <>
+          <div className="ios-section">Reports</div>
+          <div className="ios-group">
+            <Row icon={FileImage} color="indigo" label="Letterhead & Valuer" onClick={() => open('letterhead')} />
           </div>
-          <div className={`admin-toggle ${pushNotes ? 'active' : ''}`} onClick={handleTogglePush}>
-            <div className="admin-toggle-knob"></div>
-          </div>
-        </div>
+          <p className="ios-footnote">Upload your branch letterhead once — every bank report from your branch uses it.</p>
+        </>
+      )}
+
+      <div className="ios-section">Notifications</div>
+      <div className="ios-group">
+        <Row icon={Bell} color="red" label="Notifications" onClick={() => open('notifications')} />
+        {/* Company-wide alert rules are set by the Super Admin */}
+        {isSuperAdmin(currentUser) && <Row icon={Clock} color="purple" label="Automatic Reminders" onClick={() => open('reminders')} />}
+        {isSuperAdmin(currentUser) && <Row icon={BarChart3} color="indigo" label="Alert Insights" onClick={() => open('insights')} />}
       </div>
 
-      <div className="admin-card" style={{ padding: '0', overflow: 'hidden' }}>
-        <div style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '700', fontSize: '16px', borderBottom: '1px solid #f1f5f9' }}>
-          <Shield size={18} color="#b45309" /> Security
-        </div>
-        
-        {/* NEW BIOMETRIC BUTTON */}
-        <div 
-          onClick={handleRegisterBiometrics}
-          style={{ padding: '16px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: '#fff' }}
-        >
-          <div style={{ flex: 1, paddingRight: '16px' }}>
-            <div style={{ fontWeight: '700', fontSize: '13px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              Register Biometrics (Passkey)
-            </div>
-            <div style={{ fontSize: '11px', color: '#64748b' }}>Setup Face ID or Fingerprint for instant login.</div>
-          </div>
-          <div style={{ color: '#0346c8', fontSize: '12px', fontWeight: '700' }}>Setup</div>
-        </div>
-
-        <div 
-          onClick={() => setShowPasswordModal(true)}
-          style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
-        >
-          <div style={{ flex: 1, paddingRight: '16px' }}>
-            <div style={{ fontWeight: '700', fontSize: '13px', marginBottom: '4px' }}>Password</div>
-            <div style={{ fontSize: '11px', color: '#64748b' }}>Change your login password.</div>
-          </div>
-          <div style={{ color: '#0346c8', fontSize: '12px', fontWeight: '700' }}>Update</div>
+      <div className="ios-section">General</div>
+      <div className="ios-group">
+        <div className="ios-row">
+          <IconTile glyph={<AssistiveGlyph size={18} />} color="graphite" size={30} />
+          <span className="ios-row-label">Assistive Touch</span>
+          <Switch on={showWhatsappFloat} onChange={handleToggleWhatsapp} label="Assistive Touch" />
         </div>
       </div>
+      <p className="ios-footnote">A floating button for Messages and quick actions, like on iPhone.</p>
 
-      <div className="admin-card" style={{ padding: '0', overflow: 'hidden', marginTop: '16px' }}>
-        <div 
-          onClick={() => setShowHelpModal(true)}
-          style={{ padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', background: '#fff' }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ width: '36px', height: '36px', borderRadius: '18px', background: '#e0e7ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <HelpCircle size={18} color="#4338ca" />
-            </div>
-            <div>
-              <div style={{ fontWeight: '700', fontSize: '14px', color: '#0f172a' }}>Help & Support</div>
-              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>Get help with Admin Portal</div>
-            </div>
-          </div>
-          <div style={{ color: '#64748b' }}>›</div>
-        </div>
+      <div className="ios-section">Security</div>
+      <div className="ios-group">
+        <Row icon={Fingerprint} color="green" label="Face ID & Passkey" value="Set up" onClick={handleRegisterBiometrics} />
+        <Row icon={KeyRound} color="gray" label="Change Password" onClick={() => setShowPasswordModal(true)} />
       </div>
 
-      <button onClick={handleLogout} style={{ width: '100%', background: '#fff', border: '1px solid #ef4444', color: '#ef4444', padding: '14px', borderRadius: '8px', fontWeight: '700', fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '24px' }}>
-        <LogOut size={16} /> Sign Out
-      </button>
-
-      <div style={{ textAlign: 'center', marginTop: '32px', marginBottom: '24px' }}>
-        <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '600' }}>App Version 3.1.0</div>
-        <div style={{ fontSize: '11px', color: '#cbd5e1', marginTop: '4px' }}>Developed by MSTechHive</div>
+      <div className="ios-section">Support</div>
+      <div className="ios-group">
+        <Row icon={HelpCircle} color="blue" label="Help & Support" onClick={() => setShowHelpModal(true)} />
       </div>
+
+      <div className="ios-group ios-group-gap">
+        <button type="button" className="ios-row ios-signout" onClick={handleLogout}>Sign Out</button>
+      </div>
+
+      <div className="ios-version">
+        GCR Valuation · Version {pkg.version}<br />Developed by MSTechHive
+      </div>
+
+      <IosSettingsStyles />
 
       {/* Help Modal */}
       {showHelpModal && (
@@ -258,9 +299,7 @@ export default function AdminSettings({ currentUser, handleLogout }) {
               <h4 style={{ fontSize: '14px', fontWeight: '700', color: '#1e3a8a', margin: '0 0 12px 0' }}>Contact MSTechHive</h4>
               
               <a href="mailto:support@mstechhive.com" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: '#fff', borderRadius: '12px', textDecoration: 'none', marginBottom: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                <div style={{ width: '36px', height: '36px', borderRadius: '18px', background: '#dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Mail size={16} color="#2563eb" />
-                </div>
+                <IconTile icon={Mail} color="blue" size={36} />
                 <div>
                   <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '500' }}>Email Support</div>
                   <div style={{ fontSize: '14px', color: '#0f172a', fontWeight: '600' }}>support@mstechhive.com</div>
@@ -268,9 +307,7 @@ export default function AdminSettings({ currentUser, handleLogout }) {
               </a>
 
               <a href="tel:+919701800140" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: '#fff', borderRadius: '12px', textDecoration: 'none', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                <div style={{ width: '36px', height: '36px', borderRadius: '18px', background: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <PhoneCall size={16} color="#16a34a" />
-                </div>
+                <IconTile icon={Phone} color="green" size={36} />
                 <div>
                   <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '500' }}>Call Us</div>
                   <div style={{ fontSize: '14px', color: '#0f172a', fontWeight: '600' }}>+91 9701800140</div>
@@ -323,7 +360,7 @@ export default function AdminSettings({ currentUser, handleLogout }) {
             <button 
               onClick={handleUpdatePassword}
               disabled={isUpdatingPassword}
-              style={{ width: '100%', background: '#0346c8', color: '#fff', border: 'none', padding: '14px', borderRadius: '8px', fontWeight: '700', fontSize: '14px', cursor: isUpdatingPassword ? 'not-allowed' : 'pointer', opacity: isUpdatingPassword ? 0.7 : 1 }}
+              style={{ width: '100%', background: 'var(--gcr-accent)', color: '#fff', border: 'none', padding: '14px', borderRadius: '8px', fontWeight: '700', fontSize: '14px', cursor: isUpdatingPassword ? 'not-allowed' : 'pointer', opacity: isUpdatingPassword ? 0.7 : 1 }}
             >
               {isUpdatingPassword ? 'Updating...' : 'Update Password'}
             </button>
@@ -372,7 +409,7 @@ export default function AdminSettings({ currentUser, handleLogout }) {
             <button 
               onClick={handleUpdateProfile}
               disabled={isUpdatingProfile}
-              style={{ width: '100%', background: '#0346c8', color: '#fff', border: 'none', padding: '14px', borderRadius: '8px', fontWeight: '700', fontSize: '14px', cursor: isUpdatingProfile ? 'not-allowed' : 'pointer', opacity: isUpdatingProfile ? 0.7 : 1 }}
+              style={{ width: '100%', background: 'var(--gcr-accent)', color: '#fff', border: 'none', padding: '14px', borderRadius: '8px', fontWeight: '700', fontSize: '14px', cursor: isUpdatingProfile ? 'not-allowed' : 'pointer', opacity: isUpdatingProfile ? 0.7 : 1 }}
             >
               {isUpdatingProfile ? 'Saving...' : 'Save Profile'}
             </button>

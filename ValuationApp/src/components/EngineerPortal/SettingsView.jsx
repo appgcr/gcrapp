@@ -1,15 +1,33 @@
 import { API_BASE_URL } from '../../config/api';
 import React, { useState, useEffect, useRef } from 'react';
-import { Moon, Sun, Shield, HelpCircle, LogOut, ChevronRight, Camera, User, Calendar, MapPin, FileText, CheckCircle2, ChevronDown } from 'lucide-react';
+import { Moon, Sun, Fingerprint, HelpCircle, ChevronRight, CheckCircle2, Bell, ShieldCheck, PenTool } from 'lucide-react';
+import pkg from '../../../package.json';
+import IconTile, { AssistiveGlyph } from '../Shared/IconTile';
+import NotificationPrefsCard from '../Shared/NotificationPrefsCard';
+import SignatureSettings from '../Shared/SignatureSettings';
+import { Row, Switch, BackBar, IosSettingsStyles } from '../Shared/IosSettings';
 import { startRegistration } from '@simplewebauthn/browser';
 import toast from 'react-hot-toast';
+import { roleLabel as roleName } from '../../utils/session';
 
 export default function SettingsView({ currentUser, handleLogout }) {
   // Theme state
   const [isDarkMode, setIsDarkMode] = useState(false);
+
+  // WhatsApp floating toggle state
+  const [showWhatsappFloat, setShowWhatsappFloat] = useState(() => {
+    return localStorage.getItem('gcr_whatsapp_float_enabled') !== 'false';
+  });
+
+  const handleToggleWhatsapp = () => {
+    const newState = !showWhatsappFloat;
+    setShowWhatsappFloat(newState);
+    localStorage.setItem('gcr_whatsapp_float_enabled', newState.toString());
+    window.dispatchEvent(new CustomEvent('gcr_whatsapp_toggle', { detail: newState }));
+    toast.success(newState ? 'Assistive Touch button turned ON' : 'Assistive Touch button turned OFF');
+  };
   
   // Profile state
-  const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [profilePic, setProfilePic] = useState(() => {
     return localStorage.getItem(`profilePic_${currentUser?.id}`) || null;
@@ -78,7 +96,7 @@ export default function SettingsView({ currentUser, handleLogout }) {
     setIsSaved(true);
     setTimeout(() => {
       setIsSaved(false);
-      setIsEditingProfile(false); // Close the form after saving
+      setPage('main'); // back to Settings after saving
     }, 1200);
   };
 
@@ -114,241 +132,170 @@ export default function SettingsView({ currentUser, handleLogout }) {
     }
   };
 
+  // iOS Settings navigation: main list → detail pages
+  const [page, setPage] = useState('main'); // 'main' | 'profile' | 'notifications'
+  const open = (p) => { setPage(p); document.querySelector('.main-content')?.scrollTo?.({ top: 0 }); window.scrollTo({ top: 0 }); };
+  const initials = (profileData.name || 'U').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
+  const roleLabel = roleName(currentUser);
+
+  const avatar = (size) => (
+    <span className="ios-avatar" style={{ width: size, height: size, fontSize: Math.round(size * 0.4) }} aria-hidden="true">
+      {profilePic ? <img src={profilePic} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} /> : initials}
+    </span>
+  );
+
   return (
-    <div className="settings-view animate-fade-in" style={{ paddingBottom: '80px' }}>
-      <h1 style={{ fontSize: '22px', fontWeight: '700', marginBottom: '24px' }}>Settings</h1>
+    <div className={`ios-settings ${page === 'main' ? 'animate-fade-in' : 'ios-subpage'}`} key={page} style={{ paddingBottom: '80px' }}>
+      <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept="image/*" onChange={handleProfilePicUpload} />
 
-      {/* Interactive Profile Picture Section */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '32px' }}>
-        <input 
-          type="file" 
-          ref={fileInputRef} 
-          style={{ display: 'none' }} 
-          accept="image/*"
-          onChange={handleProfilePicUpload}
-        />
-        <div style={{ position: 'relative', marginBottom: '16px' }}>
-          
-          <div 
-            onClick={() => { if (profilePic) setShowProfilePreview(true); }}
-            style={{ 
-              width: '100px', height: '100px', borderRadius: '50%', 
-              backgroundColor: 'var(--primary)', color: '#fff', 
-              display: 'flex', alignItems: 'center', justifyContent: 'center', 
-              fontSize: '36px', fontWeight: '600', boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-              cursor: profilePic ? 'pointer' : 'default', overflow: 'hidden'
-            }}
-          >
-            {profilePic ? (
-              <img src={profilePic} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            ) : (
-              profileData.name.charAt(0).toUpperCase()
-            )}
+      {page === 'main' && (
+        <>
+          <h1 className="ios-large-title" style={{ marginTop: 0 }}>Settings</h1>
+
+          {/* Profile (like the Apple ID row) */}
+          <div className="ios-group">
+            <button type="button" className="ios-row ios-profile is-link" onClick={() => open('profile')}>
+              {avatar(58)}
+              <span className="ios-profile-text">
+                <span className="ios-profile-name">{profileData.name}</span>
+                <span className="ios-profile-sub">{roleLabel} · {currentUser?.id || 'ENG-001'}</span>
+              </span>
+              <ChevronRight size={18} className="ios-chev" aria-hidden="true" />
+            </button>
           </div>
-          
-          <button 
-            onClick={() => fileInputRef.current.click()}
-            style={{
-              position: 'absolute', bottom: '0', right: '0',
-              width: '32px', height: '32px', borderRadius: '50%',
-              backgroundColor: '#fff', border: '1px solid var(--border-color)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', color: 'var(--text-primary)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-            }}
-          >
-            <Camera size={16} />
-          </button>
-        </div>
-        <h2 style={{ fontSize: '20px', fontWeight: '700', margin: '0 0 4px 0' }}>{profileData.name}</h2>
-        <p className="text-muted" style={{ fontSize: '14px', margin: 0 }}>
-          {currentUser?.role === 'SUPER_ADMIN' ? 'Administrator' : 'Field Engineer'} • ID: {currentUser?.id || 'ENG-001'}
-        </p>
-      </div>
 
-      {/* Collapsible Personal Details Section */}
-      <div className="native-card" style={{ padding: '0', overflow: 'hidden', marginBottom: '24px' }}>
-        
-        <div 
-          onClick={() => setIsEditingProfile(!isEditingProfile)}
-          style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', backgroundColor: 'var(--bg-app)' }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <User size={20} color="var(--primary)" />
-            <span style={{ fontSize: '15px', fontWeight: '600' }}>Personal Details</span>
+          <div className="ios-section">Reports</div>
+          <div className="ios-group">
+            <Row icon={PenTool} color="indigo" label="Digital Signature" onClick={() => open('signature')} />
           </div>
-          <div style={{ transform: isEditingProfile ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s ease' }}>
-            <ChevronDown size={20} color="var(--text-muted)" />
+          <p className="ios-footnote">Save your signature once — it is applied to your bank reports when you submit a case.</p>
+
+          <div className="ios-section">Notifications</div>
+          <div className="ios-group">
+            <Row icon={Bell} color="red" label="Notifications" onClick={() => open('notifications')} />
           </div>
-        </div>
 
-        {isEditingProfile && (
-          <div style={{ borderTop: '1px solid var(--border-color)', animation: 'fadeIn 0.3s ease-out' }}>
-            <div style={{ padding: '16px', borderBottom: '1px solid var(--border-color)' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                <User size={14} /> Full Name
-              </label>
-              <input 
-                type="text" 
-                name="name"
-                value={profileData.name} 
-                onChange={handleInputChange}
-                style={{ width: '100%', border: 'none', background: 'transparent', fontSize: '16px', fontWeight: '500', outline: 'none', color: 'var(--text-primary)' }} 
-              />
+          <div className="ios-section">General</div>
+          <div className="ios-group">
+            <div className="ios-row">
+              <IconTile icon={isDarkMode ? Moon : Sun} color={isDarkMode ? 'indigo' : 'orange'} size={30} />
+              <span className="ios-row-label">Dark Mode</span>
+              <Switch on={isDarkMode} onChange={toggleTheme} label="Dark Mode" />
             </div>
-
-            <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)' }}>
-              <div style={{ padding: '16px', borderRight: '1px solid var(--border-color)', flex: 1 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                  <User size={14} /> Age
-                </label>
-                <input 
-                  type="number" 
-                  name="age"
-                  value={profileData.age} 
-                  onChange={handleInputChange}
-                  style={{ width: '100%', border: 'none', background: 'transparent', fontSize: '16px', fontWeight: '500', outline: 'none', color: 'var(--text-primary)' }} 
-                />
-              </div>
-              <div style={{ padding: '16px', flex: 1 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                  <Calendar size={14} /> Date of Birth
-                </label>
-                <input 
-                  type="date" 
-                  name="dob"
-                  value={profileData.dob} 
-                  onChange={handleInputChange}
-                  style={{ width: '100%', border: 'none', background: 'transparent', fontSize: '16px', fontWeight: '500', outline: 'none', color: 'var(--text-primary)' }} 
-                />
-              </div>
-            </div>
-
-            <div style={{ padding: '16px', borderBottom: '1px solid var(--border-color)' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                <MapPin size={14} /> Address
-              </label>
-              <input 
-                type="text" 
-                name="address"
-                value={profileData.address} 
-                onChange={handleInputChange}
-                style={{ width: '100%', border: 'none', background: 'transparent', fontSize: '16px', fontWeight: '500', outline: 'none', color: 'var(--text-primary)' }} 
-              />
-            </div>
-
-            <div style={{ padding: '16px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                <FileText size={14} /> Bio
-              </label>
-              <textarea 
-                name="bio"
-                value={profileData.bio}
-                onChange={handleInputChange}
-                rows="3"
-                style={{ width: '100%', border: 'none', background: 'transparent', fontSize: '16px', fontWeight: '500', outline: 'none', color: 'var(--text-primary)', resize: 'none' }} 
-              />
-            </div>
-
-            <div style={{ padding: '16px', backgroundColor: 'var(--bg-app)', borderTop: '1px solid var(--border-color)' }}>
-              <button 
-                className="btn-primary" 
-                onClick={handleSaveProfile}
-                style={{ width: '100%', backgroundColor: isSaved ? 'var(--success)' : 'var(--primary)' }}
-              >
-                {isSaved ? <><CheckCircle2 size={18} /> Saved successfully!</> : 'Save Personal Details'}
-              </button>
+            <div className="ios-row">
+              <IconTile glyph={<AssistiveGlyph size={18} />} color="graphite" size={30} />
+              <span className="ios-row-label">Assistive Touch</span>
+              <Switch on={showWhatsappFloat} onChange={handleToggleWhatsapp} label="Assistive Touch" />
             </div>
           </div>
-        )}
-      </div>
+          <p className="ios-footnote">Assistive Touch is a floating button for Messages and quick actions, like on iPhone.</p>
 
-      {/* Preferences Section */}
-      <h3 style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px', paddingLeft: '8px' }}>Preferences</h3>
-      <div className="native-card" style={{ padding: '0', overflow: 'hidden', marginBottom: '24px' }}>
-        
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            {isDarkMode ? <Moon size={20} color="var(--primary)" /> : <Sun size={20} color="var(--primary)" />}
-            <span style={{ fontSize: '15px', fontWeight: '500' }}>Dark Mode</span>
+          <div className="ios-section">Security</div>
+          <div className="ios-group">
+            <Row icon={Fingerprint} color="green" label="Face ID & Fingerprint" value="Set up" onClick={handleRegisterBiometrics} />
+            <Row icon={ShieldCheck} color="blue" label="App Permissions" onClick={() => window.dispatchEvent(new Event('gcr_open_permissions'))} />
           </div>
-          {/* Native-style iOS toggle switch (Fixed state) */}
-          <div 
-            onClick={toggleTheme}
-            style={{ 
-              width: '50px', height: '30px', borderRadius: '15px', 
-              backgroundColor: isDarkMode ? '#25d366' : '#e2e8f0',
-              position: 'relative', cursor: 'pointer', transition: 'all 0.3s' 
-            }}
-          >
-            <div style={{
-              width: '26px', height: '26px', borderRadius: '50%', backgroundColor: '#fff',
-              position: 'absolute', top: '2px', left: isDarkMode ? '22px' : '2px',
-              transition: 'all 0.3s', boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-            }} />
-          </div>
-        </div>
-      </div>
+          <p className="ios-footnote">Unlock with your face or fingerprint, and check location, camera and notification access.</p>
 
-      {/* Account Section */}
-      <h3 style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px', paddingLeft: '8px' }}>Account & Security</h3>
-      <div className="native-card" style={{ padding: '0', overflow: 'hidden', marginBottom: '32px' }}>
-        
-        <div 
-          onClick={handleRegisterBiometrics}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', borderBottom: '1px solid var(--border-color)', cursor: 'pointer', gap: '12px' }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
-            <Shield size={20} color="var(--primary)" style={{ flexShrink: 0 }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '15px', fontWeight: '500', wordBreak: 'break-word' }}>Register Biometrics (Passkey)</div>
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)', wordBreak: 'break-word' }}>Setup Fingerprint or Face ID for login</div>
-            </div>
+          <div className="ios-section">Support</div>
+          <div className="ios-group">
+            <Row icon={HelpCircle} color="blue" label="Help & Support" onClick={() => setShowHelpModal(true)} />
           </div>
-          <ChevronRight size={20} color="var(--text-muted)" style={{ flexShrink: 0 }} />
-        </div>
 
-        {currentUser?.role === 'SUPER_ADMIN' && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', borderBottom: '1px solid var(--border-color)', cursor: 'pointer', gap: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
-              <Shield size={20} color="var(--primary)" style={{ flexShrink: 0 }} />
-              <span style={{ fontSize: '15px', fontWeight: '500' }}>Change Password</span>
-            </div>
-            <ChevronRight size={20} color="var(--text-muted)" style={{ flexShrink: 0 }} />
+          <div className="ios-group ios-group-gap">
+            <button type="button" className="ios-row ios-signout" onClick={handleLogout}>Sign Out</button>
           </div>
-        )}
 
-        <div 
-          onClick={() => setShowHelpModal(true)}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', cursor: 'pointer', gap: '12px' }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
-            <HelpCircle size={20} color="var(--primary)" style={{ flexShrink: 0 }} />
-            <span style={{ fontSize: '15px', fontWeight: '500' }}>Help & Support</span>
-          </div>
-          <ChevronRight size={20} color="var(--text-muted)" style={{ flexShrink: 0 }} />
-        </div>
-      </div>
-
-      {/* Logout Button (Only for SUPER_ADMIN) */}
-      {currentUser.role === 'SUPER_ADMIN' && (
-        <button 
-          onClick={handleLogout}
-          style={{
-            width: '100%', padding: '16px', borderRadius: '12px',
-            backgroundColor: '#fee2e2', color: '#dc2626',
-            border: 'none', fontSize: '16px', fontWeight: '600',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-            cursor: 'pointer'
-          }}
-        >
-          <LogOut size={20} />
-          Log Out Securely
-        </button>
+          <div className="ios-version">GCR Valuation · Version {pkg.version}<br />Developed by MSTechHive</div>
+        </>
       )}
 
-      <div style={{ textAlign: 'center', marginTop: '24px' }}>
-        <p className="text-muted" style={{ fontSize: '12px' }}>App Version 3.1.0 • Developed by MSTechHive</p>
-      </div>
+      {page === 'signature' && (
+        <>
+          <BackBar onBack={() => setPage('main')} title="Digital Signature" />
+          <SignatureSettings />
+        </>
+      )}
+
+      {page === 'notifications' && (
+        <>
+          <BackBar onBack={() => setPage('main')} title="Notifications" />
+          <NotificationPrefsCard currentUser={currentUser} />
+        </>
+      )}
+
+      {page === 'profile' && (
+        <>
+          <BackBar onBack={() => setPage('main')} title="Personal Details" />
+
+          <div className="pd-photo">
+            <button type="button" className="pd-photo-btn" onClick={() => (profilePic ? setShowProfilePreview(true) : fileInputRef.current?.click())} aria-label={profilePic ? 'View photo' : 'Add photo'}>
+              {avatar(96)}
+            </button>
+            <button type="button" className="pd-photo-edit" onClick={() => fileInputRef.current?.click()}>
+              {profilePic ? 'Change Photo' : 'Add Photo'}
+            </button>
+          </div>
+
+          <div className="ios-group pd-form">
+            <label className="pd-field">
+              <span>Name</span>
+              <input type="text" name="name" value={profileData.name || ''} onChange={handleInputChange} placeholder="Full name" />
+            </label>
+            <label className="pd-field">
+              <span>Age</span>
+              <input type="number" name="age" inputMode="numeric" value={profileData.age || ''} onChange={handleInputChange} placeholder="Optional" />
+            </label>
+            <label className="pd-field">
+              <span>Date of Birth</span>
+              <input type="date" name="dob" value={profileData.dob || ''} onChange={handleInputChange} />
+            </label>
+            <label className="pd-field">
+              <span>Address</span>
+              <input type="text" name="address" value={profileData.address || ''} onChange={handleInputChange} placeholder="City, district" />
+            </label>
+          </div>
+
+          <div className="ios-section">About</div>
+          <div className="ios-group pd-form">
+            <label className="pd-field pd-field-area">
+              <span className="sr-only">Bio</span>
+              <textarea name="bio" rows="3" value={profileData.bio || ''} onChange={handleInputChange} placeholder="A short line about you" />
+            </label>
+          </div>
+
+          <button type="button" className={`pd-save ${isSaved ? 'saved' : ''}`} onClick={handleSaveProfile}>
+            {isSaved ? <><CheckCircle2 size={18} /> Saved</> : 'Save'}
+          </button>
+          <p className="ios-footnote" style={{ textAlign: 'center' }}>Your ID {currentUser?.id || ''} and role are managed by the admin.</p>
+        </>
+      )}
+
+      <IosSettingsStyles />
+      <style>{`
+        .pd-photo { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 4px 0 20px; }
+        .pd-photo-btn { border: none; background: none; padding: 0; cursor: pointer; border-radius: 50%; }
+        .pd-photo-edit { border: none; background: none; color: #007aff; font: inherit; font-size: 15px; cursor: pointer; }
+        .pd-form { display: flex; flex-direction: column; }
+        .pd-field { display: flex; align-items: center; gap: 12px; min-height: 46px; padding: 0 16px; position: relative; cursor: text; }
+        .pd-field + .pd-field::before { content: ''; position: absolute; top: 0; left: 16px; right: 0; border-top: 0.5px solid rgba(60,60,67,0.22); }
+        .pd-field > span { width: 108px; flex-shrink: 0; font-size: 16px; color: inherit; letter-spacing: -0.3px; }
+        .pd-field input, .pd-field textarea {
+          flex: 1; min-width: 0; border: none; outline: none; background: transparent; font: inherit; font-size: 16px;
+          color: #3c3c43; text-align: right; padding: 12px 0; letter-spacing: -0.3px;
+        }
+        .pd-field-area textarea { text-align: left; resize: none; line-height: 1.4; }
+        .pd-field input::placeholder, .pd-field textarea::placeholder { color: #c7c7cc; }
+        .pd-save {
+          display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; height: 50px; margin-top: 24px;
+          border: none; border-radius: 12px; background: #007aff; color: #fff; font: inherit; font-size: 17px; font-weight: 600; cursor: pointer;
+        }
+        .pd-save.saved { background: #34c759; }
+        .pd-save:active { opacity: 0.85; }
+        .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+        .dark-theme .pd-field input, .dark-theme .pd-field textarea { color: #ebebf5; }
+        .dark-theme .pd-field + .pd-field::before { border-top-color: rgba(84,84,88,0.6); }
+      `}</style>
 
       {showProfilePreview && profilePic && (
         <div 

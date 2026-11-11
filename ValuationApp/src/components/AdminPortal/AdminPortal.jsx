@@ -1,6 +1,6 @@
 import { API_BASE_URL } from '../../config/api';
 import React, { useState, useEffect, useRef } from 'react';
-import { Menu, Bell, LayoutDashboard, ClipboardList, PenSquare, Users, Settings, MessageCircle, Megaphone, X, Send, ImagePlus, Loader2 } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, PenSquare, Users, Settings, MessageCircle, Megaphone, LogOut } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import './AdminPortal.css';
@@ -10,8 +10,13 @@ import AdminStaff from './AdminStaff';
 import AdminSettings from './AdminSettings';
 import AttendanceLogs from '../EngineerPortal/AttendanceLogs'; // Using existing for Forms
 import NotificationBell from '../Shared/NotificationBell';
+import BranchSwitcher from './BranchSwitcher';
+import { roleLabel } from '../../utils/session';
 import ChatSystem from '../Shared/ChatSystem';
 import GlobalChatWidget from '../Shared/GlobalChatWidget';
+import BroadcastSheet from './BroadcastSheet';
+import { GridIcon, DocIcon, CalendarIcon, PeopleIcon, GearIcon } from '../Shared/TabIcons';
+import GcrLogo from '../Shared/GcrLogo';
 import { toast } from 'react-hot-toast';
 
 export default function AdminPortal({ currentUser, handleLogout }) {
@@ -74,15 +79,21 @@ export default function AdminPortal({ currentUser, handleLogout }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             userId: staff.id,
-            title: '📢 Admin Announcement',
+            title: 'Admin Announcement',
             message: finalMessage,
             isRead: false
           })
         })
       );
       
-      await Promise.all(promises);
-      toast.success(`Message sent to ${targetList.length} staff member${targetList.length !== 1 ? 's' : ''}!`);
+      const results = await Promise.all(promises);
+      const delivered = results.filter(r => r.ok).length;
+      if (delivered === 0) throw new Error('Server rejected the announcement');
+      if (delivered < targetList.length) {
+        toast.error(`Sent to ${delivered} of ${targetList.length}. Some could not be delivered.`);
+      } else {
+        toast.success(`Announcement sent to ${delivered} ${delivered === 1 ? 'person' : 'people'}`);
+      }
       setShowBroadcastModal(false);
       setBroadcastMessage('');
       setBroadcastImage('');
@@ -95,6 +106,16 @@ export default function AdminPortal({ currentUser, handleLogout }) {
     }
   };
   
+  // Tapping a push notification opens the matching Cases tab
+  useEffect(() => {
+    const open = (e) => {
+      const type = e.detail?.type;
+      handleNavigate('cases', type === 'report_submitted' ? 'Pending' : '');
+    };
+    window.addEventListener('gcr_open_case', open);
+    return () => window.removeEventListener('gcr_open_case', open);
+  }, []);
+
   const activeTabRef = useRef(activeTab);
   const lastUnreadCountRef = useRef(0);
 
@@ -118,10 +139,11 @@ export default function AdminPortal({ currentUser, handleLogout }) {
     if (!currentUser) return;
     
     // Check if push notes are enabled in localStorage (default true)
-    const pushEnabled = localStorage.getItem('admin_push_notifications') !== 'false';
-    if (!pushEnabled) return;
+    // Unread chat count is always tracked (Assistive Touch badge); desktop/phone
+    // notifications for new messages only when the admin has them switched on.
+    const alertsOn = () => localStorage.getItem('admin_push_notifications') !== 'false'; // read live (Controls can change it)
 
-    if (Capacitor.isNativePlatform()) {
+    if (alertsOn() && Capacitor.isNativePlatform()) {
       LocalNotifications.requestPermissions();
     }
 
@@ -132,7 +154,8 @@ export default function AdminPortal({ currentUser, handleLogout }) {
           const data = await res.json();
           const currentUnread = data.reduce((acc, user) => acc + user.unreadCount, 0);
           
-          if (currentUnread > lastUnreadCountRef.current && activeTabRef.current !== 'chat') {
+          setUnreadChats(currentUnread);
+          if (alertsOn() && currentUnread > lastUnreadCountRef.current && activeTabRef.current !== 'chat') {
             if (Capacitor.isNativePlatform()) {
               await LocalNotifications.schedule({
                 notifications: [
@@ -178,13 +201,39 @@ export default function AdminPortal({ currentUser, handleLogout }) {
     setActiveTab(tab);
   };
 
+  // Assistive Touch quick actions
+  const [unreadChats, setUnreadChats] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
+  useEffect(() => {
+    const onAction = (e) => {
+      const action = e.detail?.action;
+      if (action === 'new_case') handleNavigate('cases', `NEW_CASE:${Date.now()}`);
+      else if (action === 'find_case') handleNavigate('cases', `FIND:${Date.now()}`);
+      else if (action === 'review_queue') handleNavigate('cases', 'Pending');
+      else if (action === 'live_map') handleNavigate('staff');
+      else if (action === 'attendance') handleNavigate('forms');
+      else if (action === 'broadcast') setShowBroadcastModal(true);
+      else if (action === 'home') { handleNavigate('dashboard'); setRefreshKey((k) => k + 1); } // also leaves any sub-page
+      else if (action === 'refresh') setRefreshKey((k) => k + 1); // remounts the page → fresh data
+    };
+    window.addEventListener('gcr_quick_action', onAction);
+    return () => window.removeEventListener('gcr_quick_action', onAction);
+  }, []);
+
+  // Super Admin switched branch → reload the page's data and the alerts for that branch
+  useEffect(() => {
+    const onScope = () => { setRefreshKey((k) => k + 1); window.dispatchEvent(new CustomEvent('gcr_refresh_notifications')); };
+    window.addEventListener('gcr_branch_scope', onScope);
+    return () => window.removeEventListener('gcr_branch_scope', onScope);
+  }, []);
+
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard': return <AdminDashboard onViewAll={() => handleNavigate('cases')} onNavigate={handleNavigate} />;
-      case 'cases': return <AdminCases defaultFilter={caseFilter} />;
+      case 'dashboard': return <AdminDashboard onNavigate={handleNavigate} />;
+      case 'cases': return <AdminCases defaultFilter={caseFilter} currentUser={currentUser} />;
       case 'forms': return <AttendanceLogs />; // Repurposing attendance logs as Forms for now
-      case 'staff': return <AdminStaff />;
-      case 'chat': return <ChatSystem currentUser={currentUser} onBack={() => setActiveTab('dashboard')} />;
+      case 'staff': return <AdminStaff currentUser={currentUser} />;
+      case 'chat': return <div className="admin-chat-host"><ChatSystem currentUser={currentUser} onBack={() => setActiveTab('dashboard')} /></div>;
       case 'settings': return <AdminSettings currentUser={currentUser} handleLogout={handleLogout} />;
       default: return <AdminDashboard />;
     }
@@ -192,152 +241,158 @@ export default function AdminPortal({ currentUser, handleLogout }) {
 
   return (
     <div className="admin-portal-wrapper">
-      {activeTab !== 'chat' && (
-        <header className="admin-header">
-          <div style={{ 
-            width: '28px', 
-            height: '28px', 
-            backgroundColor: '#0346c8', 
-            color: 'white', 
-            borderRadius: '6px', 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center', 
-            fontWeight: '800', 
-            fontSize: '10px',
-            letterSpacing: '0.5px'
-          }}>GCR</div>
-          <div className="admin-header-title">Admin Portal</div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button 
-              className="admin-header-icon" 
-              onClick={() => setShowBroadcastModal(true)}
-              title="Broadcast to All Staff"
-              style={{ color: '#f59e0b', background: '#fef3c7' }}
-            >
-              <Megaphone size={22} />
-            </button>
-            <NotificationBell userId="ADMIN" />
-          </div>
-        </header>
-      )}
-
-      <GlobalChatWidget setActiveTab={setActiveTab} currentUser={currentUser} />
-
-      <main className="admin-main-content" style={activeTab === 'chat' ? { padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' } : {}}>
-        {renderContent()}
-      </main>
-
-      {showBroadcastModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', animation: 'fadeIn 0.2s ease-out' }}>
-          <div style={{ width: '100%', maxWidth: '420px', backgroundColor: '#fff', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
-            <div style={{ padding: '24px', background: 'linear-gradient(135deg, #0346c8 0%, #3b82f6 100%)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: '#fff', fontWeight: '800', fontSize: '18px', letterSpacing: '0.5px' }}>
-                <Megaphone size={24} color="#fef08a" /> Global Broadcast
-              </div>
-              <button onClick={() => setShowBroadcastModal(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', cursor: 'pointer', padding: '6px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }} disabled={isBroadcasting}>
-                <X size={18} color="#fff" />
-              </button>
-            </div>
-            
-            <div style={{ padding: '24px' }}>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '13px', color: '#64748b', marginBottom: '8px', fontWeight: '600' }}>Send to</label>
-                <div style={{ maxHeight: '140px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '8px', backgroundColor: '#f8fafc' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', cursor: 'pointer', borderRadius: '8px', background: broadcastTarget.includes('ALL') ? '#eff6ff' : 'transparent', transition: 'all 0.2s' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={broadcastTarget.includes('ALL')} 
-                      onChange={(e) => {
-                        if (e.target.checked) setBroadcastTarget(['ALL']);
-                        else setBroadcastTarget([]);
-                      }} 
-                      style={{ width: '16px', height: '16px', accentColor: '#0346c8', cursor: 'pointer' }}
-                    />
-                    <span style={{ fontWeight: '600', color: '#0f172a', fontSize: '14px' }}>📢 All Staff Members</span>
-                  </label>
-                  {availableStaff.map(staff => (
-                    <label key={staff.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', cursor: 'pointer', borderRadius: '8px', background: broadcastTarget.includes(staff.id) && !broadcastTarget.includes('ALL') ? '#eff6ff' : 'transparent', transition: 'all 0.2s' }}>
-                      <input 
-                        type="checkbox" 
-                        checked={broadcastTarget.includes('ALL') || broadcastTarget.includes(staff.id)} 
-                        disabled={broadcastTarget.includes('ALL')}
-                        onChange={(e) => {
-                          let newTarget = broadcastTarget.filter(t => t !== 'ALL');
-                          if (e.target.checked) newTarget.push(staff.id);
-                          else newTarget = newTarget.filter(t => t !== staff.id);
-                          if (newTarget.length === 0) newTarget = ['ALL']; // Default back to ALL if empty
-                          setBroadcastTarget(newTarget);
-                        }} 
-                        style={{ width: '16px', height: '16px', accentColor: '#0346c8', cursor: 'pointer' }}
-                      />
-                      <span style={{ fontWeight: '500', color: '#334155', fontSize: '14px' }}>👤 {staff.name || staff.id}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              
-              <textarea 
-                value={broadcastMessage}
-                onChange={e => setBroadcastMessage(e.target.value)}
-                placeholder="What's the announcement? (e.g., Happy Vinayaka Chavithi!)..."
-                style={{ width: '100%', height: '140px', padding: '16px', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc', borderRadius: '16px', fontSize: '15px', color: '#334155', resize: 'none', outline: 'none', marginBottom: '16px', transition: 'border-color 0.2s' }}
-                disabled={isBroadcasting}
-              />
-              
-              {broadcastImage && (
-                <div style={{ position: 'relative', width: '100%', height: '160px', marginBottom: '16px', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
-                  <img src={broadcastImage} alt="Attachment" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  <button onClick={() => setBroadcastImage('')} style={{ position: 'absolute', top: '12px', right: '12px', background: 'rgba(15, 23, 42, 0.7)', color: 'white', border: 'none', borderRadius: '50%', padding: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)' }}>
-                    <X size={16} />
-                  </button>
-                </div>
-              )}
-              
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} style={{ display: 'none' }} />
-                <button 
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isBroadcasting || isUploadingImage}
-                  style={{ flex: 1, padding: '14px', borderRadius: '14px', background: '#f8fafc', color: '#64748b', fontWeight: '700', border: '2px dashed #cbd5e1', cursor: isUploadingImage ? 'not-allowed' : 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', transition: 'all 0.2s' }}
-                >
-                  {isUploadingImage ? <><Loader2 size={18} className="spin" /> Uploading...</> : <><ImagePlus size={18} color="#0346c8" /> Attach</>}
-                </button>
-                
-                <button 
-                  onClick={handleSendBroadcast} 
-                  disabled={isBroadcasting || isUploadingImage}
-                  style={{ flex: 1.5, padding: '14px', borderRadius: '14px', background: 'linear-gradient(135deg, #0346c8 0%, #2563eb 100%)', color: 'white', fontWeight: '700', border: 'none', cursor: isBroadcasting ? 'not-allowed' : 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', opacity: (isBroadcasting || isUploadingImage) ? 0.7 : 1, boxShadow: '0 10px 15px -3px rgba(3, 70, 200, 0.3)' }}
-                >
-                  {isBroadcasting ? 'Broadcasting...' : <><Send size={18} /> Broadcast</>}
-                </button>
-              </div>
-            </div>
+      {/* Enterprise Desktop Sidebar (Rendered on >= 1024px) */}
+      <aside className="admin-desktop-sidebar">
+        <div className="admin-sidebar-header">
+          <GcrLogo size={38} />
+          <div>
+            <div className="admin-sidebar-brand">GCR VALUATION</div>
+            <div className="admin-sidebar-sub">Enterprise Credit Suite</div>
           </div>
         </div>
+
+        <div className="admin-sidebar-nav">
+          <button 
+            className={`admin-sidebar-item ${activeTab === 'dashboard' ? 'active' : ''}`}
+            onClick={() => handleNavigate('dashboard')}
+          >
+            <LayoutDashboard size={18} />
+            <span>Dashboard</span>
+          </button>
+          <button 
+            className={`admin-sidebar-item ${activeTab === 'cases' ? 'active' : ''}`}
+            onClick={() => handleNavigate('cases')}
+          >
+            <ClipboardList size={18} />
+            <span>Valuation Cases</span>
+          </button>
+          <button 
+            className={`admin-sidebar-item ${activeTab === 'forms' ? 'active' : ''}`}
+            onClick={() => setActiveTab('forms')}
+          >
+            <PenSquare size={18} />
+            <span>Attendance & Logs</span>
+          </button>
+          <button 
+            className={`admin-sidebar-item ${activeTab === 'staff' ? 'active' : ''}`}
+            onClick={() => setActiveTab('staff')}
+          >
+            <Users size={18} />
+            <span>Field Engineers</span>
+          </button>
+          <button 
+            className={`admin-sidebar-item ${activeTab === 'chat' ? 'active' : ''}`}
+            onClick={() => setActiveTab('chat')}
+          >
+            <MessageCircle size={18} />
+            <span>Staff Messages</span>
+          </button>
+          <button 
+            className={`admin-sidebar-item ${activeTab === 'settings' ? 'active' : ''}`}
+            onClick={() => setActiveTab('settings')}
+          >
+            <Settings size={18} />
+            <span>Portal Settings</span>
+          </button>
+        </div>
+
+        <div className="admin-sidebar-footer">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
+            <div className="admin-sidebar-avatar">
+              {(currentUser?.name || 'A').charAt(0).toUpperCase()}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="admin-sidebar-user-name">{currentUser?.name || 'Super Admin'}</div>
+              <div className="admin-sidebar-user-role">{roleLabel(currentUser)}{currentUser?.branchInfo ? ` · ${currentUser.branchInfo.name}` : ''}</div>
+            </div>
+          </div>
+          <button onClick={handleLogout} className="admin-sidebar-logout-btn" title="Sign Out">
+            <LogOut size={16} />
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <div className="admin-desktop-main">
+        {activeTab !== 'chat' && (
+          <header className="admin-header gcr-navbar">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+              <button
+                onClick={() => setActiveTab('dashboard')}
+                title="GCR Valuation"
+                aria-label="Go to dashboard"
+                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex' }}
+              >
+                <GcrLogo size={32} />
+              </button>
+              <div className="admin-header-stack">
+                <div className="admin-header-title">
+                  {activeTab === 'dashboard' && 'Dashboard'}
+                  {activeTab === 'cases' && 'Cases'}
+                  {activeTab === 'forms' && 'Attendance'}
+                  {activeTab === 'staff' && 'Staff'}
+                  {activeTab === 'settings' && 'Settings'}
+                </div>
+                {activeTab !== 'settings' && <BranchSwitcher currentUser={currentUser} />}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+              <button
+                className="gcr-nav-icon"
+                onClick={() => setShowBroadcastModal(true)}
+                title="New announcement"
+                aria-label="New announcement"
+              >
+                <Megaphone strokeWidth={2} />
+              </button>
+              <NotificationBell userId="ADMIN" currentUserId={currentUser?.id} />
+            </div>
+          </header>
+        )}
+
+        <GlobalChatWidget currentUser={currentUser} unreadChats={unreadChats} />
+
+        <main className="admin-main-content" style={activeTab === 'chat' ? { padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' } : {}}>
+          <React.Fragment key={refreshKey}>{renderContent()}</React.Fragment>
+        </main>
+      </div>
+
+      {showBroadcastModal && (
+        <BroadcastSheet
+          onClose={() => setShowBroadcastModal(false)}
+          message={broadcastMessage}
+          setMessage={setBroadcastMessage}
+          image={broadcastImage}
+          setImage={setBroadcastImage}
+          target={broadcastTarget}
+          setTarget={setBroadcastTarget}
+          staff={availableStaff}
+          isBroadcasting={isBroadcasting}
+          isUploadingImage={isUploadingImage}
+          fileInputRef={fileInputRef}
+          onImageChange={handleImageUpload}
+          onSend={handleSendBroadcast}
+        />
       )}
 
-      <nav className="admin-nav">
-        <button className={`admin-nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => handleNavigate('dashboard')}>
-          <LayoutDashboard size={22} />
-          <span>Dashboard</span>
-        </button>
-        <button className={`admin-nav-item ${activeTab === 'cases' ? 'active' : ''}`} onClick={() => handleNavigate('cases')}>
-          <ClipboardList size={22} />
-          <span>Cases</span>
-        </button>
-        <button className={`admin-nav-item ${activeTab === 'forms' ? 'active' : ''}`} onClick={() => setActiveTab('forms')}>
-          <PenSquare size={22} />
-          <span>Attendance</span>
-        </button>
-        <button className={`admin-nav-item ${activeTab === 'staff' ? 'active' : ''}`} onClick={() => setActiveTab('staff')}>
-          <Users size={22} />
-          <span>Staff</span>
-        </button>
-        <button className={`admin-nav-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
-          <Settings size={22} />
-          <span>Settings</span>
-        </button>
+      <nav className="admin-nav ios-tabbar" aria-label="Main">
+        {[
+          { key: 'dashboard', label: 'Dashboard', Icon: GridIcon, go: () => handleNavigate('dashboard') },
+          { key: 'cases', label: 'Cases', Icon: DocIcon, go: () => handleNavigate('cases') },
+          { key: 'forms', label: 'Attendance', Icon: CalendarIcon, go: () => setActiveTab('forms') },
+          { key: 'staff', label: 'Staff', Icon: PeopleIcon, go: () => setActiveTab('staff') },
+          { key: 'settings', label: 'Settings', Icon: GearIcon, go: () => setActiveTab('settings') },
+        ].map(({ key, label, Icon, go }) => (
+          <button
+            key={key}
+            className={`admin-nav-item ios-tab ${activeTab === key ? 'active' : ''}`}
+            aria-current={activeTab === key ? 'page' : undefined}
+            onClick={go}
+          >
+            <Icon active={activeTab === key} />
+            <span>{label}</span>
+          </button>
+        ))}
       </nav>
     </div>
   );

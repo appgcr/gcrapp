@@ -29,6 +29,7 @@ export default function BiometricFaceScanner({
   const [capturedPhoto, setCapturedPhoto] = useState(null);
   const isRunningRef = useRef(true);
   const earHistoryRef = useRef([]);
+  const fileInputRef = useRef(null);
 
   // Stop camera helper
   const stopCamera = () => {
@@ -48,6 +49,12 @@ export default function BiometricFaceScanner({
         await loadFaceApiModels();
         setIsModelLoading(false);
 
+        if (!navigator?.mediaDevices?.getUserMedia) {
+          setCameraError('Live video stream requires HTTPS on mobile browsers. Please tap "Take Selfie with Camera" below to verify.');
+          setIsModelLoading(false);
+          return;
+        }
+
         const mediaStream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: 'user',
@@ -62,7 +69,9 @@ export default function BiometricFaceScanner({
         }
       } catch (err) {
         console.error('Camera Access Error:', err);
-        setCameraError(err.message || 'Unable to access camera. Please allow camera permissions.');
+        setCameraError(err?.name === 'NotAllowedError'
+          ? 'Camera is blocked. Allow camera for GCR (Settings → App Permissions), or take a selfie below.'
+          : 'Camera not available. Take a selfie below instead.');
         setIsModelLoading(false);
       }
     }
@@ -267,22 +276,20 @@ export default function BiometricFaceScanner({
     ctx.fillText(`📅 ${dateStr}`, textX, boxY + 66);
 
     // Physical Address
-    const addrLine = addressData?.title
-      ? `${addressData.title}, ${addressData.subtitle || ''}`
-      : 'Yerramukkapalli, Kadapa, AP';
-    ctx.fillText(`📍 ${addrLine.substring(0, 48)}`, textX, boxY + 84);
+    const addrLine = addressData?.fullAddress || (addressData?.title ? `${addressData.title}, ${addressData.subtitle || ''}` : 'Current location');
+    ctx.fillText(`📍 ${addrLine.substring(0, 52)}`, textX, boxY + 84);
 
     // GPS Lat / Lng + Accuracy
-    const latLngStr = location
-      ? `Lat ${location.lat.toFixed(6)}° Long ${location.lng.toFixed(6)}° (±${Math.round(location.accuracy || 10)}m)`
-      : 'Lat 14.467321° Long 78.824212°';
+    const latLngStr = (location?.lat && location?.lng)
+      ? `Lat ${Number(location.lat).toFixed(6)}° Long ${Number(location.lng).toFixed(6)}° (±${Math.round(location.accuracy || 10)}m)`
+      : 'Live Network Geotag Active';
     ctx.fillStyle = '#94a3b8';
     ctx.fillText(`🌐 ${latLngStr}`, textX, boxY + 102);
 
     // Biometric Security Stamping
     ctx.fillStyle = '#34d399';
     ctx.font = 'bold 11px sans-serif';
-    ctx.fillText(`🛡️ Face Match: ${faceMatchScore}% | Liveness: ${livenessPassed ? 'Verified (Blink)' : 'Passed'}`, textX, boxY + 120);
+    ctx.fillText(`🛡️ Face Match: ${faceMatchScore}% | Blink check: ${livenessPassed ? 'Done' : 'Not done'}`, textX, boxY + 120);
 
     const finalPhoto = canvas.toDataURL('image/jpeg', 0.88);
     setCapturedPhoto(finalPhoto);
@@ -301,6 +308,12 @@ export default function BiometricFaceScanner({
       await loadFaceApiModels();
       setIsModelLoading(false);
 
+      if (!navigator?.mediaDevices?.getUserMedia) {
+        setCameraError('Live video stream requires HTTPS on mobile browsers.');
+        setIsModelLoading(false);
+        return;
+      }
+
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: 'user',
@@ -318,14 +331,114 @@ export default function BiometricFaceScanner({
     }
   };
 
+  const handleCaptureMobilePhoto = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsModelLoading(true);
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const dataUrl = reader.result;
+        const img = new Image();
+        img.onload = async () => {
+          try {
+            // Draw on canvas resized to standard 640x480
+            const canvas = canvasRef.current || document.createElement('canvas');
+            canvas.width = 640;
+            canvas.height = 480;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, 640, 480);
+
+            // The photo must show exactly one face that matches this engineer's registered face
+            let score = 0;
+            let matched = false;
+            let faces = 0;
+            try {
+              await loadFaceApiModels();
+              const result = await analyzeFaceFrame(canvas);
+              faces = result?.faceCount || 0;
+              if (faces === 1 && result?.descriptor && currentUser?.faceDescriptor?.length) {
+                const comparison = compareWithRegisteredFace(result.descriptor, currentUser.faceDescriptor);
+                score = comparison.confidence || 0;
+                matched = !!comparison.isMatch;
+              }
+            } catch (err) {
+              console.warn('Face check failed:', err);
+            }
+            if (!matched) {
+              toast.error(faces > 1
+                ? 'Only you should be in the selfie.'
+                : faces === 0 ? 'No face found. Take a clear selfie in good light.' : `Face doesn’t match your profile (${score}%). Try again.`);
+              return;
+            }
+
+            setFaceDetected(true);
+            setIsFaceMatched(true);
+            setFaceMatchScore(score);
+            setLivenessPassed(false); // a single photo can't prove a live person
+            setDetectionColor('#10b981');
+            setDetectionMessage('Face Verified');
+
+            // Stamp bank overlay
+            const boxHeight = 140;
+            const boxY = canvas.height - boxHeight;
+            ctx.fillStyle = 'rgba(2, 6, 23, 0.85)';
+            ctx.fillRect(0, boxY, canvas.width, boxHeight);
+
+            const textX = 20;
+            ctx.fillStyle = '#38bdf8';
+            ctx.font = 'bold 16px sans-serif';
+            ctx.fillText(`GCR VALUATION SYSTEM • ${attendanceType.toUpperCase()} VERIFIED`, textX, boxY + 28);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 13px sans-serif';
+            ctx.fillText(`Staff: ${currentUser?.name || 'Engineer'} (${currentUser?.username || 'GCR'})`, textX, boxY + 52);
+
+            const nowStr = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = '12px monospace';
+            ctx.fillText(`Time: ${nowStr} IST`, textX, boxY + 74);
+
+            const addrText = addressData?.fullAddress || (addressData?.title ? `${addressData.title}, ${addressData.subtitle || ''}` : 'Current location');
+            ctx.fillText(`Address: ${addrText.substring(0, 52)}`, textX, boxY + 94);
+
+            const latLngStr = (location?.lat && location?.lng)
+              ? `Lat ${Number(location.lat).toFixed(6)}° Long ${Number(location.lng).toFixed(6)}° (±${Math.round(location.accuracy || 10)}m)`
+              : 'Live Network Geotag Active';
+            ctx.fillText(`GPS: ${latLngStr}`, textX, boxY + 114);
+
+            ctx.fillStyle = '#34d399';
+            ctx.font = 'bold 11px sans-serif';
+            ctx.fillText(`Face Match: ${score}% | Identity Verified`, textX, boxY + 132);
+
+            const stamped = canvas.toDataURL('image/jpeg', 0.88);
+            setCapturedPhoto(stamped);
+            toast.success('Selfie captured! Tap "Confirm ' + attendanceType + '" to submit.');
+          } catch (analysisErr) {
+            console.error('Error in photo processing:', analysisErr);
+            toast.error('Error processing photo: ' + analysisErr.message);
+          } finally {
+            setIsModelLoading(false);
+          }
+        };
+        img.src = dataUrl;
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      toast.error('Error processing photo: ' + err.message);
+      setIsModelLoading(false);
+    }
+  };
+
   const handleConfirmSubmit = () => {
     if (!capturedPhoto) return;
 
     onCaptureSuccess({
       photo: capturedPhoto,
-      faceVerified: true,
-      faceMatchScore: faceMatchScore || 95,
-      livenessVerified: livenessPassed || true,
+      faceVerified: !!isFaceMatched,
+      faceMatchScore: faceMatchScore || 0,
+      livenessVerified: !!livenessPassed,
       address: addressData?.title ? `${addressData.title}, ${addressData.subtitle || ''}` : 'Location Acquired'
     });
   };
@@ -336,82 +449,60 @@ export default function BiometricFaceScanner({
   };
 
   return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      backgroundColor: 'rgba(15, 23, 42, 0.9)',
-      backdropFilter: 'blur(10px)',
-      zIndex: 9999,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '16px'
-    }}>
-      <div style={{
-        width: '100%',
-        maxWidth: '440px',
-        backgroundColor: '#ffffff',
-        borderRadius: '24px',
-        overflow: 'hidden',
-        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-        animation: 'fadeIn 0.25s ease-out'
-      }}>
+    <div className="responsive-modal-overlay">
+      <div className="responsive-modal-dialog">
         {/* Header */}
         <div style={{
           padding: '16px 20px',
+          paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))',
           background: 'linear-gradient(135deg, #001233 0%, #002855 100%)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          color: '#ffffff'
+          color: '#ffffff',
+          flexShrink: 0
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '10px',
-              backgroundColor: 'rgba(255, 255, 255, 0.12)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <ShieldCheck size={20} color="#38bdf8" />
-            </div>
-            <div>
-              <h3 style={{ fontSize: '15px', fontWeight: '700', margin: 0 }}>
-                {attendanceType} Verification
-              </h3>
-              <p style={{ fontSize: '12px', margin: 0, color: '#94a3b8' }}>
-                Bank-Grade Biometric Face Authentication
-              </p>
-            </div>
+          <div>
+            <h3 style={{ fontSize: '17px', fontWeight: '700', margin: 0, color: '#ffffff' }}>
+              {attendanceType} Verification
+            </h3>
+            <p style={{ fontSize: '12px', margin: '2px 0 0 0', color: '#94a3b8' }}>
+              Selfie check — look at the camera and blink
+            </p>
           </div>
           <button
             onClick={handleClose}
+            aria-label="Close"
             style={{
               background: 'rgba(255, 255, 255, 0.12)',
               border: 'none',
               borderRadius: '50%',
-              width: '32px',
-              height: '32px',
+              width: '36px',
+              height: '36px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
-              color: '#ffffff'
+              color: '#ffffff',
+              fontSize: '18px',
+              fontWeight: '700'
             }}
           >
-            <X size={18} />
+            ✕
           </button>
         </div>
 
-        {/* Viewfinder / Captured Photo */}
+        {/* Viewfinder / Captured Photo (Flex 1 to fill available mobile height) */}
         <div style={{
           position: 'relative',
           width: '100%',
-          height: '380px',
+          flex: 1,
+          minHeight: '260px',
           backgroundColor: '#020617',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
         }}>
           {isModelLoading && (
             <div style={{
@@ -426,11 +517,11 @@ export default function BiometricFaceScanner({
               zIndex: 10
             }}>
               <Loader2 className="spin" size={32} color="#38bdf8" />
-              <span style={{ fontSize: '13px', fontWeight: '500' }}>Initializing Facial AI Engines...</span>
+              <span style={{ fontSize: '13px', fontWeight: '500' }}>Preparing camera…</span>
             </div>
           )}
 
-          {cameraError && (
+          {cameraError && !capturedPhoto && (
             <div style={{
               position: 'absolute',
               inset: 0,
@@ -441,10 +532,29 @@ export default function BiometricFaceScanner({
               color: '#ffffff',
               padding: '24px',
               textAlign: 'center',
-              zIndex: 10
+              zIndex: 10,
+              backgroundColor: 'rgba(2, 6, 23, 0.95)'
             }}>
-              <AlertTriangle size={36} color="#ef4444" style={{ marginBottom: '10px' }} />
-              <p style={{ fontSize: '13px', color: '#fca5a5' }}>{cameraError}</p>
+              <p style={{ fontSize: '14px', color: '#fca5a5', marginBottom: '18px', lineHeight: '1.4', maxWidth: '320px' }}>
+                {cameraError}
+              </p>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  padding: '14px 28px',
+                  borderRadius: '12px',
+                  backgroundColor: '#0052cc',
+                  color: '#ffffff',
+                  border: 'none',
+                  fontSize: '15px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(0, 82, 204, 0.4)'
+                }}
+              >
+                Take Selfie with Camera
+              </button>
             </div>
           )}
 
@@ -477,7 +587,11 @@ export default function BiometricFaceScanner({
             <>
               <div style={{
                 position: 'absolute',
-                inset: '30px 45px',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: 'min(75vw, 270px)',
+                height: 'min(62vh, 360px)',
                 borderRadius: '50%',
                 border: `3px dashed ${detectionColor}`,
                 boxShadow: isFaceMatched ? '0 0 30px rgba(16, 185, 129, 0.7)' : '0 0 15px rgba(56, 189, 248, 0.4)',
@@ -507,7 +621,6 @@ export default function BiometricFaceScanner({
                   alignItems: 'center',
                   gap: '4px'
                 }}>
-                  <ShieldCheck size={13} />
                   <span>Face Auth: {isFaceMatched ? `${faceMatchScore}% Match` : 'Scanning'}</span>
                 </div>
 
@@ -522,7 +635,6 @@ export default function BiometricFaceScanner({
                   alignItems: 'center',
                   gap: '4px'
                 }}>
-                  <Eye size={13} />
                   <span>{livenessPassed ? 'Liveness: Confirmed' : 'Blink Eyes'}</span>
                 </div>
               </div>
@@ -546,109 +658,116 @@ export default function BiometricFaceScanner({
                 whiteSpace: 'nowrap',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
               }}>
-                {isFaceMatched ? (
-                  <CheckCircle2 size={16} color="#10b981" />
-                ) : (
-                  <Loader2 className="spin" size={16} color={detectionColor} />
-                )}
                 <span>{detectionMessage}</span>
               </div>
             </>
           )}
 
           <canvas ref={canvasRef} style={{ display: 'none' }} />
+          <input
+            type="file"
+            accept="image/*"
+            capture="user"
+            ref={fileInputRef}
+            onChange={handleCaptureMobilePhoto}
+            style={{ display: 'none' }}
+          />
         </div>
 
         {/* Footer Actions */}
-        <div style={{ padding: '16px 20px', backgroundColor: '#ffffff' }}>
-          {capturedPhoto ? (
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button
-                onClick={handleRetake}
-                style={{
-                  flex: 1,
-                  padding: '12px',
-                  borderRadius: '12px',
-                  border: '1px solid #cbd5e1',
-                  backgroundColor: '#f8fafc',
-                  color: '#475569',
-                  fontSize: '13px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px'
-                }}
-              >
-                <RefreshCw size={15} /> Retake
-              </button>
-              <button
-                onClick={handleConfirmSubmit}
-                style={{
-                  flex: 2,
-                  padding: '12px',
-                  borderRadius: '12px',
-                  border: 'none',
-                  backgroundColor: attendanceType === 'Clock-In' ? '#0052cc' : '#ef4444',
-                  color: '#ffffff',
-                  fontSize: '13px',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  boxShadow: '0 4px 14px rgba(0, 82, 204, 0.3)'
-                }}
-              >
-                <CheckCircle2 size={18} /> Confirm {attendanceType}
-              </button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button
-                onClick={handleClose}
-                style={{
-                  flex: 1,
-                  padding: '12px',
-                  borderRadius: '12px',
-                  border: '1px solid #e2e8f0',
-                  backgroundColor: '#f1f5f9',
-                  color: '#475569',
-                  fontSize: '13px',
-                  fontWeight: '600',
-                  cursor: 'pointer'
-                }}
-              >
-                Close Camera
-              </button>
-              <button
-                onClick={handleCapture}
-                disabled={!faceDetected || !isFaceMatched || isModelLoading}
-                style={{
-                  flex: 2,
-                  padding: '12px',
-                  borderRadius: '12px',
-                  border: 'none',
-                  backgroundColor: (faceDetected && isFaceMatched) ? '#0052cc' : '#94a3b8',
-                  color: '#ffffff',
-                  fontSize: '13px',
-                  fontWeight: '700',
-                  cursor: (faceDetected && isFaceMatched) ? 'pointer' : 'not-allowed',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  boxShadow: (faceDetected && isFaceMatched) ? '0 4px 14px rgba(0, 82, 204, 0.35)' : 'none',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                <Camera size={18} />
-                {faceDetected && isFaceMatched ? 'Capture Geotagged Proof' : 'Face Detection Required'}
-              </button>
-            </div>
-          )}
+        <div style={{
+          padding: '16px 20px',
+          backgroundColor: '#ffffff',
+          flexShrink: 0,
+          borderTop: '1px solid #e2e8f0',
+          paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))'
+        }}>
+          <div style={{ maxWidth: '560px', margin: '0 auto' }}>
+            {capturedPhoto ? (
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  onClick={handleRetake}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    borderRadius: '12px',
+                    border: '1px solid #cbd5e1',
+                    backgroundColor: '#f8fafc',
+                    color: '#475569',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  Retake
+                </button>
+                <button
+                  onClick={handleConfirmSubmit}
+                  style={{
+                    flex: 2,
+                    padding: '12px',
+                    borderRadius: '12px',
+                    border: 'none',
+                    backgroundColor: attendanceType === 'Clock-In' ? '#0052cc' : '#ef4444',
+                    color: '#ffffff',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 4px 14px rgba(0, 82, 204, 0.3)'
+                  }}
+                >
+                  Confirm {attendanceType}
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  onClick={handleClose}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    borderRadius: '12px',
+                    border: '1px solid #e2e8f0',
+                    backgroundColor: '#f1f5f9',
+                    color: '#475569',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Close Camera
+                </button>
+                <button
+                  onClick={handleCapture}
+                  disabled={!faceDetected || !isFaceMatched || !livenessPassed || isModelLoading}
+                  style={{
+                    flex: 2,
+                    padding: '12px',
+                    borderRadius: '12px',
+                    border: 'none',
+                    backgroundColor: (faceDetected && isFaceMatched && livenessPassed) ? '#0052cc' : '#94a3b8',
+                    color: '#ffffff',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    cursor: (faceDetected && isFaceMatched && livenessPassed) ? 'pointer' : 'not-allowed',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: (faceDetected && isFaceMatched && livenessPassed) ? '0 4px 14px rgba(0, 82, 204, 0.35)' : 'none',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  {!faceDetected ? 'Look at the camera' : !isFaceMatched ? 'Face not matched' : !livenessPassed ? 'Blink to continue' : `Take Selfie & ${attendanceType === 'Clock-Out' ? 'Check Out' : 'Check In'}`}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -1,0 +1,41 @@
+{
+  "baselineVersion": "1.0.0",
+  "frozenAt": "2026-11-05T02:00:00.000Z",
+  "description": "Cryptographically frozen baseline for historical valuation report archives in ValuationBackend/uploads/reports/",
+  "archives": {
+    "report_20261101_v1.docx": {
+      "format": "DOCX",
+      "sizeBytes": 3369724,
+      "sha256": "d156e1a835c898532a0ba47b3a114f2fad482eb0898f2a09aa74a2320d016115"
+    },
+    "report_20261101_v1.pdf": {
+      "format": "PDF",
+      "sizeBytes": 1557904,
+      "sha256": "5c4cc8c68efdcfe2b73b68f067bcd449de547da02f70b8b5f1a2b76ecbdfaa23"
+    },
+    "report_20261101_v2.docx": {
+      "format": "DOCX",
+      "sizeBytes": 3369735,
+      "sha256": "813a013f7cba0cfafc18fb8ccefccafcd9733ddf705244261612fa46edf9a58c"
+    },
+    "report_20261101_v2.pdf": {
+      "format": "PDF",
+      "sizeBytes": 1557926,
+      "sha256": "6bb83e92e71cb03264744218546395900dcb152d99ed74c22bcd5bb050c94c0f"
+    }
+  },
+  "manifests": {
+    "manifest_20261101_v1.json": {
+      "caseId": "20261101",
+      "version": 1,
+      "keyId": null,
+      "digitalSignature": "2dfd9c4df3fe0232256aee14e6abc74771422c71a9c1d674e6144b8157b98fe5"
+    },
+    "manifest_20261101_v2.json": {
+      "caseId": "20261101",
+      "version": 2,
+      "keyId": "gcr-2026-k1",
+      "digitalSignature": "66741cb2a89baf23517dff8c93c93a274500be2bfda3d1b7efcba15eb73092ab"
+    }
+  }
+}

@@ -1,0 +1,86 @@
+# ==============================================================================
+# GCR Property Valuation Ecosystem — Staging Docker Compose
+# Orchestrates: Backend API, Python OCR Engine, and React Admin Portal
+# ==============================================================================
+
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ../ValuationBackend
+      dockerfile: Dockerfile
+    container_name: gcr-backend-staging
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+    env_file:
+      - .env.staging
+    environment:
+      - NODE_ENV=staging
+      - PORT=5001
+      - OCR_SERVICE_URL=http://ocr-service:5002
+    volumes:
+      - staging_uploads:/app/uploads
+    depends_on:
+      ocr-service:
+        condition: service_healthy
+    networks:
+      - gcr-staging-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5001/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  ocr-service:
+    build:
+      context: ../OCRService
+      dockerfile: Dockerfile
+    container_name: gcr-ocr-staging
+    restart: unless-stopped
+    ports:
+      - "5002:5002"
+    env_file:
+      - .env.staging
+    environment:
+      - OCR_ENV=staging
+      - OCR_PORT=5002
+      - OCR_HOST=0.0.0.0
+    networks:
+      - gcr-staging-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5002/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ../ValuationApp
+      dockerfile: Dockerfile
+    container_name: gcr-frontend-staging
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - gcr-staging-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+networks:
+  gcr-staging-network:
+    driver: bridge
+
+volumes:
+  staging_uploads:
+    driver: local

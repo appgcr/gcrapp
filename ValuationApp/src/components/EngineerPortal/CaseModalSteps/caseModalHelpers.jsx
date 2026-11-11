@@ -108,6 +108,19 @@ export const toFieldValue = (val) => {
   return str;
 };
 
+// Built properties carry building fields (age, structure, flooring, floors); land does not
+export const isBuiltProperty = (type = '') =>
+  /house|apartment|flat|residential\s*building|commercial|industrial|shed/i.test(type) && !/open\s*site|agri/i.test(type);
+
+// Areas (Sqft) keep their decimals: '1336.50' stays 1336.50
+export const formatArea = (val) => {
+  if (val === undefined || val === null) return '';
+  let s = String(val).replace(/[^\d.]/g, '');
+  const i = s.indexOf('.');
+  if (i >= 0) s = s.slice(0, i + 1) + s.slice(i + 1).replace(/\./g, '').slice(0, 2);
+  return s;
+};
+
 export const formatCurrency = (val) => {
   if (!val) return '';
   const num = val.toString().replace(/\D/g, '');

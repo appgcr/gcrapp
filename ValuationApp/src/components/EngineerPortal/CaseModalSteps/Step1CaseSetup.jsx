@@ -1,3 +1,4 @@
+import { searchBanks } from '../../../utils/banks';
 import React from 'react';
 import { User, Building, ChevronDown, ChevronRight } from 'lucide-react';
 
@@ -15,13 +16,16 @@ export default function Step1CaseSetup({
   showBankDropdown,
   setShowBankDropdown,
   availableBanks = [],
+  bankRecords = [],
   availableDistricts = [],
   handleAddCustomBank,
-  handleNextToUpload
+  handleNextToUpload,
+  propertyTypes = [],
+  propertyType = '',
+  setPropertyType = () => {}
 }) {
-  const filteredBanks = availableBanks.filter(b =>
-    b.toLowerCase().includes(bankName.toLowerCase())
-  );
+  const filteredBanks = (bankRecords.length ? searchBanks(bankRecords, bankName).map(b => b.name)
+    : availableBanks.filter(b => b.toLowerCase().includes(bankName.toLowerCase())));
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
@@ -105,20 +109,9 @@ export default function Step1CaseSetup({
               </div>
             ))}
 
-            {bankName.trim() !== '' && !filteredBanks.some(b => b.toLowerCase() === bankName.toLowerCase()) && (
-              <div 
-                onClick={() => handleAddCustomBank(bankName)}
-                onMouseDown={(e) => e.preventDefault()} 
-                style={{ 
-                  margin: '8px', padding: '12px', fontSize: '13px', color: '#0346c8', 
-                  fontWeight: '700', cursor: 'pointer', textAlign: 'center', 
-                  backgroundColor: '#eff6ff', borderRadius: '8px', 
-                  border: '1px dashed #93c5fd', transition: 'all 0.2s'
-                }}
-                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#dbeafe'}
-                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#eff6ff'}
-              >
-                + Use "{bankName}" as custom bank
+            {bankName.trim() !== '' && filteredBanks.length === 0 && (
+              <div style={{ margin: '8px', padding: '12px', fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.4 }}>
+                “{bankName.trim()}” isn’t in the bank list. Ask the Super Admin to add it.
               </div>
             )}
           </div>
@@ -160,6 +153,21 @@ export default function Step1CaseSetup({
         </div>
       </div>
       
+      <div style={{ marginBottom: '16px' }}>
+        <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '8px' }}>
+          Report Type (Property Category) <span style={{ color: '#ef4444' }}>*</span>
+        </label>
+        <select
+          data-testid="step1-property-type"
+          value={propertyType}
+          onChange={e => setPropertyType(e.target.value)}
+          style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '15px', backgroundColor: 'white' }}
+        >
+          <option value="">Select the report type…</option>
+          {propertyTypes.map(pt => <option key={pt} value={pt}>{pt}</option>)}
+        </select>
+      </div>
+
       <button className="btn-primary" onClick={handleNextToUpload}>
         Next step <ChevronRight size={18} />
       </button>

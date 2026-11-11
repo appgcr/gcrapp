@@ -3,6 +3,9 @@ import { Camera, CheckCircle2, CloudUpload, Loader2, FileText, MapPin, Building,
 import toast from 'react-hot-toast';
 import ChatSystem from '../Shared/ChatSystem';
 import { API_BASE_URL } from '../../config/api';
+import IconTile from '../Shared/IconTile';
+import ReportViewer, { fetchReport } from '../Shared/ReportViewer';
+import './AttendanceView.css';
 
 const REQUIRED_DOCS = [
   { id: 'saleDeed', label: '1. Registered Document / Sale Deed' },
@@ -19,6 +22,7 @@ export default function CaseDetailsView({ caseId }) {
   const [isTracking, setIsTracking] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [previewDoc, setPreviewDoc] = useState(null);
+  const [showReport, setShowReport] = useState(false);
   const watchIdRef = useRef(null);
 
   const formatFileSize = (bytes) => {
@@ -63,7 +67,7 @@ export default function CaseDetailsView({ caseId }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         title: 'Trip Started 🚗',
-        message: `Engineer has started the trip for Case #${caseId} (${caseData?.clientName || 'Client'})`,
+        message: `Engineer has started the trip for Case ${caseData?.fileNumber || `#${caseId}`} (${caseData?.clientName || 'Client'})`,
         type: 'info',
         targetUser: 'ADMIN'
       })
@@ -153,178 +157,86 @@ export default function CaseDetailsView({ caseId }) {
   return (
     <div className="case-details-view animate-fade-in" style={{ paddingBottom: '160px' }}>
       
-      {/* Header Info */}
-      <div style={{ marginBottom: '24px', backgroundColor: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-          <span className="badge badge-gray">{caseId}</span>
-          <span className={`badge ${status === 'Approved' ? 'badge-success' : 'badge-primary'}`} style={{ display: 'flex', gap: '4px', alignItems: 'center', padding: '4px 8px' }}>
-             <CheckCircle2 size={14} /> {status}
-          </span>
-        </div>
-        
-        <h2 style={{ fontSize: '22px', fontWeight: '800', marginBottom: '12px', color: '#0f172a' }}>{displayName}</h2>
-        
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px' }}>
-          <p style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '600', color: 'var(--primary)' }}>
-            <Building size={16} /> {bankName || 'Unknown Bank'}
-          </p>
-          
-          <p style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', color: '#334155' }}>
-            <Phone size={16} color="#64748b" /> {clientPhone || 'No Mobile'}
-          </p>
-
-          <p className="text-muted" style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '14px' }}>
-            <MapPin size={16} style={{ flexShrink: 0, marginTop: '2px', color: '#64748b' }} /> 
-            <span>{locationData && locationData !== 'Fetching location...' && locationData !== 'Address pending' ? locationData : 'Address pending'}</span>
-          </p>
-          
-          <p style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', color: '#334155' }}>
-            <Calendar size={16} color="#64748b" /> 
-            {inspectionDate ? new Date(inspectionDate).toLocaleDateString() : 'Date TBD'} 
-            <Clock size={16} color="#64748b" style={{ marginLeft: '4px' }} /> 
-            {inspectionTime || 'Time TBD'}
-          </p>
-          
-          <div style={{ marginTop: '8px', padding: '12px', backgroundColor: note ? '#fef9c3' : '#f8fafc', borderRadius: '8px', border: note ? '1px solid #fef08a' : '1px solid #e2e8f0' }}>
-            <p style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '13px', color: note ? '#854d0e' : '#64748b', margin: 0 }}>
-              <StickyNote size={16} style={{ flexShrink: 0, marginTop: '2px' }} /> 
-              <span style={{ fontWeight: '500' }}>Admin Note: {note || 'None'}</span>
-            </p>
-          </div>
-        </div>
-      </div>
-      
-      {!isStarted && (
-        <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '12px' }}>
-          
-          <div style={{ textAlign: 'center', margin: '8px 0 16px 0' }}>
-            <div style={{ width: '72px', height: '72px', borderRadius: '36px', background: 'linear-gradient(135deg, #eff6ff, #dbeafe)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px auto', boxShadow: '0 8px 16px rgba(59, 130, 246, 0.15)' }}>
-              <FileText size={32} color="#2563eb" />
+      {/* Case summary — Apple style */}
+      {(() => {
+        const addr = [caseData.address, locationData].find(v => v && !/fetching|pending/i.test(v)) || '';
+        const STATUS = { Pending: ['In field', 'blue'], Reviewing: ['With admin', 'orange'], Completed: ['With admin', 'orange'], Returned: ['Returned', 'red'], Approved: ['Approved', 'green'], Rejected: ['Rejected', 'red'] };
+        const [label, tone] = STATUS[status] || STATUS.Pending;
+        const when = inspectionDate
+          ? `${new Date(inspectionDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}${inspectionTime ? ` · ${/^\d{1,2}:\d{2}$/.test(inspectionTime) ? new Date(`2000-01-01T${inspectionTime.padStart(5, '0')}`).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }) : inspectionTime}` : ''}`
+          : 'Not scheduled';
+        const openMaps = () => {
+          if (!addr) { toast.error('No address on this case yet. Ask your admin to add it.'); return; }
+          window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}`, '_blank');
+        };
+        return (
+          <div className="td">
+            <div className="cd-hero">
+              <h1>{displayName}</h1>
+              <div className="cd-meta">
+                <span className="cd-file">{caseData?.fileNumber || `#${caseId}`}</span>
+                <span className={`cd-status ${tone}`}>{label}</span>
+                {(caseData.version || 1) > 1 && <span className="cd-ver">v{caseData.version}</span>}
+              </div>
             </div>
-            <h3 style={{ fontSize: '20px', fontWeight: '800', color: '#1e293b', margin: '0 0 6px 0' }}>Ready to Begin</h3>
-            <p style={{ fontSize: '14px', color: '#64748b', margin: 0, lineHeight: '1.5' }}>Review the details above and start the valuation process when you arrive at the property.</p>
-          </div>
 
-          <button 
-            onClick={handleToggleTracking}
-            style={{ 
-              background: isTracking ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', 
-              color: 'white', 
-              border: 'none', 
-              borderRadius: '16px', 
-              padding: '18px', 
-              fontSize: '16px', 
-              fontWeight: '700', 
-              display: 'flex', 
-              justifyContent: 'center', 
-              alignItems: 'center', 
-              gap: '10px', 
-              cursor: 'pointer', 
-              boxShadow: isTracking ? '0 10px 25px -5px rgba(239, 68, 68, 0.4)' : '0 10px 25px -5px rgba(245, 158, 11, 0.4)',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-              animation: isTracking ? 'pulse 2s infinite' : 'none'
-            }}
-            onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; }}
-            onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
-          >
-            {isTracking ? (
-              <><MapPin size={22} /> Stop Tracking Trip</>
-            ) : (
-              <><Map size={22} /> Start Trip (Enable GPS)</>
+            {status === 'Returned' && (
+              <div className="td-group cd-returned">
+                <div className="td-row">
+                  <IconTile icon={StickyNote} color="red" size={30} />
+                  <div className="td-main">
+                    <div className="td-title">Sent back for corrections</div>
+                    <div className="td-sub cd-full">“{caseData.rejectionReason || 'Please review and correct the details.'}”</div>
+                    {caseData.returnedBy && <div className="td-sub">{caseData.returnedBy}{caseData.returnedAt ? ` · ${new Date(caseData.returnedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : ''}</div>}
+                  </div>
+                </div>
+              </div>
             )}
-          </button>
 
-          <button 
-            onClick={() => setIsStarted(true)}
-            style={{ 
-              background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', 
-              color: 'white', 
-              border: 'none', 
-              borderRadius: '16px', 
-              padding: '18px', 
-              fontSize: '16px', 
-              fontWeight: '700', 
-              display: 'flex', 
-              justifyContent: 'center', 
-              alignItems: 'center', 
-              gap: '10px', 
-              cursor: 'pointer', 
-              boxShadow: '0 10px 25px -5px rgba(37, 99, 235, 0.4), 0 8px 10px -6px rgba(37, 99, 235, 0.1)',
-              transition: 'transform 0.2s, box-shadow 0.2s'
-            }}
-            onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 15px 30px -5px rgba(37, 99, 235, 0.5)'; }}
-            onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 10px 25px -5px rgba(37, 99, 235, 0.4)'; }}
-          >
-            <CheckCircle2 size={22} /> Start Valuation Process
-          </button>
+            <div className="td-group" style={{ marginTop: 16 }}>
+              <div className="td-row">
+                <IconTile icon={Building} color="blue" size={30} />
+                <div className="td-main"><div className="td-title">{bankName || 'Bank not set'}</div><div className="td-sub">Bank</div></div>
+              </div>
+              {clientPhone && (
+                <a className="td-row td-link" href={`tel:${clientPhone}`} style={{ textDecoration: 'none' }}>
+                  <IconTile icon={Phone} color="green" size={30} />
+                  <div className="td-main"><div className="td-title">{clientPhone}</div><div className="td-sub">Call client</div></div>
+                </a>
+              )}
+              <button className="td-row td-link" onClick={openMaps}>
+                <IconTile icon={MapPin} color="red" size={30} />
+                <div className="td-main"><div className="td-title">{addr || 'Address not added yet'}</div><div className="td-sub">Directions</div></div>
+                <Navigation size={17} className="td-chev" />
+              </button>
+              <div className="td-row">
+                <IconTile icon={Calendar} color="orange" size={30} />
+                <div className="td-main"><div className="td-title">{when}</div><div className="td-sub">Inspection</div></div>
+              </div>
+              {note && (
+                <div className="td-row">
+                  <IconTile icon={StickyNote} color="gray" size={30} />
+                  <div className="td-main"><div className="td-title cd-full">{note}</div><div className="td-sub">Note from admin</div></div>
+                </div>
+              )}
+            </div>
 
-          <style>{`
-            @keyframes pulse {
-              0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-              70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
-              100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-            }
-          `}</style>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <button 
-              onClick={() => {
-                const isValid = (val) => val && !['fetching location...', 'address pending', 'to be updated', 'unknown bank', 'bank'].includes(val.trim().toLowerCase());
-                const addr = isValid(locationData) ? locationData : (isValid(bankName) ? bankName : 'Kadapa, Andhra Pradesh');
-                window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}`, '_blank');
-              }}
-              style={{ 
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', 
-                color: 'white', 
-                border: 'none', 
-                borderRadius: '16px', 
-                padding: '16px', 
-                fontSize: '14px', 
-                fontWeight: '600', 
-                display: 'flex', 
-                flexDirection: 'column',
-                justifyContent: 'center', 
-                alignItems: 'center', 
-                gap: '8px', 
-                cursor: 'pointer', 
-                boxShadow: '0 10px 15px -3px rgba(16, 185, 129, 0.3)',
-                transition: 'transform 0.2s'
-              }}
-              onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-              onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-            >
-              <Navigation size={24} /> 
-              <span>Get Directions</span>
-            </button>
-            <button 
-              onClick={() => setIsChatOpen(true)}
-              style={{ 
-                background: 'linear-gradient(135deg, #128C7E 0%, #075E54 100%)', 
-                color: 'white', 
-                border: 'none', 
-                borderRadius: '16px', 
-                padding: '16px', 
-                fontSize: '14px', 
-                fontWeight: '600', 
-                display: 'flex', 
-                flexDirection: 'column',
-                justifyContent: 'center', 
-                alignItems: 'center', 
-                gap: '8px', 
-                cursor: 'pointer', 
-                boxShadow: '0 10px 15px -3px rgba(18, 140, 126, 0.3)',
-                transition: 'transform 0.2s'
-              }}
-              onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-              onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-            >
-              <MessageSquare size={24} /> 
-              <span>In-App Chat</span>
-            </button>
+            {!isStarted && (
+              <>
+                <button className="td-action in" onClick={() => setIsStarted(true)}>
+                  <FileText size={20} /> {status === 'Returned' ? 'Make Corrections' : 'Start Valuation'}
+                </button>
+                <div className="cd-actions">
+                  <button onClick={openMaps}><Navigation size={20} /><span>Directions</span></button>
+                  <button onClick={handleToggleTracking} className={isTracking ? 'on' : ''}><Map size={20} /><span>{isTracking ? 'Stop Trip' : 'Start Trip'}</span></button>
+                  <button onClick={() => setIsChatOpen(true)}><MessageSquare size={20} /><span>Message</span></button>
+                </div>
+              </>
+            )}
           </div>
-        </div>
-      )}
-        
+        );
+      })()}
+
       {isStarted && propertyDetails && (
           <div style={{ backgroundColor: '#fff', borderRadius: '12px', border: '1px solid var(--border-color)', marginBottom: '24px', overflow: 'hidden' }}>
             <div style={{ padding: '16px', borderBottom: '1px solid var(--border-color)', backgroundColor: '#f8fafc' }}>
@@ -657,15 +569,19 @@ export default function CaseDetailsView({ caseId }) {
       {/* Sticky Bottom Action Bar - Only show when started */}
       {isStarted && (
         <div style={{ position: 'fixed', bottom: '66px', left: 0, right: 0, padding: '10px 14px', backgroundColor: '#fff', borderTop: '1px solid var(--border-color)', display: 'flex', gap: '8px', zIndex: 90, boxShadow: '0 -4px 12px rgba(0,0,0,0.05)' }}>
-          <button className="btn-secondary" style={{ flex: 1, backgroundColor: '#f1f5f9', border: '1px solid var(--border-color)', padding: '10px 8px', fontSize: '13px', fontWeight: '600', minWidth: 0, whiteSpace: 'nowrap' }} onClick={() => window.print()}>
-            <FileText size={16} /> Export PDF
+          <button className="btn-primary" onClick={() => setShowReport(true)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '11px 8px', fontSize: '14px', border: 'none', borderRadius: '10px', backgroundColor: 'var(--primary)', color: '#fff', fontWeight: '600', minWidth: 0 }}>
+            <FileText size={16} /> View Bank Report
           </button>
-          <a href={`${API_BASE_URL}/api/cases/${caseId}/report`} download style={{ flex: 1.2, textDecoration: 'none', minWidth: 0 }}>
-            <button className="btn-primary" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '10px 8px', fontSize: '13px', border: 'none', borderRadius: '8px', backgroundColor: 'var(--primary)', color: '#fff', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              <FileText size={16} /> Report (.docx)
-            </button>
-          </a>
         </div>
+      )}
+      {showReport && (
+        <ReportViewer
+          title={caseData?.clientName || 'Valuation Report'}
+          subtitle={[caseData?.fileNumber, caseData?.bankName].filter(Boolean).join(' · ')}
+          fileName={`Report_${String(caseData?.fileNumber || caseId).replace(/[^a-zA-Z0-9]+/g, '-')}.docx`}
+          load={() => fetchReport(`${API_BASE_URL}/api/cases/${caseId}/report?format=docx`)}
+          onClose={() => setShowReport(false)}
+        />
       )}
       {isChatOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, backgroundColor: '#fff', display: 'flex', flexDirection: 'column' }}>

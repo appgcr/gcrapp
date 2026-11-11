@@ -1,8 +1,9 @@
-import React from 'react';
-import { CheckSquare, Eye, UploadCloud, PenTool, ShieldAlert } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { CheckSquare, Eye, UploadCloud, PenTool, ShieldAlert, Coins, TrendingDown, Building, ShieldCheck } from 'lucide-react';
 import SignatureCanvas from 'react-signature-canvas';
 import toast from 'react-hot-toast';
 import { getPageDisplayInfo } from './caseModalHelpers';
+import { calculateValuation } from '../../../utils/valuationCalculator';
 
 export default function Step6FinalReviewSignature({
   clientName,
@@ -26,9 +27,19 @@ export default function Step6FinalReviewSignature({
   setTermsAccepted,
   showSubmitModal,
   setShowSubmitModal,
-  handleCreateCase
+  handleCreateCase,
+  onReviewReport,
+  savedSignature = '',
+  bankValues
 }) {
+  const [applySignature, setApplySignature] = React.useState(false);
   const totalDocPages = Object.values(uploadedDocs).flat().reduce((sum, p) => sum + (p.pageCount || 1), 0);
+
+  const valSummary = useMemo(() => {
+    const v = calculateValuation({ ...propertyDetails, bankName }) || {};
+    // The quick on-device estimate may not have every figure (e.g. bank % not known here)
+    return typeof v.fairMarketValue === 'number' ? v : null;
+  }, [propertyDetails, bankName]);
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
@@ -133,7 +144,7 @@ export default function Step6FinalReviewSignature({
               <span style={{ fontWeight: '600', textAlign: 'right' }}>
                 {propertyDetails.propertyType || 'Residential'}<br/>
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  {propertyDetails.siteValue?.plinthArea || 'No Value'}
+                  {propertyDetails.siteValue?.plinthArea ? `Plinth ${propertyDetails.siteValue.plinthArea} sft` : (propertyDetails.netExtent || propertyDetails.totalExtent || propertyDetails.landArea) ? `Extent ${propertyDetails.netExtent || propertyDetails.totalExtent || propertyDetails.landArea}` : (propertyDetails.roadWidth ? `Road ${propertyDetails.roadWidth} ft` : '')}
                 </span>
               </span>
               <button 
@@ -180,73 +191,99 @@ export default function Step6FinalReviewSignature({
         </div>
       </div>
 
-      <div style={{ marginBottom: '24px' }}>
-        <h4 style={{ margin: '0 0 12px 0', fontSize: '15px', color: 'var(--text-primary)' }}>Digital Signature</h4>
-        
-        <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
-          <button 
-            type="button"
-            onClick={() => setActiveSignatureTab('draw')} 
-            style={{ flex: 1, padding: '8px', fontSize: '13px', fontWeight: '600', borderRadius: '8px', border: activeSignatureTab === 'draw' ? '2px solid var(--primary)' : '1px solid var(--border-color)', backgroundColor: activeSignatureTab === 'draw' ? 'rgba(0,82,204,0.05)' : 'transparent', color: activeSignatureTab === 'draw' ? 'var(--primary)' : 'var(--text-muted)', cursor: 'pointer' }}
-          >
-            Draw Signature
-          </button>
-          <button 
-            type="button"
-            onClick={() => setActiveSignatureTab('upload')} 
-            style={{ flex: 1, padding: '8px', fontSize: '13px', fontWeight: '600', borderRadius: '8px', border: activeSignatureTab === 'upload' ? '2px solid var(--primary)' : '1px solid var(--border-color)', backgroundColor: activeSignatureTab === 'upload' ? 'rgba(0,82,204,0.05)' : 'transparent', color: activeSignatureTab === 'upload' ? 'var(--primary)' : 'var(--text-muted)', cursor: 'pointer' }}
-          >
-            Upload Signature
-          </button>
+      {/* The bank's own report calculates the values — show exactly its figures */}
+      {bankValues ? (
+        <div style={{ padding: '16px', backgroundColor: '#f0fdf4', borderRadius: '12px', border: '1px solid #bbf7d0', marginBottom: '24px' }}>
+          <h4 style={{ margin: '0 0 12px 0', fontSize: '15px', color: '#166534', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Coins size={16} /> Values in the {bankName} report
+          </h4>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
+            {[['Fair Market Value', bankValues.fairMarketValue, '#166534'], ['Realizable Value', bankValues.realizableValue, '#1e40af'], ['Distress Value', bankValues.distressSaleValue, '#92400e']].map(([label, v, color]) => (
+              <div key={label} style={{ padding: '10px 12px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #dcfce7', minWidth: 0 }}>
+                <span style={{ fontSize: '11px', fontWeight: '600', color: '#4b5563' }}>{label}</span>
+                <div style={{ fontSize: '17px', fontWeight: '800', color }}>₹{Number(v || 0).toLocaleString('en-IN')}</div>
+              </div>
+            ))}
+          </div>
+          <p style={{ margin: '10px 0 0', fontSize: '12px', color: '#4b5563' }}>Sign below — you’ll see the full bank report before it is submitted.</p>
+        </div>
+      ) : !valSummary ? (
+        <div style={{ padding: '14px 16px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '24px', fontSize: '13px', color: '#475569', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Coins size={16} /> Values are calculated in the bank report — you’ll see them after signing.
+        </div>
+      ) : (
+      <div style={{ padding: '16px', backgroundColor: '#f0fdf4', borderRadius: '12px', border: '1px solid #bbf7d0', marginBottom: '24px' }}>
+        <h4 style={{ margin: '0 0 14px 0', fontSize: '15px', color: '#166534', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Coins size={16} /> Valuation Assessment Summary
+        </h4>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+          <div style={{ padding: '10px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #dcfce7' }}>
+            <span style={{ fontSize: '11px', color: '#4b5563' }}>Land Value:</span>
+            <div style={{ fontSize: '15px', fontWeight: '700', color: '#15803d' }}>
+              ₹{valSummary.landValue.toLocaleString('en-IN')}
+            </div>
+            <span style={{ fontSize: '10px', color: '#6b7280' }}>
+              {valSummary.netExtentSqYards} Sq. Yds @ ₹{valSummary.landRate.toLocaleString('en-IN')}
+            </span>
+          </div>
+
+          <div style={{ padding: '10px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #dcfce7' }}>
+            <span style={{ fontSize: '11px', color: '#4b5563' }}>Net Structure:</span>
+            <div style={{ fontSize: '15px', fontWeight: '700', color: '#15803d' }}>
+              ₹{valSummary.netStructureValue.toLocaleString('en-IN')}
+            </div>
+            <span style={{ fontSize: '10px', color: '#6b7280' }}>
+              Depr: {valSummary.depreciationPercent}% ({valSummary.buildingAge} yrs)
+            </span>
+          </div>
+
+          <div style={{ padding: '10px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #dcfce7' }}>
+            <span style={{ fontSize: '11px', color: '#4b5563' }}>Amenities / Extra:</span>
+            <div style={{ fontSize: '15px', fontWeight: '700', color: '#15803d' }}>
+              ₹{valSummary.amenitiesValue.toLocaleString('en-IN')}
+            </div>
+            <span style={{ fontSize: '10px', color: '#6b7280' }}>Compound/Sump/etc.</span>
+          </div>
         </div>
 
-        {activeSignatureTab === 'draw' && (
-          <div style={{ border: '2px dashed var(--border-color)', borderRadius: '12px', backgroundColor: '#fff', position: 'relative', height: '150px' }}>
-            <SignatureCanvas 
-              ref={sigCanvas}
-              penColor="black"
-              canvasProps={{ style: { width: '100%', height: '100%', borderRadius: '12px' }, className: 'sigCanvas' }}
-              onEnd={() => {
-                if (sigCanvas.current && typeof sigCanvas.current.getTrimmedCanvas === 'function') {
-                  setSignatureDataUrl(sigCanvas.current.getTrimmedCanvas().toDataURL('image/png'));
-                }
-              }}
-            />
-            <button 
-              type="button"
-              onClick={() => { 
-                if (sigCanvas.current && typeof sigCanvas.current.clear === 'function') {
-                  sigCanvas.current.clear(); 
-                }
-                setSignatureDataUrl(null); 
-              }} 
-              style={{ position: 'absolute', top: '8px', right: '8px', fontSize: '11px', padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: '#fff', cursor: 'pointer' }}
-            >
-              Clear
-            </button>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', paddingTop: '10px', borderTop: '1px dashed #86efac' }}>
+          <div style={{ flex: 1, minWidth: '130px', padding: '8px 12px', backgroundColor: '#dcfce7', borderRadius: '8px' }}>
+            <span style={{ fontSize: '11px', fontWeight: '600', color: '#166534' }}>Fair Market Value</span>
+            <div style={{ fontSize: '16px', fontWeight: '800', color: '#14532d' }}>
+              ₹{valSummary.fairMarketValue.toLocaleString('en-IN')}
+            </div>
           </div>
-        )}
+          <div style={{ flex: 1, minWidth: '130px', padding: '8px 12px', backgroundColor: '#e0f2fe', borderRadius: '8px' }}>
+            <span style={{ fontSize: '11px', fontWeight: '600', color: '#0369a1' }}>Realizable Value (90%)</span>
+            <div style={{ fontSize: '16px', fontWeight: '800', color: '#075985' }}>
+              ₹{valSummary.realizableValue.toLocaleString('en-IN')}
+            </div>
+          </div>
+          <div style={{ flex: 1, minWidth: '130px', padding: '8px 12px', backgroundColor: '#fef3c7', borderRadius: '8px' }}>
+            <span style={{ fontSize: '11px', fontWeight: '600', color: '#92400e' }}>Distress Sale Value</span>
+            <div style={{ fontSize: '16px', fontWeight: '800', color: '#78350f' }}>
+              ₹{valSummary.distressSaleValue.toLocaleString('en-IN')}
+            </div>
+          </div>
+        </div>
+      </div>
 
-        {activeSignatureTab === 'upload' && (
-          <div style={{ border: '2px dashed var(--border-color)', borderRadius: '12px', backgroundColor: '#f8fafc', height: '150px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-            <input 
-              type="file" 
-              accept="image/*" 
-              onChange={(e) => {
-                if (e.target.files && e.target.files[0]) {
-                  setSignatureUploadUrl(URL.createObjectURL(e.target.files[0]));
-                }
-              }} 
-              style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} 
-            />
-            {signatureUploadUrl ? (
-              <img src={signatureUploadUrl} alt="Signature" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
-            ) : (
-              <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
-                <UploadCloud size={24} style={{ margin: '0 auto 8px auto' }} />
-                <div style={{ fontSize: '13px', fontWeight: '600' }}>Tap to upload signature image</div>
-              </div>
-            )}
+      )}
+
+      <div style={{ marginBottom: '24px' }} data-testid="final-signature">
+        <h4 style={{ margin: '0 0 12px 0', fontSize: '15px', color: 'var(--text-primary)' }}>Digital Signature</h4>
+        {savedSignature ? (
+          <label style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px', borderRadius: '12px', border: applySignature ? '2px solid var(--primary)' : '1px solid var(--border-color)', backgroundColor: applySignature ? 'rgba(0,82,204,0.04)' : '#fff', cursor: 'pointer' }}>
+            <input type="checkbox" checked={applySignature} onChange={e => setApplySignature(e.target.checked)} style={{ width: '22px', height: '22px', cursor: 'pointer' }} data-testid="apply-signature" />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' }}>Apply my digital signature to this report</div>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>Saved in Settings → Digital Signature</div>
+            </div>
+            <img src={savedSignature} alt="Your signature" style={{ height: '48px', maxWidth: '120px', objectFit: 'contain', background: '#fff', borderRadius: '6px' }} />
+          </label>
+        ) : (
+          <div style={{ padding: '14px', borderRadius: '12px', border: '1px solid #fecaca', backgroundColor: '#fef2f2', fontSize: '13px', color: '#991b1b', lineHeight: 1.45 }}>
+            You have no digital signature saved. Open <strong>Settings → Digital Signature</strong>, save your signature, then come back to this case (your work here is kept as a draft).
           </div>
         )}
       </div>
@@ -268,31 +305,17 @@ export default function Step6FinalReviewSignature({
         type="button"
         className="btn-primary" 
         onClick={() => {
-          try {
-            if (activeSignatureTab === 'draw') {
-              if (sigCanvas.current && typeof sigCanvas.current.isEmpty === 'function' && !sigCanvas.current.isEmpty()) {
-                const canvas = sigCanvas.current.getCanvas();
-                setSignatureDataUrl(canvas.toDataURL('image/png'));
-                setShowSubmitModal(true);
-              } else {
-                toast.error("Please draw your signature before submitting.");
-              }
-            } else {
-              if (!signatureUploadUrl) {
-                toast.error("Please upload your signature before submitting.");
-              } else {
-                setShowSubmitModal(true);
-              }
-            }
-          } catch (err) {
-            toast.error("Error capturing signature: " + err.message);
-            console.error(err);
-          }
+          if (!savedSignature) { toast.error('Save your digital signature in Settings first.'); return; }
+          if (!applySignature) { toast.error('Tick “Apply my digital signature” to sign this report.'); return; }
+          setSignatureDataUrl(savedSignature);
+          // Preview the finished bank report with the signature; submit from the preview
+          if (onReviewReport) onReviewReport(savedSignature); else setShowSubmitModal(true);
         }} 
-        disabled={!termsAccepted}
-        style={{ opacity: !termsAccepted ? 0.5 : 1, marginTop: 'auto' }}
+        disabled={!termsAccepted || !savedSignature || !applySignature}
+        style={{ opacity: (!termsAccepted || !savedSignature || !applySignature) ? 0.5 : 1, marginTop: 'auto' }}
+        data-testid="preview-submit"
       >
-        <PenTool size={18} /> Sign & Submit Application
+        <PenTool size={18} /> {onReviewReport ? 'Preview Report & Submit' : 'Sign & Submit Application'}
       </button>
 
       {/* Submit Confirmation Modal */}

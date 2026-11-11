@@ -1,0 +1,11 @@
+{
+  "appEnvironment": "development",
+  "apiBaseUrl": "http://192.168.1.18:5001/",
+  "enableLogging": true,
+  "enableOfflineMode": true,
+  "enableGps": true,
+  "enableCamera": true,
+  "enableNotifications": false,
+  "mapProvider": "osm",
+  "requestTimeoutSeconds": 30
+}

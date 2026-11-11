@@ -1,0 +1,382 @@
+{
+  "testSuiteVersion": "2.0.0",
+  "name": "GCR Option A Valuation & Monetary Precision Test Suite",
+  "generatedAt": "2026-11-05T02:00:00.000Z",
+  "suites": [
+    {
+      "id": "suite_1_approved_whitelist",
+      "description": "Standard ₹1,00,00,000 FMV tests across all whitelisted bank and category policies",
+      "cases": [
+        {
+          "id": "TC-01",
+          "bankName": "APGB",
+          "propertyCategory": "Independent House",
+          "engineVersion": "v2_option_a",
+          "landValue": 4000000,
+          "structureValue": 5500000,
+          "amenitiesValue": 500000,
+          "expectedFmv": 10000000,
+          "expectedRealizableRate": 0.90,
+          "expectedDistressRate": 0.80,
+          "expectedRealizable": 9000000,
+          "expectedDistress": 8000000,
+          "expectedInsurable": 6000000,
+          "expectedStatus": "SUCCESS"
+        },
+        {
+          "id": "TC-02",
+          "bankName": "APGB",
+          "propertyCategory": "Open Site",
+          "engineVersion": "v2_option_a",
+          "landValue": 10000000,
+          "structureValue": 0,
+          "amenitiesValue": 0,
+          "expectedFmv": 10000000,
+          "expectedRealizableRate": 0.90,
+          "expectedDistressRate": 0.80,
+          "expectedRealizable": 9000000,
+          "expectedDistress": 8000000,
+          "expectedInsurable": 0,
+          "expectedStatus": "SUCCESS"
+        },
+        {
+          "id": "TC-03",
+          "bankName": "APGB",
+          "propertyCategory": "Apartment",
+          "engineVersion": "v2_option_a",
+          "landValue": 3000000,
+          "structureValue": 7000000,
+          "amenitiesValue": 0,
+          "expectedFmv": 10000000,
+          "expectedRealizableRate": 0.85,
+          "expectedDistressRate": 0.75,
+          "expectedRealizable": 8500000,
+          "expectedDistress": 7500000,
+          "expectedInsurable": 7000000,
+          "expectedStatus": "SUCCESS"
+        },
+        {
+          "id": "TC-04",
+          "bankName": "APGB",
+          "propertyCategory": "Open Agriculture Land",
+          "engineVersion": "v2_option_a",
+          "landValue": 10000000,
+          "structureValue": 0,
+          "amenitiesValue": 0,
+          "expectedFmv": 10000000,
+          "expectedRealizableRate": 0.85,
+          "expectedDistressRate": 0.75,
+          "expectedRealizable": 8500000,
+          "expectedDistress": 7500000,
+          "expectedInsurable": 0,
+          "expectedStatus": "SUCCESS"
+        },
+        {
+          "id": "TC-05",
+          "bankName": "State Bank of India",
+          "propertyCategory": "Independent House",
+          "engineVersion": "v2_option_a",
+          "landValue": 4000000,
+          "structureValue": 5500000,
+          "amenitiesValue": 500000,
+          "expectedFmv": 10000000,
+          "expectedRealizableRate": 0.95,
+          "expectedDistressRate": 0.90,
+          "expectedRealizable": 9500000,
+          "expectedDistress": 9000000,
+          "expectedInsurable": 6000000,
+          "expectedStatus": "SUCCESS"
+        },
+        {
+          "id": "TC-05b",
+          "bankName": "State Bank of India",
+          "propertyCategory": "Residential Building",
+          "engineVersion": "v2_option_a",
+          "landValue": 4000000,
+          "structureValue": 5500000,
+          "amenitiesValue": 500000,
+          "expectedFmv": 10000000,
+          "expectedRealizableRate": 0.95,
+          "expectedDistressRate": 0.90,
+          "expectedRealizable": 9500000,
+          "expectedDistress": 9000000,
+          "expectedInsurable": 6000000,
+          "expectedStatus": "SUCCESS"
+        }
+      ]
+    },
+    {
+      "id": "suite_2_half_up_rounding_boundaries",
+      "description": "Boundary values, half-rupee tests, and Banker's rounding deterrence",
+      "cases": [
+        {
+          "id": "TC-06",
+          "bankName": "APGB",
+          "propertyCategory": "Independent House",
+          "engineVersion": "v2_option_a",
+          "landValue": 100001,
+          "structureValue": 0,
+          "amenitiesValue": 0,
+          "expectedFmv": 100001,
+          "expectedRealizable": 90001,
+          "expectedDistress": 80001,
+          "expectedInsurable": 0,
+          "expectedStatus": "SUCCESS",
+          "comment": "Exact half-up rounding test on fractional rupee"
+        },
+        {
+          "id": "TC-07",
+          "bankName": "State Bank of India",
+          "propertyCategory": "Independent House",
+          "engineVersion": "v2_option_a",
+          "landValue": 100000.50,
+          "structureValue": 0,
+          "amenitiesValue": 0,
+          "expectedFmv": 100001,
+          "expectedRealizable": 95001,
+          "expectedDistress": 90001,
+          "expectedInsurable": 0,
+          "expectedStatus": "SUCCESS",
+          "comment": "Even integer + .50 must round up to 100001, not banker-round to 100000"
+        },
+        {
+          "id": "TC-08",
+          "bankName": "State Bank of India",
+          "propertyCategory": "Independent House",
+          "engineVersion": "v2_option_a",
+          "landValue": 100001.50,
+          "structureValue": 0,
+          "amenitiesValue": 0,
+          "expectedFmv": 100002,
+          "expectedRealizable": 95002,
+          "expectedDistress": 90002,
+          "expectedInsurable": 0,
+          "expectedStatus": "SUCCESS",
+          "comment": "Odd integer + .50 standard half-up"
+        },
+        {
+          "id": "TC-09",
+          "bankName": "APGB",
+          "propertyCategory": "Open Site",
+          "engineVersion": "v2_option_a",
+          "landValue": 100000.49,
+          "structureValue": 0,
+          "amenitiesValue": 0,
+          "expectedFmv": 100000,
+          "expectedRealizable": 90000,
+          "expectedDistress": 80000,
+          "expectedInsurable": 0,
+          "expectedStatus": "SUCCESS",
+          "comment": "Strict truncate below half (.49)"
+        },
+        {
+          "id": "TC-10",
+          "bankName": "APGB",
+          "propertyCategory": "Open Site",
+          "engineVersion": "v2_option_a",
+          "landValue": 100000.51,
+          "structureValue": 0,
+          "amenitiesValue": 0,
+          "expectedFmv": 100001,
+          "expectedRealizable": 90001,
+          "expectedDistress": 80001,
+          "expectedInsurable": 0,
+          "expectedStatus": "SUCCESS",
+          "comment": "Strict round above half (.51)"
+        }
+      ]
+    },
+    {
+      "id": "suite_3_high_net_worth_scaling",
+      "description": "High-net-worth prime asset valuations up to ₹100 Crore with zero precision loss",
+      "cases": [
+        {
+          "id": "TC-11",
+          "bankName": "APGB",
+          "propertyCategory": "Independent House",
+          "engineVersion": "v2_option_a",
+          "landValue": 200000000,
+          "structureValue": 250000000,
+          "amenitiesValue": 50000000,
+          "expectedFmv": 500000000,
+          "expectedRealizable": 450000000,
+          "expectedDistress": 400000000,
+          "expectedInsurable": 300000000,
+          "expectedStatus": "SUCCESS",
+          "comment": "₹50 Crore asset scale test"
+        },
+        {
+          "id": "TC-12",
+          "bankName": "State Bank of India",
+          "propertyCategory": "Independent House",
+          "engineVersion": "v2_option_a",
+          "landValue": 400000000,
+          "structureValue": 500000000,
+          "amenitiesValue": 100000000,
+          "expectedFmv": 1000000000,
+          "expectedRealizable": 950000000,
+          "expectedDistress": 900000000,
+          "expectedInsurable": 600000000,
+          "expectedStatus": "SUCCESS",
+          "comment": "₹100 Crore asset scale test (zero 64-bit overflow)"
+        }
+      ]
+    },
+    {
+      "id": "suite_4_policy_guards",
+      "description": "Policy whitelist guard tests across v2_option_a and v1_universal_shortcut",
+      "cases": [
+        {
+          "id": "TC-13",
+          "bankName": "Canara Bank",
+          "propertyCategory": "Independent House",
+          "engineVersion": "v2_option_a",
+          "landValue": 5000000,
+          "structureValue": 0,
+          "amenitiesValue": 0,
+          "expectedStatus": "POLICY_NOT_CONFIGURED"
+        },
+        {
+          "id": "TC-14",
+          "bankName": "Canara Bank",
+          "propertyCategory": "Independent House",
+          "engineVersion": "v1_universal_shortcut",
+          "landValue": 5000000,
+          "structureValue": 0,
+          "amenitiesValue": 0,
+          "expectedStatus": "POLICY_NOT_CONFIGURED"
+        },
+        {
+          "id": "TC-15",
+          "bankName": "State Bank of India",
+          "propertyCategory": "Open Agriculture Land",
+          "engineVersion": "v2_option_a",
+          "landValue": 5000000,
+          "structureValue": 0,
+          "amenitiesValue": 0,
+          "expectedStatus": "POLICY_NOT_CONFIGURED"
+        },
+        {
+          "id": "TC-16",
+          "bankName": "State Bank of India",
+          "propertyCategory": "Open Agriculture Land",
+          "engineVersion": "v1_universal_shortcut",
+          "landValue": 5000000,
+          "structureValue": 0,
+          "amenitiesValue": 0,
+          "expectedStatus": "POLICY_NOT_CONFIGURED"
+        },
+        {
+          "id": "TC-17",
+          "bankName": "",
+          "propertyCategory": "Open Site",
+          "engineVersion": "v2_option_a",
+          "landValue": 5000000,
+          "structureValue": 0,
+          "amenitiesValue": 0,
+          "expectedStatus": "BANK_UNASSIGNED"
+        }
+      ]
+    },
+    {
+      "id": "suite_5_report_labels_and_verbal_concordance",
+      "description": "Report table label percentages, formatted digits, and Indian verbal words",
+      "cases": [
+        {
+          "id": "TC-18",
+          "bankName": "APGB",
+          "propertyCategory": "Independent House",
+          "amount": 9000000,
+          "expectedLabel": "Realizable Value of the Property (90 % of FMV)",
+          "expectedDigits": "Rs. 90,00,000/-",
+          "expectedWords": "Rupees Ninety Lakhs Only"
+        },
+        {
+          "id": "TC-19",
+          "bankName": "APGB",
+          "propertyCategory": "Independent House",
+          "amount": 8000000,
+          "expectedLabel": "Distress Sale Value of the Property (80 % of FMV)",
+          "expectedDigits": "Rs. 80,00,000/-",
+          "expectedWords": "Rupees Eighty Lakhs Only"
+        },
+        {
+          "id": "TC-20",
+          "bankName": "APGB",
+          "propertyCategory": "Apartment",
+          "amount": 8500000,
+          "expectedLabel": "Realizable Value of the Property (85 % of FMV)",
+          "expectedDigits": "Rs. 85,00,000/-",
+          "expectedWords": "Rupees Eighty Five Lakhs Only"
+        },
+        {
+          "id": "TC-21",
+          "bankName": "APGB",
+          "propertyCategory": "Apartment",
+          "amount": 7500000,
+          "expectedLabel": "Distress Sale Value of the Property (75 % of FMV)",
+          "expectedDigits": "Rs. 75,00,000/-",
+          "expectedWords": "Rupees Seventy Five Lakhs Only"
+        },
+        {
+          "id": "TC-22",
+          "bankName": "State Bank of India",
+          "propertyCategory": "Independent House",
+          "amount": 9500000,
+          "expectedLabel": "(iii) Realizable Value :",
+          "expectedDigits": "Rs 95,00,000/-",
+          "expectedWords": "Rupees Ninety Five Lakhs Only"
+        },
+        {
+          "id": "TC-23",
+          "bankName": "State Bank of India",
+          "propertyCategory": "Independent House",
+          "amount": 9000000,
+          "expectedLabel": "(iv) Forced / Distress Sale Value :",
+          "expectedDigits": "Rs 90,00,000/-",
+          "expectedWords": "Rupees Ninety Lakhs Only"
+        },
+        {
+          "id": "TC-24",
+          "bankName": "State Bank of India",
+          "propertyCategory": "Independent House",
+          "amount": 1000000000,
+          "expectedLabel": "(ii) Fair Market Value :",
+          "expectedDigits": "Rs 1,00,00,00,000/-",
+          "expectedWords": "Rupees One Hundred Crores Only"
+        },
+        {
+          "id": "TC-25",
+          "bankName": "APGB",
+          "propertyCategory": "Open Agriculture Land",
+          "amount": 8500000,
+          "expectedLabel": "Realizable Value of the Property (85 % of FMV)",
+          "expectedDigits": "Rs. 85,00,000/-",
+          "expectedWords": "Rupees Eighty Five Lakhs Only"
+        }
+      ]
+    },
+    {
+      "suiteId": "SUITE-06",
+      "suiteName": "Exact Fractional Extent and Rate Fixed-Point Precision",
+      "cases": [
+        {
+          "id": "TC-26",
+          "description": "Fractional land extent (142.375 Sq. Yards) x Fractional rate (Rs 4521.85 / Sq. Yd)",
+          "bankName": "APGB",
+          "propertyCategory": "Open Site",
+          "netExtent": "142.375 Sq. Yards",
+          "ratePerSqYd": "4521.85",
+          "rawCalculation": "142.375 * 4521.85 = 643798.39375",
+          "paiseBeforeRounding": "64379839.375",
+          "expectedPaise": "64379839",
+          "expectedLandValue": 643798,
+          "expectedFmv": 643798,
+          "expectedRealizable": 579418,
+          "expectedDistress": 515038,
+          "engineVersion": "v2_option_a"
+        }
+      ]
+    }
+  ]
+}

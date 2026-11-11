@@ -1,5 +1,6 @@
 import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle, UnderlineType } from "docx";
 import { saveAs } from "file-saver";
+import { calculateValuation } from "./valuationCalculator";
 
 export const generateDocxReport = async (caseData, configData = {}) => {
   const { 
@@ -169,6 +170,17 @@ export const generateDocxReport = async (caseData, configData = {}) => {
           new Paragraph({ text: "", spacing: { after: 400 } })
         ] : []),
 
+        // VALUATION SUMMARY TABLE
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          children: [
+            new TextRun({ text: "VALUATION SUMMARY & PROPERTY APPRAISAL", bold: true, underline: { type: UnderlineType.SINGLE }, size: 24 })
+          ],
+          spacing: { after: 200 }
+        }),
+        createValuationSummaryTable(caseData.valuation || calculateValuation(propertyDetails, configData)),
+        new Paragraph({ text: "", spacing: { after: 400 } }),
+
         // BOUNDARIES
         new Paragraph({
           children: [
@@ -260,5 +272,47 @@ const createAdditionsTable = (additions) => {
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
     rows: [headerRow, ...rows, totalRow]
+  });
+};
+
+// Helper for official bank valuation summary table
+const createValuationSummaryTable = (val = {}) => {
+  const landVal = Number(val.landValue || 0);
+  const structCost = Number(val.structureReplacementCost || 0);
+  const deprAmt = Number(val.depreciationAmount || 0);
+  const netStructVal = Number(val.netStructureValue || (structCost - deprAmt) || 0);
+  const amenVal = Number(val.amenitiesValue || 0);
+  const fmv = Number(val.fairMarketValue || (landVal + netStructVal + amenVal) || 0);
+  const realVal = Number(val.realizableValue || Math.round(fmv * 0.90));
+  const distVal = Number(val.distressSaleValue || Math.round(fmv * 0.85));
+  const insVal = Number(val.insurableValue || structCost);
+
+  const makeRow = (label, value, bold = false) => new TableRow({
+    children: [
+      new TableCell({
+        children: [new Paragraph({ children: [new TextRun({ text: label, bold, size: 20 })] })],
+        width: { size: 60, type: WidthType.PERCENTAGE }
+      }),
+      new TableCell({
+        children: [new Paragraph({ children: [new TextRun({ text: value, bold, size: 20 })] })],
+        width: { size: 40, type: WidthType.PERCENTAGE }
+      })
+    ]
+  });
+
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [
+      makeRow("APPRAISAL ITEM", "AMOUNT (INR)", true),
+      makeRow("A. Value of Land", `Rs. ${landVal.toLocaleString('en-IN')}`),
+      makeRow("B. Structure Replacement Cost", `Rs. ${structCost.toLocaleString('en-IN')}`),
+      makeRow("   Less: Depreciation", `- Rs. ${deprAmt.toLocaleString('en-IN')}`),
+      makeRow("C. Net Depreciated Structure Value", `Rs. ${netStructVal.toLocaleString('en-IN')}`),
+      makeRow("D. Extra Amenities & Services", `Rs. ${amenVal.toLocaleString('en-IN')}`),
+      makeRow("FAIR MARKET VALUE (A + C + D)", `Rs. ${fmv.toLocaleString('en-IN')}`, true),
+      makeRow("REALIZABLE VALUE (90% of Market Value)", `Rs. ${realVal.toLocaleString('en-IN')}`),
+      makeRow("DISTRESS SALE VALUE (85% of Market Value)", `Rs. ${distVal.toLocaleString('en-IN')}`),
+      makeRow("INSURABLE VALUE (Structure)", `Rs. ${insVal.toLocaleString('en-IN')}`)
+    ]
   });
 };

@@ -1,0 +1,11 @@
+{
+  "appEnvironment": "staging",
+  "apiBaseUrl": "https://staging-api.gcrvaluations.com/api/",
+  "enableLogging": true,
+  "enableOfflineMode": true,
+  "enableGps": true,
+  "enableCamera": true,
+  "enableNotifications": true,
+  "mapProvider": "osm",
+  "requestTimeoutSeconds": 45
+}

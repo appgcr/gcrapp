@@ -1,28 +1,109 @@
 import { API_BASE_URL } from '../../config/api';
 import React, { useState, useEffect } from 'react';
-import { Navigation, MapPin, FileText } from 'lucide-react';
+import { Navigation, FileText, CloudUpload, RefreshCw, WifiOff, AlertTriangle, ChevronRight, Phone, CalendarCheck, Clock, MapPin, Send } from 'lucide-react';
+import IconTile from '../Shared/IconTile';
+import './AttendanceView.css';
+import localforage from 'localforage';
+import toast from 'react-hot-toast';
+import { getPendingOfflineQueue, syncPendingCases, subscribeSyncStatus } from '../../services/offlineSyncService';
 
 export default function EngineerDashboard({ currentUser, onOpenCase }) {
   const firstName = currentUser?.name ? currentUser.name.split(' ')[0] : 'Engineer';
 
   const [cases, setCases] = useState([]);
+  const [offlineCount, setOfflineCount] = useState(0);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+
+  const checkOfflineQueue = async () => {
+    try {
+      const queue = await getPendingOfflineQueue();
+      setOfflineCount(queue.length);
+    } catch (e) {
+      console.warn('Could not read offline queue:', e);
+    }
+  };
 
   useEffect(() => {
-    const fetchCases = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/cases`);
-        if (res.ok) {
-          const data = await res.json();
-          // Filter cases assigned to this user
-          const userCases = data.filter(c => c.assignedEngineerId === currentUser?.id || c.assignedEngineerName === currentUser?.name);
-          setCases(userCases);
-        }
-      } catch (err) {
-        console.error("Failed to fetch cases for dashboard", err);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    checkOfflineQueue();
+    const unsubscribe = subscribeSyncStatus((status) => {
+      if (status.status === 'syncing') setIsSyncing(true);
+      else {
+        setIsSyncing(false);
+        checkOfflineQueue();
       }
+    });
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      unsubscribe();
     };
+  }, []);
+
+  const handleManualSync = async () => {
+    if (!navigator.onLine) {
+      toast.error('Device is still offline. Please connect to internet to sync.');
+      return;
+    }
+    setIsSyncing(true);
+    toast.loading('Syncing offline cases to server...', { id: 'manual-sync' });
+    try {
+      await syncPendingCases();
+      await checkOfflineQueue();
+      toast.success('Offline inspections synced successfully!', { id: 'manual-sync' });
+      // Refresh case list
+      fetchCases();
+    } catch (err) {
+      toast.error(`Sync failed: ${err.message}`, { id: 'manual-sync' });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const fetchCases = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/cases`);
+      if (res.ok) {
+        const data = await res.json();
+        // Filter cases assigned to this user
+        const userCases = data.filter(c => c.assignedEngineerId === currentUser?.id || c.assignedEngineerName === currentUser?.name);
+        setCases(userCases);
+        // Cache to localforage for offline viewing
+        await localforage.setItem(`cached_cases_${currentUser?.id || 'guest'}`, userCases);
+      } else {
+        throw new Error('Server returned ' + res.status);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch online cases, loading local offline cache:", err);
+      try {
+        const cached = await localforage.getItem(`cached_cases_${currentUser?.id || 'guest'}`);
+        if (cached && Array.isArray(cached)) {
+          setCases(cached);
+        }
+      } catch (cacheErr) {
+        console.error("Cache read error:", cacheErr);
+      }
+    }
+  };
+
+  useEffect(() => {
     fetchCases();
   }, [currentUser]);
+
+  // This week (Monday → today): days present, hours, site visits, reports
+  const [week, setWeek] = useState(null);
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/attendance/week-summary`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => setWeek(d))
+      .catch(() => setWeek(null));
+  }, [currentUser?.id]);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -33,123 +114,132 @@ export default function EngineerDashboard({ currentUser, onOpenCase }) {
 
   const greeting = getGreeting();
 
-  const activeCases = cases.filter(c => c.status !== 'Approved' && c.status !== 'Completed').length;
-  const pendingInspections = cases.filter(c => c.status === 'Pending').length;
-  const reportsReview = cases.filter(c => c.status === 'Completed').length; // Waiting admin review
-  const completedCases = cases.filter(c => c.status === 'Approved').length;
+  // Case counts by real status: Pending = in the field, Reviewing = with the admin
+  const inField = cases.filter(c => !c.status || c.status === 'Pending');
+  const withAdmin = cases.filter(c => c.status === 'Reviewing' || c.status === 'Completed');
+  const returned = cases.filter(c => c.status === 'Returned');
+  const approved = cases.filter(c => c.status === 'Approved');
 
-  const upcomingCases = cases.filter(c => c.status === 'Pending').slice(0, 2);
+  // Next inspections: open cases in the field, soonest first
+  const when = (c) => new Date(`${String(c.inspectionDate || '').slice(0, 10)}T${(c.inspectionTime || '23:59').slice(0, 5)}`).getTime() || Infinity;
+  const upcoming = [...inField].sort((a, b) => when(a) - when(b)).slice(0, 5);
+  const fmtWhen = (c) => {
+    if (!c.inspectionDate) return 'Not scheduled';
+    const t = when(c);
+    if (!Number.isFinite(t)) return c.inspectionDate;
+    const d = new Date(t);
+    const today = new Date(); const tmr = new Date(Date.now() + 86400000);
+    const day = d.toDateString() === today.toDateString() ? 'Today' : d.toDateString() === tmr.toDateString() ? 'Tomorrow' : d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+    return c.inspectionTime ? `${day}, ${d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}` : day;
+  };
+  const navigateTo = (c) => {
+    const addr = [c.address, c.locationData].find(v => v && !/fetching|pending/i.test(v));
+    if (!addr) { toast.error('No address on this case yet. Ask your admin to add it.'); return; }
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}`, '_blank');
+  };
 
   return (
-    <div className="dashboard-view animate-fade-in">
-      <div className="dashboard-header" style={{ marginBottom: '20px' }}>
-        <h1 style={{ fontSize: 'clamp(20px, 5vw, 26px)', fontWeight: '700', marginBottom: '4px', lineHeight: '1.2' }}>{greeting}, {firstName}</h1>
-        <p className="text-muted" style={{ fontSize: '14px' }}>Here is your daily valuation overview.</p>
+    <div className="td animate-fade-in">
+      <div className="ed-greet">
+        <h1>{greeting}, {firstName}</h1>
+        <p>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
       </div>
 
-      {/* 2x2 Metric Grid */}
-      <div className="responsive-grid-2" style={{ gap: '12px', marginBottom: '24px' }}>
-        <div className="native-card" style={{ marginBottom: 0, padding: 'clamp(12px, 3vw, 16px)' }}>
-          <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: '6px' }}>Active Cases</div>
-          <div style={{ fontSize: 'clamp(20px, 4.5vw, 24px)', fontWeight: '700' }}>{activeCases}</div>
-        </div>
-        <div className="native-card" style={{ marginBottom: 0, padding: 'clamp(12px, 3vw, 16px)' }}>
-          <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: '6px' }}>Pending Inspections</div>
-          <div style={{ fontSize: 'clamp(20px, 4.5vw, 24px)', fontWeight: '700' }}>{pendingInspections}</div>
-        </div>
-        <div className="native-card" style={{ marginBottom: 0, padding: 'clamp(12px, 3vw, 16px)' }}>
-          <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: '6px' }}>Reports Review</div>
-          <div style={{ fontSize: 'clamp(20px, 4.5vw, 24px)', fontWeight: '700' }}>{reportsReview}</div>
-        </div>
-        <div className="native-card" style={{ marginBottom: 0, padding: 'clamp(12px, 3vw, 16px)' }}>
-          <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: '6px' }}>Completed</div>
-          <div style={{ fontSize: 'clamp(20px, 4.5vw, 24px)', fontWeight: '700' }}>{completedCases}</div>
-        </div>
-      </div>
-
-      {/* Upcoming Inspections */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', gap: '8px' }}>
-        <h3 style={{ fontSize: '16px', fontWeight: '600' }}>Upcoming Inspections</h3>
-        <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--primary)', cursor: 'pointer' }}>View All</span>
-      </div>
-
-      {upcomingCases.length === 0 ? (
-        <div className="native-card" style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)' }}>
-          No upcoming inspections pending.
-        </div>
-      ) : (
-        upcomingCases.map((c, idx) => (
-          <div key={c._id || c.id} className="native-card" style={{ padding: 'clamp(12px, 3vw, 16px)', marginBottom: '12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '8px' }}>
-              <div style={{ fontSize: '15px', fontWeight: '600', wordBreak: 'break-word', flex: 1 }}>{c.borrowerName || c.clientName || 'Unknown Client'}</div>
-              <span className="badge badge-gray" style={{ fontSize: '11px', flexShrink: 0 }}>{c.caseId || c.id}</span>
+      {/* Offline / waiting to upload */}
+      {(!isOnline || offlineCount > 0) && (
+        <div className="td-group" style={{ marginBottom: 16 }}>
+          <div className="td-row">
+            <IconTile icon={!isOnline ? WifiOff : CloudUpload} color={!isOnline ? 'orange' : 'green'} size={30} />
+            <div className="td-main">
+              <div className="td-title">{!isOnline ? 'You’re offline' : `${offlineCount} case${offlineCount === 1 ? '' : 's'} ready to upload`}</div>
+              <div className="td-sub">{!isOnline ? 'Your work is saved on this phone and uploads when you’re back online.' : 'Saved on this phone while offline.'}</div>
             </div>
-            <p className="text-muted" style={{ fontSize: '13px', marginBottom: '8px', wordBreak: 'break-word' }}>
-              {c.bankName || 'Bank'} • {c.clientPhone || c.mobile || 'No Mobile'}
-            </p>
-            <p style={{ fontSize: '13px', marginBottom: '8px', color: '#334155', display: 'flex', alignItems: 'flex-start', gap: '6px', wordBreak: 'break-word' }}>
-              <MapPin size={14} color="#0346c8" style={{ flexShrink: 0, marginTop: '3px' }} />
-              <span>{c.locationData && c.locationData !== 'Fetching location...' ? c.locationData : 'Address pending'}</span>
-            </p>
-            <p className="text-muted" style={{ fontSize: '13px', marginBottom: '14px' }}>
-              {c.inspectionDate ? `${new Date(c.inspectionDate).toLocaleDateString()} at ${c.inspectionTime || 'TBD'}` : 'Schedule pending'} • Valuation
-            </p>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <button
-                className="btn-secondary"
-                onClick={() => onOpenCase(c.caseId || c.id)}
-                style={{ flex: '1 1 120px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', height: '40px', fontSize: '13px' }}
-              >
-                <FileText size={16} />
-                Open File
+            {isOnline && offlineCount > 0 && (
+              <button className="ed-pill-btn" onClick={handleManualSync} disabled={isSyncing}>
+                {isSyncing ? <RefreshCw size={14} className="animate-spin" /> : 'Upload'}
               </button>
-              <button
-                className="btn-primary"
-                onClick={() => {
-                  const isValid = (val) => val && !['fetching location...', 'address pending', 'to be updated', 'unknown bank', 'bank'].includes(val.trim().toLowerCase());
-                  const addr = isValid(c.locationData) ? c.locationData : (isValid(c.bankName) ? c.bankName : null);
-
-                  if (addr) {
-                    window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}`, '_blank');
-                  } else {
-                    alert('No valid address or bank provided for this task. Please ask Admin to update the details.');
-                  }
-                }}
-                style={{ flex: '1 1 120px', backgroundColor: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', height: '40px', fontSize: '13px' }}
-              >
-                <Navigation size={16} />
-                Start GPS
-              </button>
-            </div>
+            )}
           </div>
-        ))
+        </div>
       )}
 
-      {/* Recent Activity */}
-      <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '16px', marginTop: '28px' }}>Recent Activity</h3>
+      {/* Overview */}
+      <div className="ed-tiles">
+        <div><b style={{ color: '#2a78d6' }}>{inField.length}</b><span>In field</span></div>
+        <div><b style={{ color: '#eb6834' }}>{withAdmin.length}</b><span>With admin</span></div>
+        <div><b style={{ color: '#6250d6' }}>{returned.length}</b><span>Returned</span></div>
+        <div><b style={{ color: '#008300' }}>{approved.length}</b><span>Approved</span></div>
+      </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-        {cases.slice(0, 5).map((c, idx) => (
-          <div key={idx} style={{ display: 'flex', gap: '14px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <div style={{ width: '8px', height: '8px', backgroundColor: c.status === 'Completed' ? 'var(--primary)' : 'var(--border-color)', borderRadius: '50%', marginTop: '6px' }}></div>
-              {idx !== Math.min(cases.length, 5) - 1 && (
-                <div style={{ width: '2px', height: '40px', backgroundColor: 'var(--border-color)', margin: '4px 0' }}></div>
-              )}
+      {/* Sent back by the admin */}
+      {returned.length > 0 && (
+        <>
+          <div className="td-section">Needs your attention</div>
+          <div className="td-group">
+            {returned.map(c => (
+              <button key={c.id} className="td-row td-link" onClick={() => onOpenCase(c.id)}>
+                <IconTile icon={AlertTriangle} color="red" size={30} />
+                <div className="td-main">
+                  <div className="td-title">{c.clientName || 'Case'} · {c.fileNumber || `#${c.id}`}</div>
+                  <div className="td-sub">“{c.rejectionReason || 'Please review and resubmit.'}”{c.returnedBy ? ` — ${c.returnedBy}` : ''}</div>
+                </div>
+                <ChevronRight size={18} className="td-chev" />
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* This week */}
+      {week && (
+        <>
+          <div className="td-section">This week</div>
+          <div className="ed-week">
+            <div>
+              <IconTile icon={CalendarCheck} color="green" size={28} />
+              <b>{week.daysPresent}<small> / {week.workingDays}</small></b>
+              <span>Days present</span>
             </div>
-            <div style={{ paddingBottom: '16px', flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '14px', fontWeight: '500', wordBreak: 'break-word' }}>
-                {c.status === 'Completed' || c.status === 'Approved' ? 'Report Submitted' : 'Inspection Scheduled'}
-              </div>
-              <div className="text-muted" style={{ fontSize: '13px', wordBreak: 'break-word' }}>
-                {c.caseId || c.id} • {new Date(c.createdAt || c.updatedAt).toLocaleDateString()}
-              </div>
+            <div>
+              <IconTile icon={Clock} color="blue" size={28} />
+              <b>{week.hoursWorked < 1 ? <>{Math.round(week.hoursWorked * 60)}<small> min</small></> : <>{week.hoursWorked}<small> h</small></>}</b>
+              <span>Hours worked</span>
+            </div>
+            <div>
+              <IconTile icon={MapPin} color="orange" size={28} />
+              <b>{week.siteVisits}</b>
+              <span>Site visits done</span>
+            </div>
+            <div>
+              <IconTile icon={Send} color="indigo" size={28} />
+              <b>{week.reportsSubmitted}</b>
+              <span>Reports submitted</span>
             </div>
           </div>
+        </>
+      )}
+
+      {/* Next inspections */}
+      <div className="td-section">Next inspections</div>
+      <div className="td-group">
+        {upcoming.length === 0 ? (
+          <div className="td-empty">No inspections pending.</div>
+        ) : upcoming.map(c => (
+          <div key={c.id} className="td-row">
+            <button className="ed-row-main" onClick={() => onOpenCase(c.id)}>
+              <IconTile icon={FileText} color="blue" size={30} />
+              <div className="td-main">
+                <div className="td-title">{c.clientName || c.borrowerName || 'Client'}</div>
+                <div className="td-sub">{fmtWhen(c)}{c.bankName ? ` · ${c.bankName}` : ''}</div>
+                <div className="td-sub">{c.address || c.locationData || 'Address not added yet'}</div>
+              </div>
+            </button>
+            {c.clientPhone && (
+              <a className="td-icon-btn" href={`tel:${c.clientPhone}`} aria-label={`Call ${c.clientName || 'client'}`}><Phone size={16} /></a>
+            )}
+            <button className="td-icon-btn" onClick={() => navigateTo(c)} aria-label="Directions"><Navigation size={16} /></button>
+          </div>
         ))}
-        {cases.length === 0 && (
-          <div className="text-muted" style={{ fontSize: '13px', textAlign: 'center' }}>No recent activity.</div>
-        )}
       </div>
     </div>
   );

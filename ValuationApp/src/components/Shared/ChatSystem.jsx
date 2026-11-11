@@ -1,688 +1,477 @@
 import { API_BASE_URL } from '../../config/api';
-import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Send, Search, UserCircle2, Check, CheckCheck, Paperclip, FileText, ImageIcon, MapPin, UserPlus, Loader2, X, MessageCircle, ChevronDown } from 'lucide-react';
-import { Capacitor } from '@capacitor/core';
-import { Contacts } from '@capacitor-community/contacts';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronLeft, Send, Search, Check, CheckCheck, Plus, Camera, ImageIcon, FileText, MapPin, Loader2, X, Phone, ChevronDown, AlertCircle, Clock, Megaphone } from 'lucide-react';
+import BranchSwitcher from '../AdminPortal/BranchSwitcher';
 import toast from 'react-hot-toast';
 import CryptoJS from 'crypto-js';
+import { isAdminRole, isSuperAdmin } from '../../utils/session';
+import './ChatSystem.css';
+
+// Office ↔ staff chat. Each engineer has one conversation with their office (branch admins
+// + Super Admin answer it together). Admins see every engineer they manage.
+
+const POLL_MS = 3000;
+const LEGACY_KEY = 'gcr-secure-chat-key-2024'; // only to read messages saved by the old chat
+
+const legacyText = (t) => {
+  if (!t || !t.startsWith('U2FsdGVkX1')) return t;
+  try { return CryptoJS.AES.decrypt(t, LEGACY_KEY).toString(CryptoJS.enc.Utf8) || t; } catch { return t; }
+};
+const initials = (name = '') => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
+const hhmm = (d) => new Date(d).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+const dayLabel = (d) => {
+  const x = new Date(d); const t = new Date(); const y = new Date(Date.now() - 86400000);
+  if (x.toDateString() === t.toDateString()) return 'Today';
+  if (x.toDateString() === y.toDateString()) return 'Yesterday';
+  return x.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: x.getFullYear() === t.getFullYear() ? undefined : 'numeric' });
+};
+const listTime = (d) => {
+  if (!d) return '';
+  const x = new Date(d);
+  return x.toDateString() === new Date().toDateString() ? hhmm(x) : dayLabel(x);
+};
+// Indian mobile → international digits for WhatsApp (e.g. 9876543210 → 919876543210)
+const waNumber = (phone) => {
+  const d = String(phone || '').replace(/\D/g, '');
+  if (d.length === 10) return `91${d}`;
+  if (d.length === 12 && d.startsWith('91')) return d;
+  if (d.length === 11 && d.startsWith('0')) return `91${d.slice(1)}`;
+  return d.length >= 11 ? d : '';
+};
+const offDutyText = (at) => {
+  const x = new Date(at);
+  return x.toDateString() === new Date().toDateString() ? `Checked out at ${hhmm(x)}` : `Checked out ${dayLabel(x)}, ${hhmm(x)}`;
+};
+const WhatsAppGlyph = ({ size = 20 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M12 2a10 10 0 0 0-8.66 15L2 22l5.13-1.32A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.18-1.15l-.3-.18-3.04.78.81-2.96-.2-.31A8.2 8.2 0 1 1 12 20.2zm4.5-6.14c-.25-.12-1.46-.72-1.69-.8-.23-.08-.39-.12-.56.12-.16.25-.64.8-.78.97-.14.16-.29.18-.53.06a6.7 6.7 0 0 1-1.98-1.22 7.4 7.4 0 0 1-1.37-1.7c-.14-.25-.02-.38.11-.5l.37-.43c.12-.14.16-.25.25-.41.08-.16.04-.31-.02-.43-.06-.12-.56-1.34-.76-1.84-.2-.48-.4-.41-.56-.42h-.47a.9.9 0 0 0-.66.31 2.77 2.77 0 0 0-.86 2.06 4.8 4.8 0 0 0 1 2.55 11 11 0 0 0 4.2 3.71c.59.25 1.05.4 1.4.52.59.19 1.13.16 1.55.1.47-.07 1.46-.6 1.66-1.17.2-.58.2-1.07.14-1.17-.06-.1-.22-.16-.47-.28z"/>
+  </svg>
+);
+
+const preview = (m) => (m.attachmentType === 'photo' || m.attachmentType === 'gallery' ? '📷 Photo'
+  : m.attachmentType === 'document' ? `📄 ${m.text || 'Document'}`
+  : m.attachmentType === 'location' ? '📍 Location' : legacyText(m.text));
+
+// Shrink photos before upload (max 1600 px, JPEG) — faster on field networks
+const compressImage = (file) => new Promise((resolve, reject) => {
+  const r = new FileReader();
+  r.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      resolve(c.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = reject;
+    img.src = r.result;
+  };
+  r.onerror = reject;
+  r.readAsDataURL(file);
+});
+const readAsDataUrl = (file) => new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = reject; r.readAsDataURL(file); });
+
+async function api(path, opts = {}) {
+  const res = await fetch(`${API_BASE_URL}${path}`, { ...opts, headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) } });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Something went wrong');
+  return data;
+}
 
 export default function ChatSystem({ currentUser, otherUserId, caseId, onBack, isMini }) {
-  const [messages, setMessages] = useState([]);
-  const [inputText, setInputText] = useState('');
-  
-  // Admin Chat States
-  const [adminChatList, setAdminChatList] = useState([]);
-  const [isSearchingChats, setIsSearchingChats] = useState(false);
-  const [chatSearchQuery, setChatSearchQuery] = useState('');
-  const [debouncedChatSearch, setDebouncedChatSearch] = useState('');
-
-  const [activeChatUserId, setActiveChatUserId] = useState(otherUserId || null);
-  const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
-  const [showContactModal, setShowContactModal] = useState(false);
-  const [contactSearch, setContactSearch] = useState('');
-  const [uploading, setUploading] = useState(false);
-  const [contactList, setContactList] = useState([]);
-  const [showScrollDown, setShowScrollDown] = useState(false);
-
-  // Debounce the chat search query
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedChatSearch(chatSearchQuery);
-    }, 300);
-    return () => clearTimeout(handler);
-  }, [chatSearchQuery]);
-  
-  const messagesEndRef = useRef(null);
-  const scrollContainerRef = useRef(null);
-  const fileInputRef = useRef(null);
-  const galleryInputRef = useRef(null);
-  
-  const isAdmin = currentUser?.role === 'SUPER_ADMIN';
-  const myId = isAdmin ? 'ADMIN' : currentUser?.id;
-
-  const SECRET_KEY = 'gcr-secure-chat-key-2024';
-
-  const encryptText = (text) => {
-    if (!text) return text;
-    try {
-      return CryptoJS.AES.encrypt(text, SECRET_KEY).toString();
-    } catch (e) {
-      return text;
-    }
-  };
-
-  const decryptText = (ciphertext) => {
-    if (!ciphertext) return ciphertext;
-    // Check if it looks like a base64 encoded CryptoJS string (starts with U2FsdGVkX1)
-    if (!ciphertext.startsWith('U2FsdGVkX1')) return ciphertext;
-    try {
-      const bytes = CryptoJS.AES.decrypt(ciphertext, SECRET_KEY);
-      const originalText = bytes.toString(CryptoJS.enc.Utf8);
-      return originalText || ciphertext;
-    } catch (e) {
-      return ciphertext;
-    }
-  };
-
-  const fetchAdminChats = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/chat/admin/users`);
-      if (res.ok) {
-        const data = await res.json();
-        const decryptedData = data.map(chat => ({
-          ...chat,
-          lastMessage: decryptText(chat.lastMessage)
-        }));
-        setAdminChatList(decryptedData);
-      }
-    } catch (err) {
-      console.error("Failed to fetch admin chats:", err);
-    }
-  };
-
-  const fetchMessages = async () => {
-    if (!activeChatUserId) return;
-    try {
-      const res = await fetch(`https://gcr-9ys1.onrender.com/api/chat/${myId}/${activeChatUserId}`);
-      if (res.ok) {
-        const data = await res.json();
-        const decryptedData = data.map(msg => ({
-          ...msg,
-          text: decryptText(msg.text)
-        }));
-        setMessages(decryptedData);
-        // Mark as read without blocking
-        fetch(`https://gcr-9ys1.onrender.com/api/chat/read/${myId}/${activeChatUserId}`, { method: 'PUT' });
-      }
-    } catch (err) {
-      console.error("Failed to fetch messages:", err);
-    }
-  };
+  const admin = isAdminRole(currentUser);
+  const [wide, setWide] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 900);
+  const [active, setActive] = useState(admin ? null : currentUser?.id); // engineerId of the open conversation
+  const [conversations, setConversations] = useState([]);
+  const [listLoaded, setListLoaded] = useState(false);
 
   useEffect(() => {
-    if (isAdmin && !activeChatUserId) {
-      fetchAdminChats();
-      const interval = setInterval(fetchAdminChats, 2000);
-      return () => clearInterval(interval);
-    }
-  }, [isAdmin, activeChatUserId]);
+    const onResize = () => setWide(window.innerWidth >= 900);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
+  const loadList = useCallback(async () => {
+    try { setConversations(await api('/api/chat/conversations')); } catch { /* offline */ } finally { setListLoaded(true); }
+  }, []);
   useEffect(() => {
-    if (activeChatUserId) {
-      fetchMessages();
-      const interval = setInterval(fetchMessages, 2000);
-      return () => clearInterval(interval);
-    }
-  }, [activeChatUserId]);
+    loadList();
+    const t = setInterval(() => { if (!document.hidden) loadList(); }, POLL_MS * 2);
+    return () => clearInterval(t);
+  }, [loadList]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const twoPane = admin && wide && !isMini;
+  const activeConv = conversations.find((c) => c.engineerId === active);
 
-  useEffect(() => {
-    if (scrollContainerRef.current) {
-      const { scrollHeight, scrollTop, clientHeight } = scrollContainerRef.current;
-      const distanceToBottom = scrollHeight - Math.ceil(scrollTop) - clientHeight;
-      const isScrolledUp = distanceToBottom > 20;
-      if (!isScrolledUp) {
-        scrollToBottom();
-      }
-    } else {
-      scrollToBottom();
-    }
-  }, [messages]);
-
-  const handleScroll = () => {
-    if (scrollContainerRef.current) {
-      const { scrollHeight, scrollTop, clientHeight } = scrollContainerRef.current;
-      const distanceToBottom = scrollHeight - Math.ceil(scrollTop) - clientHeight;
-      setShowScrollDown(distanceToBottom > 20);
-    }
-  };
-
-  const sendPayload = async (messagePayload) => {
-    // Optimistic update (show unencrypted text immediately)
-    setMessages(prev => [...prev, { ...messagePayload, _id: Date.now().toString() }]);
-    
-    // Encrypt payload before sending to DB
-    const encryptedPayload = {
-      ...messagePayload,
-      text: encryptText(messagePayload.text)
-    };
-
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(encryptedPayload)
-      });
-      if (!res.ok) throw new Error("Failed to send message");
-    } catch (err) {
-      toast.error("Message failed to send");
-      console.error(err);
-    }
-  };
-
-  const handleSendMessage = (e) => {
-    e.preventDefault();
-    if (!inputText.trim()) return;
-
-    const messagePayload = {
-      senderId: myId,
-      receiverId: activeChatUserId,
-      caseId: caseId || null,
-      text: inputText.trim(),
-      timestamp: new Date().toISOString()
-    };
-    sendPayload(messagePayload);
-    setInputText('');
-    setTimeout(scrollToBottom, 100);
-  };
-
-  const handleFileUpload = async (e, type) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    
-    // Check file size (limit to 10MB)
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('File size must be under 10MB');
-      return;
-    }
-    
-    setUploading(true);
-    setShowAttachmentMenu(false);
-    
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onloadend = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/upload`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image: reader.result, folder: 'chat_attachments' })
-        });
-        const data = await res.json();
-        
-        if (data.url) {
-          const messagePayload = {
-            senderId: myId,
-            receiverId: activeChatUserId,
-            caseId: caseId || null,
-            text: file.name,
-            attachmentUrl: data.url,
-            attachmentType: type,
-            timestamp: new Date().toISOString()
-          };
-          sendPayload(messagePayload);
-        } else {
-          throw new Error('No URL returned');
-        }
-      } catch (err) {
-        toast.error('Upload failed');
-      } finally {
-        setUploading(false);
-      }
-    };
-  };
-
-  const handleShareLocation = () => {
-    setShowAttachmentMenu(false);
-    if (!navigator.geolocation) {
-      toast.error('Geolocation is not supported by your browser');
-      return;
-    }
-    setUploading(true);
-    navigator.geolocation.getCurrentPosition((position) => {
-      const lat = position.coords.latitude;
-      const lng = position.coords.longitude;
-      const url = `https://maps.google.com/?q=${lat},${lng}`;
-      
-      const messagePayload = {
-        senderId: myId,
-        receiverId: activeChatUserId,
-        caseId: caseId || null,
-        text: 'Live Location',
-        attachmentUrl: url,
-        attachmentType: 'location',
-        timestamp: new Date().toISOString()
-      };
-      sendPayload(messagePayload);
-      setUploading(false);
-    }, () => {
-      toast.error('Unable to retrieve your location');
-      setUploading(false);
-    });
-  };
-
-  const handleShareContact = async () => {
-    setShowAttachmentMenu(false);
-    
-    // Try Native Capacitor Contacts API first (Android/iOS App)
-    if (Capacitor.isNativePlatform()) {
-      try {
-        const permission = await Contacts.requestPermissions();
-        if (permission.contacts === 'granted') {
-          const result = await Contacts.getContacts({
-            projection: { name: true, phones: true }
-          });
-          
-          if (result.contacts && result.contacts.length > 0) {
-            // Map capacitor contacts to our UI format
-            const nativeContacts = result.contacts.map((c, idx) => ({
-              id: c.contactId || idx.toString(),
-              name: c.name?.display || 'Unknown',
-              phone: c.phones?.[0]?.number || 'No number'
-            }));
-            // Sort alphabetically
-            nativeContacts.sort((a, b) => a.name.localeCompare(b.name));
-            setContactList(nativeContacts);
-          } else {
-            setContactList([]);
-          }
-          setShowContactModal(true);
-          return;
-        } else {
-          toast.error("Permission denied to access contacts. Check app settings.");
-        }
-      } catch (ex) {
-        console.warn("Native Contacts API failed", ex);
-      }
-    }
-    
-    // Load real registered team members as contacts
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/users`);
-      if (res.ok) {
-        const users = await res.json();
-        const teamContacts = users
-          .filter(u => u.id !== myId)
-          .map(u => ({ id: u.id, name: u.name || u.username, phone: u.phone || 'N/A' }));
-        setContactList(teamContacts);
-      } else {
-        setContactList([]);
-      }
-    } catch (err) {
-      setContactList([]);
-    }
-    setShowContactModal(true);
-  };
-
-  const submitManualContact = (contact) => {
-    const messagePayload = {
-      senderId: myId,
-      receiverId: activeChatUserId,
-      caseId: caseId || null,
-      text: `Contact: ${contact.name}`,
-      attachmentType: 'contact',
-      attachmentMetadata: { name: contact.name, phone: contact.phone },
-      timestamp: new Date().toISOString()
-    };
-    sendPayload(messagePayload);
-    setShowContactModal(false);
-    setContactSearch('');
-  };
-
-  // View: Admin Chat List
-  if (isAdmin && !activeChatUserId) {
-    const filteredAdminChats = adminChatList.filter(chat => 
-      chat.userId.toLowerCase().includes(debouncedChatSearch.toLowerCase()) ||
-      (chat.lastMessage && chat.lastMessage.toLowerCase().includes(debouncedChatSearch.toLowerCase()))
-    );
-
+  if (admin && !twoPane && !active) {
+    return <ConversationList {...{ conversations, listLoaded, currentUser, onOpen: setActive, onBack, isMini }} />;
+  }
+  if (twoPane) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: '#ffffff', paddingBottom: isMini ? '0' : '80px' }}>
-        
-        {/* WhatsApp Style Header (Hidden in Mini Mode) */}
-        {!isMini && (
-          <div style={{ padding: '16px 20px', backgroundColor: '#075E54', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-            {isSearchingChats ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
-              <button onClick={() => { setIsSearchingChats(false); setChatSearchQuery(''); }} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: 0 }}>
-                <ArrowLeft size={24} />
-              </button>
-              <input 
-                autoFocus
-                type="text" 
-                placeholder="Search..."
-                value={chatSearchQuery}
-                onChange={(e) => setChatSearchQuery(e.target.value)}
-                style={{ flex: 1, backgroundColor: 'transparent', border: 'none', color: 'white', fontSize: '16px', outline: 'none' }}
-              />
-              {chatSearchQuery && (
-                <button onClick={() => setChatSearchQuery('')} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: 0 }}>
-                  <X size={20} />
-                </button>
-              )}
-            </div>
-          ) : (
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                {onBack && (
-                  <button onClick={onBack} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: 0 }}>
-                    <ArrowLeft size={24} />
-                  </button>
-                )}
-                <h1 style={{ fontSize: '20px', fontWeight: '600', margin: 0 }}>GCR Personal Chats</h1>
-              </div>
-              <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-                <Search size={20} color="white" style={{ cursor: 'pointer' }} onClick={() => setIsSearchingChats(true)} />
-              </div>
-            </>
-          )}
-        </div>
-        )}
-        
-        {/* Chat List */}
-        <div style={{ flex: 1, overflowY: 'auto', backgroundColor: '#ffffff' }}>
-          {filteredAdminChats.length === 0 ? (
-            <div style={{ padding: '40px 20px', textAlign: 'center', color: '#8696a0', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <MessageCircle size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
-              <div style={{ fontSize: '16px', fontWeight: '500' }}>No active chats found</div>
-              <div style={{ fontSize: '14px', marginTop: '8px' }}>When engineers message you, they will appear here.</div>
-            </div>
-          ) : (
-            filteredAdminChats.map(chat => (
-              <div 
-                key={chat.userId}
-                onClick={() => {
-                  setActiveChatUserId(chat.userId);
-                }}
-                style={{ 
-                  display: 'flex', 
-                  padding: '12px 16px', 
-                  cursor: 'pointer', 
-                  alignItems: 'center',
-                  transition: 'background-color 0.2s ease'
-                }}
-                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f0f2f5'}
-                onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-              >
-                <img 
-                  src={`https://ui-avatars.com/api/?name=${encodeURIComponent(chat.userId)}&background=e2e8f0&color=334155&font-size=0.33&bold=true`} 
-                  alt={chat.userId}
-                  style={{ width: '52px', height: '52px', borderRadius: '50%', marginRight: '16px', objectFit: 'cover' }}
-                />
-                
-                <div style={{ flex: 1, borderBottom: '1px solid #f0f2f5', paddingBottom: '12px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', alignItems: 'center' }}>
-                    <div style={{ fontWeight: '600', fontSize: '16px', color: '#111b21' }}>{chat.userId}</div>
-                    <div style={{ fontSize: '12px', color: chat.unreadCount > 0 ? '#25D366' : '#667781', fontWeight: chat.unreadCount > 0 ? '600' : '400' }}>
-                      {new Date(chat.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontSize: '14px', color: '#667781', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '220px' }}>
-                      {chat.lastMessage || 'Attachment'}
-                    </div>
-                    {chat.unreadCount > 0 && (
-                      <div style={{ backgroundColor: '#25D366', color: 'white', fontSize: '12px', fontWeight: 'bold', width: '22px', height: '22px', borderRadius: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
-                        {chat.unreadCount}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+      <div className="ch-split">
+        <ConversationList {...{ conversations, listLoaded, currentUser, onOpen: setActive, activeId: active, embedded: true }} />
+        {active
+          ? <Thread key={active} {...{ currentUser, engineerId: active, conv: activeConv, caseId, onRead: loadList }} />
+          : <div className="ch-pick"><div className="ch-pick-icon">💬</div><b>Choose a conversation</b><span>Messages with your field engineers appear here.</span></div>}
       </div>
     );
   }
-
-  // View: Active Chat Thread
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%', backgroundColor: '#f1f5f9', position: 'relative' }}>
-      
-      {/* Hidden File Inputs */}
-      <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept=".pdf,.doc,.docx,.xls,.xlsx,.txt" onChange={(e) => handleFileUpload(e, 'document')} />
-      <input type="file" ref={galleryInputRef} style={{ display: 'none' }} accept="image/*,video/*" onChange={(e) => handleFileUpload(e, 'gallery')} />
+    <Thread
+      key={active}
+      {...{ currentUser, engineerId: active, conv: activeConv, caseId, isMini, onRead: loadList }}
+      onBack={admin ? () => setActive(null) : onBack}
+    />
+  );
+}
 
-      {/* Header */}
-      <div style={{ padding: '16px 20px', backgroundColor: '#17202A', color: 'white', display: 'flex', alignItems: 'center', gap: '16px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', zIndex: 100, flexShrink: 0 }}>
-        <button 
-          onClick={() => {
-            if (isAdmin && !otherUserId) {
-              setActiveChatUserId(null);
-            } else if (onBack) {
-              onBack();
-            }
-          }}
-          style={{ width: '36px', height: '36px', background: '#2C3540', borderRadius: '50%', border: 'none', color: '#E2E8F0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s' }}
-        >
-          <ArrowLeft size={20} />
+/* ------------------------------ Conversation list (admins) ------------------------------ */
+// Stable colour per person (Apple's system palette), so people are easy to recognise
+const AVATAR_COLORS = [['#5AC8FA', '#007AFF'], ['#4CD964', '#28A745'], ['#FFB340', '#FF9500'], ['#FF6B8B', '#FF2D55'], ['#C77DFF', '#AF52DE'], ['#5AD2F0', '#30B0C7'], ['#7D7AFF', '#5856D6'], ['#FF8A80', '#FF3B30']];
+export const avatarStyle = (key = '') => {
+  let h = 0; for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const [a, b] = AVATAR_COLORS[h % AVATAR_COLORS.length];
+  return { background: `linear-gradient(180deg, ${a}, ${b})` };
+};
+
+function ConversationList({ conversations, listLoaded, currentUser, onOpen, activeId, onBack, embedded, isMini }) {
+  const [q, setQ] = useState('');
+  const [filter, setFilter] = useState('all'); // all | unread | duty
+  const superAdmin = isSuperAdmin(currentUser);
+  const unreadTotal = conversations.reduce((n, c) => n + c.unread, 0);
+  const unreadPeople = conversations.filter((c) => c.unread > 0).length;
+  const onDuty = conversations.filter((c) => c.onDuty).length;
+  const showBranch = superAdmin && (typeof window !== 'undefined' && (localStorage.getItem('gcr_branch_scope') || 'all') === 'all');
+
+  const needle = q.trim().toLowerCase();
+  const list = conversations
+    .filter((c) => (filter === 'unread' ? c.unread > 0 : filter === 'duty' ? c.onDuty : true))
+    .filter((c) => !needle || c.name.toLowerCase().includes(needle) || (c.lastMessage || '').toLowerCase().includes(needle) || (c.phone || '').includes(needle));
+
+  const statusLine = (c) => (c.onDuty
+    ? `On duty since ${hhmm(c.dutyAt)}`
+    : c.dutyAt ? offDutyText(c.dutyAt) : 'Not checked in yet');
+
+  const empty = !listLoaded ? null
+    : conversations.length === 0 ? 'No field engineers yet. Add them in Staff, then chat here.'
+    : list.length === 0 ? (needle ? `No results for “${q.trim()}”.` : filter === 'unread' ? 'You’re all caught up — no unread messages.' : 'Nobody is on duty right now.')
+    : null;
+
+  return (
+    <div className={`ch-list ${embedded ? 'embedded' : ''} ${isMini ? 'mini' : ''}`}>
+      <div className="ch-list-head">
+        {onBack && !embedded && <button className="ch-back" onClick={onBack} aria-label="Back"><ChevronLeft size={28} /></button>}
+        <div className="ch-list-titles">
+          <h1>Messages</h1>
+          {superAdmin ? <BranchSwitcher currentUser={currentUser} /> : currentUser?.branchInfo && <span className="ch-branch-static">{currentUser.branchInfo.name} Branch</span>}
+        </div>
+        <button className="ch-compose-all" onClick={() => window.dispatchEvent(new CustomEvent('gcr_quick_action', { detail: { action: 'broadcast' } }))} aria-label="Message everyone" title="Message everyone">
+          <Megaphone size={20} />
         </button>
-        <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#3B82F6', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 0 15px rgba(59, 130, 246, 0.6)' }}>
-          <UserCircle2 size={28} color="white" />
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <div style={{ fontWeight: '700', fontSize: '17px', letterSpacing: '0.2px', color: '#FFFFFF' }}>
-            {isAdmin ? activeChatUserId : 'Super Admin'}
-          </div>
-          <div style={{ fontSize: '13px', color: '#94A3B8', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px' }}>
-            <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#22c55e' }}></div>
-            Online
-          </div>
-        </div>
       </div>
 
-      {/* Message List */}
-      <div 
-        ref={scrollContainerRef}
-        onScroll={handleScroll}
-        style={{ flex: 1, padding: '16px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px', position: 'relative' }}
-        onClick={() => document.activeElement?.blur()}
-        onTouchStart={() => document.activeElement?.blur()}
-      >
-        
-        {uploading && (
-          <div style={{ position: 'absolute', top: '16px', left: '50%', transform: 'translateX(-50%)', backgroundColor: 'rgba(0,0,0,0.6)', color: 'white', padding: '8px 16px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '8px', zIndex: 10 }}>
-            <Loader2 size={16} className="spinner" /> Uploading attachment...
-          </div>
-        )}
-
-        {messages.length === 0 ? (
-          <div style={{ textAlign: 'center', margin: 'auto', backgroundColor: '#e0e7ff', padding: '12px 20px', borderRadius: '16px', fontSize: '12px', color: '#4338ca', fontWeight: '500', maxWidth: '80%', boxShadow: '0 2px 8px rgba(67, 56, 202, 0.1)' }}>
-            Messages are end-to-end encrypted. No one outside of this chat can read or listen to them.
-          </div>
-        ) : (
-          messages.map((msg, idx) => {
-            const isMe = msg.senderId === myId;
-            return (
-              <div key={msg._id || idx} style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', margin: '4px 12px' }}>
-                <div style={{ 
-                  maxWidth: '80%', 
-                  background: isMe ? 'linear-gradient(135deg, #0ea5e9 0%, #3b82f6 100%)' : 'white', 
-                  color: isMe ? 'white' : '#1e293b',
-                  padding: '10px 14px 22px 14px', 
-                  borderRadius: '18px', 
-                  borderBottomRightRadius: isMe ? '4px' : '18px',
-                  borderBottomLeftRadius: isMe ? '18px' : '4px',
-                  boxShadow: isMe ? '0 4px 12px rgba(59, 130, 246, 0.25)' : '0 2px 8px rgba(0,0,0,0.05)',
-                  position: 'relative'
-                }}>
-                  
-                  {/* Rendering Attachments */}
-                  {msg.attachmentType === 'gallery' && (
-                    <img src={msg.attachmentUrl} alt="gallery" style={{ width: '100%', borderRadius: '8px', marginBottom: '8px', objectFit: 'cover' }} />
-                  )}
-                  {msg.attachmentType === 'document' && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: isMe ? 'rgba(255,255,255,0.2)' : '#f1f5f9', padding: '12px', borderRadius: '12px', marginBottom: '6px', cursor: 'pointer' }} onClick={() => window.open(msg.attachmentUrl, '_blank')}>
-                      <FileText size={32} color={isMe ? 'white' : '#3b82f6'} />
-                      <div style={{ overflow: 'hidden' }}>
-                        <div style={{ fontSize: '14px', fontWeight: '700', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{msg.text || 'Document'}</div>
-                        <div style={{ fontSize: '11px', color: isMe ? 'rgba(255,255,255,0.8)' : '#64748b' }}>Tap to open</div>
-                      </div>
-                    </div>
-                  )}
-                  {msg.attachmentType === 'location' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', backgroundColor: isMe ? 'rgba(255,255,255,0.2)' : '#f1f5f9', padding: '12px', borderRadius: '12px', marginBottom: '6px', cursor: 'pointer' }} onClick={() => window.open(msg.attachmentUrl, '_blank')}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <MapPin size={24} color={isMe ? 'white' : '#ef4444'} />
-                        <div style={{ fontSize: '14px', fontWeight: '700' }}>Live Location</div>
-                      </div>
-                      <div style={{ fontSize: '12px', color: isMe ? 'rgba(255,255,255,0.9)' : '#2563eb', fontWeight: '500' }}>View on Google Maps</div>
-                    </div>
-                  )}
-                  {msg.attachmentType === 'contact' && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: isMe ? 'rgba(255,255,255,0.2)' : '#f1f5f9', padding: '12px', borderRadius: '12px', marginBottom: '6px' }}>
-                      <div style={{ width: '40px', height: '40px', borderRadius: '20px', backgroundColor: isMe ? 'rgba(255,255,255,0.3)' : '#cbd5e1', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                        <UserCircle2 size={24} color={isMe ? "white" : "#475569"} />
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '14px', fontWeight: '700' }}>{msg.attachmentMetadata?.name}</div>
-                        <div style={{ fontSize: '12px', color: isMe ? 'rgba(255,255,255,0.8)' : '#64748b' }}>{msg.attachmentMetadata?.phone}</div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Text (if any) and Timestamp */}
-                  {(!msg.attachmentType || (msg.attachmentType && msg.text && msg.attachmentType !== 'document' && msg.attachmentType !== 'location' && msg.attachmentType !== 'contact')) && (
-                    <div style={{ fontSize: '15px', color: 'inherit', wordBreak: 'break-word', lineHeight: '1.4' }}>
-                      {msg.text}
-                    </div>
-                  )}
-                  
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', position: 'absolute', bottom: '6px', right: '12px' }}>
-                    <span style={{ fontSize: '10px', color: isMe ? 'rgba(255,255,255,0.8)' : '#94a3b8', fontWeight: '500' }}>
-                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                    {isMe && (
-                      msg.isRead ? <CheckCheck size={14} color="white" /> : <Check size={14} color="rgba(255,255,255,0.6)" />
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })
-        )}
-        <div ref={messagesEndRef} />
-      </div>
-
-      {showScrollDown && (
-        <button 
-          onClick={scrollToBottom}
-          style={{ position: 'absolute', bottom: '80px', right: '16px', width: '44px', height: '44px', borderRadius: '22px', backgroundColor: 'white', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 100, color: '#0f172a' }}
-        >
-          <ChevronDown size={28} strokeWidth={2.5} />
-        </button>
+      {listLoaded && conversations.length > 0 && (
+        <p className="ch-summary">
+          <span><i className="dot green" />{onDuty} on duty</span>
+          <span><i className="dot blue" />{unreadTotal} unread</span>
+          <span>{conversations.length} engineer{conversations.length === 1 ? '' : 's'}</span>
+        </p>
       )}
 
-      {/* Attachment Bottom Sheet Overlay */}
-      {showAttachmentMenu && (
-        <div style={{ position: 'absolute', bottom: '70px', left: '16px', right: '16px', backgroundColor: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 -2px 10px rgba(0,0,0,0.1)', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', zIndex: 10 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={() => fileInputRef.current.click()}>
-            <div style={{ width: '56px', height: '56px', borderRadius: '28px', backgroundColor: '#5f66cd', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-              <FileText size={24} color="white" />
-            </div>
-            <span style={{ fontSize: '12px', color: '#475569' }}>Document</span>
-          </div>
-          
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={() => galleryInputRef.current.click()}>
-            <div style={{ width: '56px', height: '56px', borderRadius: '28px', backgroundColor: '#ec407a', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-              <ImageIcon size={24} color="white" />
-            </div>
-            <span style={{ fontSize: '12px', color: '#475569' }}>Gallery</span>
-          </div>
-          
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={handleShareLocation}>
-            <div style={{ width: '56px', height: '56px', borderRadius: '28px', backgroundColor: '#25D366', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-              <MapPin size={24} color="white" />
-            </div>
-            <span style={{ fontSize: '12px', color: '#475569' }}>Location</span>
-          </div>
-          
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', cursor: 'pointer' }} onClick={handleShareContact}>
-            <div style={{ width: '56px', height: '56px', borderRadius: '28px', backgroundColor: '#00a884', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-              <UserPlus size={24} color="white" />
-            </div>
-            <span style={{ fontSize: '12px', color: '#475569' }}>Contact</span>
-          </div>
-        </div>
-      )}
+      <label className="ch-search">
+        <Search size={16} />
+        <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, phone or message" />
+        {q && <button className="ch-clear" onClick={() => setQ('')} aria-label="Clear search"><X size={14} /></button>}
+      </label>
 
-      {/* WhatsApp-style Contact Picker Modal */}
-      {showContactModal && (
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#f0f2f5', display: 'flex', flexDirection: 'column', zIndex: 20 }}>
-          {/* Header */}
-          <div style={{ padding: '16px', backgroundColor: '#075E54', color: 'white', display: 'flex', alignItems: 'center', gap: '16px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-            <button onClick={() => setShowContactModal(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: '4px' }}>
-              <ArrowLeft size={24} />
-            </button>
-            <div style={{ fontWeight: '500', fontSize: '18px' }}>Contacts</div>
-          </div>
-          
-          {/* Search Bar */}
-          <div style={{ padding: '8px 12px', backgroundColor: '#fff', borderBottom: '1px solid #e2e8f0' }}>
-            <div style={{ backgroundColor: '#f0f2f5', borderRadius: '8px', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Search size={18} color="#94a3b8" />
-              <input 
-                type="text" 
-                placeholder="Search contacts..." 
-                value={contactSearch}
-                onChange={e => setContactSearch(e.target.value)}
-                style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, fontSize: '15px' }}
-              />
-            </div>
-          </div>
-
-          {/* Contact List */}
-          <div style={{ flex: 1, overflowY: 'auto', backgroundColor: '#fff' }}>
-            {contactList
-              .filter(c => c.name.toLowerCase().includes(contactSearch.toLowerCase()) || c.phone.includes(contactSearch))
-              .map(contact => (
-              <div 
-                key={contact.id}
-                onClick={() => submitManualContact(contact)}
-                style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}
-              >
-                <div style={{ width: '40px', height: '40px', borderRadius: '20px', backgroundColor: '#cbd5e1', display: 'flex', justifyContent: 'center', alignItems: 'center', marginRight: '16px' }}>
-                  <UserCircle2 size={24} color="white" />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '16px', fontWeight: '500', color: '#0f172a' }}>{contact.name}</div>
-                  <div style={{ fontSize: '14px', color: '#64748b', marginTop: '2px' }}>{contact.phone}</div>
-                </div>
-              </div>
-            ))}
-            
-            {contactList.filter(c => c.name.toLowerCase().includes(contactSearch.toLowerCase()) || c.phone.includes(contactSearch)).length === 0 && (
-              <div style={{ padding: '32px', textAlign: 'center', color: '#94a3b8' }}>
-                No contacts found matching "{contactSearch}"
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Input Area */}
-      <div style={{ padding: '12px 16px', backgroundColor: 'white', borderTop: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: '12px', zIndex: 10, position: 'relative', flexShrink: 0 }}>
-        
-        {/* Pill Input with Paperclip Inside */}
-        <div style={{ flex: 1, backgroundColor: '#F3F4F6', borderRadius: '24px', padding: '10px 16px', display: 'flex', alignItems: 'center', border: '1px solid #E5E7EB' }}>
-          <input 
-            type="text" 
-            placeholder="Message..." 
-            value={inputText}
-            onChange={e => setInputText(e.target.value)}
-            onKeyPress={e => e.key === 'Enter' && handleSendMessage(e)}
-            style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, fontSize: '15px', color: '#1F2937' }}
-          />
-          <button 
-            onClick={() => setShowAttachmentMenu(!showAttachmentMenu)} 
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6B7280', transition: 'color 0.2s' }}
-          >
-            <Paperclip size={20} />
+      <div className="ch-filters" role="tablist" aria-label="Filter conversations">
+        {[['all', 'All', conversations.length], ['unread', 'Unread', unreadPeople], ['duty', 'On duty', onDuty]].map(([k, label, n]) => (
+          <button key={k} role="tab" aria-selected={filter === k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>
+            {label}{n > 0 && <span>{n}</span>}
           </button>
-        </div>
-
-        {/* Send Button */}
-        <button 
-          onClick={handleSendMessage} 
-          style={{ width: '48px', height: '48px', borderRadius: '24px', backgroundColor: '#3B82F6', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)', flexShrink: 0, transition: 'transform 0.1s' }}
-        >
-          <Send size={20} strokeWidth={2.5} style={{ marginLeft: '-2px' }} />
-        </button>
+        ))}
       </div>
+
+      <div className="ch-rows">
+        {!listLoaded && <div className="ch-empty"><Loader2 size={20} className="spin" /></div>}
+        {empty && (
+          <div className="ch-empty">
+            <div className="ch-empty-icon">{filter === 'unread' && !needle ? '✓' : '💬'}</div>
+            {empty}
+          </div>
+        )}
+        {list.map((c) => (
+          <button key={c.engineerId} className={`ch-row ${activeId === c.engineerId ? 'active' : ''} ${c.unread ? 'unread' : ''}`} onClick={() => onOpen(c.engineerId)}>
+            <span className="ch-avatar-wrap">
+              <span className="ch-avatar" style={avatarStyle(c.engineerId)}>{initials(c.name)}</span>
+              {c.onDuty && <span className="ch-duty-dot" aria-label="On duty" />}
+            </span>
+            <span className="ch-row-main">
+              <span className="ch-row-top">
+                <span className="ch-row-name">
+                  {c.name}
+                  {showBranch && c.branchCode && <span className="ch-chip">{c.branchCode}</span>}
+                </span>
+                <span className={`ch-row-time ${c.unread ? 'hot' : ''}`}>{listTime(c.lastAt)}</span>
+              </span>
+              <span className="ch-row-bottom">
+                <span className="ch-row-msg">
+                  {c.lastMessage ? (
+                    <>
+                      {c.lastFromMe && (c.lastRead ? <CheckCheck size={15} className="tick read" /> : <Check size={15} className="tick" />)}
+                      {c.lastFromMe && <span className="ch-you">You:</span>}
+                      {legacyText(c.lastMessage)}
+                    </>
+                  ) : (
+                    <span className={c.onDuty ? 'ch-status on' : 'ch-status'}>{statusLine(c)}</span>
+                  )}
+                </span>
+                {c.unread > 0 && <span className="ch-unread">{c.unread}</span>}
+              </span>
+              {c.lastMessage && <span className={`ch-row-status ${c.onDuty ? 'on' : ''}`}>{statusLine(c)}</span>}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------ Conversation ------------------------------------ */
+function Thread({ currentUser, engineerId, conv, caseId, onBack, isMini, onRead }) {
+  const admin = isAdminRole(currentUser);
+  const [messages, setMessages] = useState([]);
+  const [pending, setPending] = useState([]); // optimistic: { tempId, ...payload, status: 'sending' | 'failed' }
+  const [loaded, setLoaded] = useState(false);
+  const [text, setText] = useState('');
+  const [sheet, setSheet] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [lightbox, setLightbox] = useState(null);
+  const [atBottom, setAtBottom] = useState(true);
+  const scrollRef = useRef(null);
+  const inputRef = useRef(null);
+  const cameraRef = useRef(null);
+  const photoRef = useRef(null);
+  const docRef = useRef(null);
+  const myInbox = admin ? 'ADMIN' : currentUser.id;
+
+  const title = admin ? (conv?.name || 'Engineer') : (conv?.officeName || `${currentUser.branchInfo?.name || 'Head'} Office`);
+  const subtitle = admin
+    ? (conv?.onDuty ? `On duty since ${hhmm(conv.dutyAt)}` : conv?.dutyAt ? offDutyText(conv.dutyAt) : 'Field engineer')
+    : 'Your branch admin & head office';
+  // Admins call the engineer; engineers call their office
+  const phone = admin ? conv?.phone : conv?.officePhone;
+  const wa = waNumber(phone);
+
+  const load = useCallback(async () => {
+    if (!engineerId) return;
+    try {
+      const rows = await api(`/api/chat/thread/${encodeURIComponent(engineerId)}`);
+      setMessages(rows);
+      setLoaded(true);
+      const unseen = rows.some((m) => m.receiverId === myInbox && !m.isRead);
+      if (unseen) api(`/api/chat/thread/${encodeURIComponent(engineerId)}/read`, { method: 'PUT' }).then(() => onRead?.()).catch(() => {});
+    } catch { setLoaded(true); }
+  }, [engineerId, myInbox, onRead]);
+
+  useEffect(() => {
+    load();
+    const t = setInterval(() => { if (!document.hidden) load(); }, POLL_MS);
+    return () => clearInterval(t);
+  }, [load]);
+
+  // Stick to the bottom when new messages arrive (unless reading older ones)
+  const all = useMemo(() => [...messages, ...pending], [messages, pending]);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el && atBottom) el.scrollTop = el.scrollHeight;
+  }, [all.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (el) setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 60);
+  };
+  const toBottom = () => { const el = scrollRef.current; if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' }); };
+
+  const send = async (payload) => {
+    const tempId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const optimistic = { ...payload, _id: tempId, tempId, senderId: myInbox, sentBy: currentUser.id, timestamp: new Date().toISOString(), status: 'sending' };
+    setPending((p) => [...p, optimistic]);
+    setAtBottom(true);
+    try {
+      await api('/api/chat', { method: 'POST', body: JSON.stringify({ ...payload, engineerId: admin ? engineerId : undefined, caseId: caseId || null }) });
+      await load();
+      setPending((p) => p.filter((m) => m.tempId !== tempId));
+      onRead?.();
+    } catch (err) {
+      setPending((p) => p.map((m) => (m.tempId === tempId ? { ...m, status: 'failed', error: err.message } : m)));
+    }
+  };
+  const retry = (m) => { setPending((p) => p.filter((x) => x.tempId !== m.tempId)); const { text: t, attachmentUrl, attachmentType, attachmentMetadata } = m; send({ text: t, attachmentUrl, attachmentType, attachmentMetadata }); };
+
+  const submit = (e) => {
+    e?.preventDefault();
+    const t = text.trim();
+    if (!t) return;
+    setText('');
+    if (inputRef.current) inputRef.current.style.height = '';
+    send({ text: t });
+  };
+
+  const upload = async (dataUrl) => {
+    const res = await api('/api/upload', { method: 'POST', body: JSON.stringify({ image: dataUrl, folder: 'chat_attachments' }) });
+    if (!res.url) throw new Error('Upload failed');
+    return res.url;
+  };
+  const onPhoto = async (e) => {
+    const file = e.target.files?.[0]; e.target.value = '';
+    if (!file) return;
+    setSheet(false); setBusy(true);
+    try { send({ text: '', attachmentType: 'photo', attachmentUrl: await upload(await compressImage(file)) }); }
+    catch (err) { toast.error(err.message || 'Could not send photo'); } finally { setBusy(false); }
+  };
+  const onDoc = async (e) => {
+    const file = e.target.files?.[0]; e.target.value = '';
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { toast.error('Files must be under 10 MB'); return; }
+    setSheet(false); setBusy(true);
+    try { send({ text: file.name, attachmentType: 'document', attachmentUrl: await upload(await readAsDataUrl(file)), attachmentMetadata: { size: file.size } }); }
+    catch (err) { toast.error(err.message || 'Could not send file'); } finally { setBusy(false); }
+  };
+  const onLocation = () => {
+    setSheet(false);
+    if (!navigator.geolocation) { toast.error('Location is not available on this device'); return; }
+    setBusy(true);
+    navigator.geolocation.getCurrentPosition(
+      (p) => { setBusy(false); send({ text: 'Location', attachmentType: 'location', attachmentUrl: `https://maps.google.com/?q=${p.coords.latitude},${p.coords.longitude}`, attachmentMetadata: { lat: p.coords.latitude, lng: p.coords.longitude } }); },
+      () => { setBusy(false); toast.error('Turn on location to share it'); },
+      { enableHighAccuracy: true, timeout: 15000 },
+    );
+  };
+
+  // Group into days; show the sender's name when the office side changes person
+  const rows = [];
+  let lastDay = '';
+  all.forEach((m, i) => {
+    const day = new Date(m.timestamp).toDateString();
+    if (day !== lastDay) { rows.push({ sep: dayLabel(m.timestamp), key: `d-${day}` }); lastDay = day; }
+    const mine = m.senderId === myInbox && (!admin || !m.sentBy || m.sentBy === currentUser.id || m.senderId === 'ADMIN');
+    const prev = all[i - 1];
+    const sameRun = prev && prev.senderId === m.senderId && (prev.sentBy || '') === (m.sentBy || '') && new Date(m.timestamp) - new Date(prev.timestamp) < 5 * 60000 && new Date(prev.timestamp).toDateString() === day;
+    const showName = m.senderId === 'ADMIN' && m.sentByName && !sameRun && (!admin || m.sentBy !== currentUser.id);
+    rows.push({ m, mine, sameRun, showName, key: m._id });
+  });
+
+  return (
+    <div className={`ch-thread ${isMini ? 'mini' : ''}`}>
+      <header className="ch-head">
+        {onBack && <button className="ch-back" onClick={onBack} aria-label="Back"><ChevronLeft size={26} /></button>}
+        <span className={`ch-avatar sm ${admin ? '' : 'office'}`} style={admin ? avatarStyle(engineerId) : undefined}>{admin ? initials(title) : 'GCR'}</span>
+        <div className="ch-head-text">
+          <b>{title}</b>
+          <span>{subtitle}</span>
+        </div>
+        {wa && (
+          <a className="ch-icon wa" href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer" aria-label={`WhatsApp ${title}`} title="WhatsApp (chat or free call)">
+            <WhatsAppGlyph size={21} />
+          </a>
+        )}
+        {phone && <a className="ch-icon" href={`tel:${phone}`} aria-label={`Call ${title}`} title={`Call ${phone}`}><Phone size={20} /></a>}
+      </header>
+
+      <div className="ch-scroll" ref={scrollRef} onScroll={onScroll}>
+        {loaded && all.length === 0 && (
+          <div className="ch-hello">
+            <div className="ch-hello-icon">💬</div>
+            <b>No messages yet</b>
+            <span>{admin ? `Send ${title.split(' ')[0]} a message.` : 'Messages here go to your branch admin and head office.'}</span>
+          </div>
+        )}
+        {rows.map((r) => (r.sep ? (
+          <div key={r.key} className="ch-day"><span>{r.sep}</span></div>
+        ) : (
+          <Bubble key={r.key} m={r.m} mine={r.mine} sameRun={r.sameRun} showName={r.showName} onOpenPhoto={setLightbox} onRetry={retry} />
+        )))}
+      </div>
+
+      {!atBottom && <button className="ch-down" onClick={toBottom} aria-label="Scroll to latest"><ChevronDown size={20} /></button>}
+
+      <form className="ch-compose" onSubmit={submit}>
+        <button type="button" className="ch-plus" onClick={() => setSheet(true)} aria-label="Attach" disabled={busy}>
+          {busy ? <Loader2 size={20} className="spin" /> : <Plus size={22} />}
+        </button>
+        <textarea
+          ref={inputRef}
+          rows={1}
+          value={text}
+          placeholder="Message"
+          onChange={(e) => { setText(e.target.value); e.target.style.height = ''; e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`; }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && window.innerWidth >= 768) { e.preventDefault(); submit(); } }}
+        />
+        <button type="submit" className="ch-send" disabled={!text.trim()} aria-label="Send"><Send size={18} /></button>
+      </form>
+
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={onPhoto} />
+      <input ref={photoRef} type="file" accept="image/*" hidden onChange={onPhoto} />
+      <input ref={docRef} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf" hidden onChange={onDoc} />
+
+      {sheet && (
+        <div className="ch-sheet-bg" onClick={() => setSheet(false)}>
+          <div className="ch-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="ch-sheet-group">
+              <button onClick={() => cameraRef.current?.click()}><span className="ch-tile blue"><Camera size={18} /></span>Camera</button>
+              <button onClick={() => photoRef.current?.click()}><span className="ch-tile purple"><ImageIcon size={18} /></span>Photo</button>
+              <button onClick={() => docRef.current?.click()}><span className="ch-tile indigo"><FileText size={18} /></span>Document</button>
+              <button onClick={onLocation}><span className="ch-tile green"><MapPin size={18} /></span>My Location</button>
+            </div>
+            <button className="ch-sheet-cancel" onClick={() => setSheet(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {lightbox && (
+        <div className="ch-lightbox" onClick={() => setLightbox(null)}>
+          <button className="ch-lightbox-x" aria-label="Close"><X size={22} /></button>
+          <img src={lightbox} alt="" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Bubble({ m, mine, sameRun, showName, onOpenPhoto, onRetry }) {
+  const type = m.attachmentType === 'gallery' ? 'photo' : m.attachmentType;
+  const text = legacyText(m.text);
+  const status = m.status === 'sending'
+    ? <Clock size={12} className="tick" />
+    : m.status === 'failed' ? null
+    : mine ? (m.isRead ? <CheckCheck size={15} className="tick read" /> : <Check size={15} className="tick" />) : null;
+  return (
+    <div className={`ch-msg ${mine ? 'me' : 'them'} ${sameRun ? 'run' : ''}`}>
+      {showName && <div className="ch-name">{m.sentByName}</div>}
+      <div className={`ch-bubble ${type ? `att ${type}` : ''}`}>
+        {type === 'photo' && (
+          <button className="ch-photo" onClick={() => onOpenPhoto(m.attachmentUrl)}><img src={m.attachmentUrl} alt="Photo" loading="lazy" /></button>
+        )}
+        {type === 'document' && (
+          <a className="ch-doc" href={m.attachmentUrl} target="_blank" rel="noopener noreferrer">
+            <span className="ch-doc-icon"><FileText size={20} /></span>
+            <span className="ch-doc-name">{text || 'Document'}</span>
+          </a>
+        )}
+        {type === 'location' && (
+          <a className="ch-loc" href={m.attachmentUrl} target="_blank" rel="noopener noreferrer">
+            <span className="ch-loc-map"><MapPin size={26} /></span>
+            <span className="ch-loc-text">Location<small>Open in Maps</small></span>
+          </a>
+        )}
+        {type === 'contact' && <span>👤 {m.attachmentMetadata?.name} {m.attachmentMetadata?.phone}</span>}
+        {!type && <span className="ch-text">{text}</span>}
+        <span className="ch-meta">{hhmm(m.timestamp)} {status}</span>
+      </div>
+      {m.status === 'failed' && (
+        <button className="ch-failed" onClick={() => onRetry(m)}><AlertCircle size={14} /> Not sent — tap to retry</button>
+      )}
     </div>
   );
 }

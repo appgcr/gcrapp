@@ -105,7 +105,8 @@ print(json.dumps({'sharp': res_sharp, 'blurry': res_blurry}))
 `;
     fs.writeFileSync(tempPyScriptPath, pyScript, 'utf-8');
     const venvPy = 'd:\\gcr\\venv_ocr\\Scripts\\python.exe';
-    const rawOut = execSync(`"${venvPy}" "${tempPyScriptPath}"`, {
+    let pyExe = fs.existsSync(venvPy) ? venvPy : (process.platform === 'darwin' ? (fs.existsSync('/usr/local/bin/python3') ? '/usr/local/bin/python3' : 'python3') : (process.platform === 'win32' ? 'python' : 'python3'));
+    const rawOut = execSync(`"${pyExe}" "${tempPyScriptPath}"`, {
       env: {
         ...process.env,
         OPENBLAS_NUM_THREADS: '1',

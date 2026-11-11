@@ -1,232 +1,144 @@
-.ref-login-wrapper {
+/* GCR sign-in — Apple-style, light & dark. Tokens live here so the screen works before login. */
+.lg-root {
+  --lg-bg: #f2f2f7;
+  --lg-card: #ffffff;
+  --lg-text: #000000;
+  --lg-sub: #6d6d72;
+  --lg-hint: #8e8e93;
+  --lg-sep: rgba(60, 60, 67, 0.18);
+  --lg-accent: #007aff;
+  --lg-fill: rgba(120, 120, 128, 0.12);
+  --lg-red: #ff3b30;
   min-height: 100vh;
-  background-color: #f4f7f9;
+  min-height: 100dvh;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  color: #1a202c;
-  padding: 20px;
+  background: var(--lg-bg);
+  color: var(--lg-text);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+@media (prefers-color-scheme: dark) {
+  .lg-root {
+    --lg-bg: #000000;
+    --lg-card: #1c1c1e;
+    --lg-text: #ffffff;
+    --lg-sub: #98989f;
+    --lg-hint: #8e8e93;
+    --lg-sep: rgba(84, 84, 88, 0.6);
+    --lg-accent: #0a84ff;
+    --lg-fill: rgba(120, 120, 128, 0.24);
+    --lg-red: #ff453a;
+  }
 }
 
-.ref-logo-box {
-  width: 64px;
-  height: 64px;
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 24px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03);
+/* ---------- Brand panel (≥ 960px) ---------- */
+.lg-brand { display: none; }
+@media (min-width: 960px) {
+  .lg-brand {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    width: 44%;
+    max-width: 620px;
+    padding: 40px 56px;
+    color: #fff;
+    background:
+      radial-gradient(120% 80% at 0% 0%, rgba(56, 189, 248, 0.28), transparent 60%),
+      radial-gradient(90% 70% at 100% 100%, rgba(245, 158, 11, 0.18), transparent 60%),
+      linear-gradient(160deg, #0b1f5c 0%, #1d4ed8 100%);
+  }
 }
+.lg-brand-top { display: flex; align-items: center; gap: 12px; font-size: 17px; font-weight: 600; letter-spacing: -0.2px; }
+.lg-brand-body h1 { color: #fff; font-size: 36px; line-height: 1.12; font-weight: 700; letter-spacing: -0.8px; margin: 0 0 32px; max-width: 440px; }
+.lg-brand-body ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 16px; }
+.lg-brand-body li { display: flex; align-items: center; gap: 14px; font-size: 16px; color: rgba(255, 255, 255, 0.88); }
+.lg-brand-body li span { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.14); flex: none; }
+.lg-brand-foot { font-size: 13px; color: rgba(255, 255, 255, 0.6); }
 
-.ref-login-header {
-  text-align: center;
-  margin-bottom: 32px;
-}
-
-.ref-login-header h2 {
-  font-size: 24px;
-  font-weight: 700;
-  color: #111827;
-  margin-bottom: 8px;
-}
-
-.ref-login-header p {
-  font-size: 15px;
-  color: #4b5563;
-}
-
-.ref-login-card {
-  width: 100%;
-  max-width: 400px;
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 32px;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
-}
-
-.ref-form-group {
-  margin-bottom: 20px;
-}
-
-.ref-form-label-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.ref-form-label {
-  font-size: 14px;
-  font-weight: 500;
-  color: #374151;
-}
-
-.ref-forgot-link {
-  font-size: 13px;
-  font-weight: 500;
-  color: #0052cc;
-  text-decoration: none;
-  background: none;
-  border: none;
-  cursor: pointer;
-}
-
-.ref-forgot-link:hover {
-  text-decoration: underline;
-}
-
-.ref-input-container {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.ref-input-icon-left {
-  position: absolute;
-  left: 14px;
-  color: #6b7280;
-  display: flex;
-  align-items: center;
-  pointer-events: none;
-}
-
-.ref-input-icon-right {
-  position: absolute;
-  right: 14px;
-  color: #6b7280;
-  display: flex;
-  align-items: center;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-}
-
-.ref-input {
-  width: 100%;
-  padding: 12px 14px 12px 42px;
-  font-size: 15px;
-  color: #111827;
-  background: white;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  outline: none;
-  transition: all 0.2s;
-}
-
-.ref-input::placeholder {
-  color: #9ca3af;
-}
-
-.ref-input:focus {
-  border-color: #0052cc;
-  box-shadow: 0 0 0 3px rgba(0, 82, 204, 0.15);
-}
-
-.ref-btn-primary {
-  width: 100%;
-  background: #0052cc;
-  color: white;
-  border: none;
-  padding: 14px;
-  font-size: 15px;
-  font-weight: 600;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.2s;
-  margin-top: 8px;
-}
-
-.ref-btn-primary:hover {
-  background: #0047b3;
-}
-
-.ref-divider {
-  display: flex;
-  align-items: center;
-  text-align: center;
-  margin: 24px 0;
-  color: #6b7280;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.ref-divider::before,
-.ref-divider::after {
-  content: '';
+/* ---------- Form side ---------- */
+.lg-main {
   flex: 1;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.ref-divider:not(:empty)::before {
-  margin-right: 16px;
-}
-
-.ref-divider:not(:empty)::after {
-  margin-left: 16px;
-}
-
-.ref-btn-secondary {
-  width: 100%;
-  background: #f1f5f9;
-  color: #111827;
-  border: 1px solid #e2e8f0;
-  padding: 14px;
-  font-size: 15px;
-  font-weight: 600;
-  border-radius: 8px;
-  cursor: pointer;
+  min-width: 0; /* let the form shrink on narrow screens (Android's Roboto is wider than SF) */
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  transition: background 0.2s;
+  padding: calc(env(safe-area-inset-top, 0px) + 32px) 20px calc(env(safe-area-inset-bottom, 0px) + 24px);
 }
+.lg-form-wrap { width: 100%; min-width: 0; max-width: 380px; animation: lgIn 0.5s cubic-bezier(0.2, 0.9, 0.25, 1) both; }
+@keyframes lgIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 
-.ref-btn-secondary:hover {
-  background: #e2e8f0;
+.lg-head { text-align: center; margin-bottom: 28px; }
+.lg-logo { display: inline-flex; margin-bottom: 18px; }
+.lg-head h2 { font-size: 28px; font-weight: 700; letter-spacing: -0.6px; color: var(--lg-text); margin: 0 0 6px; }
+.lg-head p { font-size: 15px; color: var(--lg-sub); margin: 0; overflow-wrap: anywhere; }
+
+/* Inset grouped fields (like iOS Settings) */
+.lg-group { background: var(--lg-card); border-radius: 12px; overflow: hidden; box-shadow: 0 0 0 0.5px var(--lg-sep); transition: box-shadow 0.2s; }
+.lg-group-error { box-shadow: 0 0 0 1.5px var(--lg-red); }
+.lg-shake { animation: lgShake 0.42s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+@keyframes lgShake { 10%, 90% { transform: translateX(-2px); } 20%, 80% { transform: translateX(4px); } 30%, 50%, 70% { transform: translateX(-7px); } 40%, 60% { transform: translateX(7px); } }
+.lg-field { display: flex; align-items: center; min-height: 52px; padding: 0 8px 0 16px; position: relative; cursor: text; }
+.lg-field + .lg-field::before { content: ''; position: absolute; top: 0; left: 16px; right: 0; height: 0.5px; background: var(--lg-sep); }
+.lg-label { width: 86px; flex: none; font-size: 16px; color: var(--lg-text); }
+.lg-field input {
+  flex: 1; min-width: 0; height: 52px; border: none; outline: none; background: transparent;
+  font: inherit; font-size: 16px; /* 16px stops iOS zooming on focus */ color: var(--lg-text); padding: 0 8px 0 0;
 }
+.lg-field input::placeholder { color: var(--lg-hint); opacity: 0.7; }
+.lg-eye { width: 40px; height: 40px; border: none; background: none; color: var(--lg-hint); display: flex; align-items: center; justify-content: center; border-radius: 10px; cursor: pointer; flex: none; }
+.lg-eye:active { background: var(--lg-fill); }
 
-.ref-footer {
-  margin-top: 48px;
-  text-align: center;
-  font-size: 14px;
-  color: #4b5563;
+.lg-msg { min-height: 22px; margin: 8px 4px 0; display: flex; align-items: flex-start; gap: 6px; font-size: 13px; line-height: 1.35; color: var(--lg-red); }
+.lg-msg svg { flex: none; margin-top: 1px; }
+
+.lg-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin: 6px 2px 22px; }
+.lg-remember { display: inline-flex; align-items: center; gap: 10px; font-size: 15px; color: var(--lg-text); cursor: pointer; user-select: none; }
+.lg-remember input { position: absolute; opacity: 0; pointer-events: none; }
+.lg-switch { width: 42px; height: 26px; border-radius: 13px; background: var(--lg-fill); position: relative; transition: background 0.2s; flex: none; }
+.lg-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); transition: transform 0.22s cubic-bezier(0.3, 0.7, 0.4, 1); }
+.lg-remember input:checked + .lg-switch { background: #34c759; }
+.lg-remember input:checked + .lg-switch::after { transform: translateX(16px); }
+.lg-remember input:focus-visible + .lg-switch { outline: 2px solid var(--lg-accent); outline-offset: 2px; }
+.lg-link { border: none; background: none; padding: 6px 0; font: inherit; font-size: 15px; color: var(--lg-accent); cursor: pointer; }
+
+.lg-primary {
+  width: 100%; height: 52px; border: none; border-radius: 12px; background: var(--lg-accent); color: #fff;
+  font: inherit; font-size: 17px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;
+  cursor: pointer; text-decoration: none; transition: opacity 0.15s, transform 0.1s;
 }
+.lg-primary:active:not(:disabled) { transform: scale(0.985); opacity: 0.9; }
+.lg-primary:disabled { opacity: 0.4; cursor: default; }
 
-.ref-footer p {
-  margin-bottom: 12px;
+.lg-or { display: flex; align-items: center; gap: 12px; margin: 22px 0; color: var(--lg-hint); font-size: 13px; }
+.lg-or::before, .lg-or::after { content: ''; flex: 1; height: 0.5px; background: var(--lg-sep); }
+.lg-secondary {
+  width: 100%; min-height: 52px; border: none; border-radius: 12px; background: var(--lg-card); color: var(--lg-accent);
+  box-shadow: 0 0 0 0.5px var(--lg-sep); font: inherit; font-size: 16px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer; padding: 0 16px;
 }
+.lg-secondary:active:not(:disabled) { background: var(--lg-fill); }
+.lg-secondary:disabled { opacity: 0.5; cursor: default; }
 
-.ref-footer-links {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  color: #d1d5db;
-}
+.lg-foot { margin-top: 36px; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; color: var(--lg-hint); }
 
-.ref-footer-link {
-  color: #0052cc;
-  text-decoration: none;
-  font-weight: 500;
-}
+/* Forgot-password sheet */
+.lg-sheet-bg { position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, 0.35); display: flex; align-items: flex-end; justify-content: center; animation: lgFade 0.2s ease-out; }
+.lg-sheet { position: relative; width: 100%; max-width: 440px; background: var(--lg-card); border-radius: 16px 16px 0 0; padding: 28px 24px calc(env(safe-area-inset-bottom, 0px) + 16px); text-align: center; animation: lgUp 0.32s cubic-bezier(0.2, 0.9, 0.25, 1); }
+@media (min-width: 600px) { .lg-sheet-bg { align-items: center; } .lg-sheet { border-radius: 16px; } }
+.lg-sheet-x { position: absolute; top: 12px; right: 12px; width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--lg-fill); color: var(--lg-sub); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.lg-sheet-icon { width: 56px; height: 56px; margin: 0 auto 14px; border-radius: 14px; background: linear-gradient(180deg, #5ac8fa, #007aff); color: #fff; display: flex; align-items: center; justify-content: center; }
+.lg-sheet h3 { font-size: 20px; font-weight: 700; color: var(--lg-text); margin: 0 0 8px; }
+.lg-sheet p { font-size: 15px; line-height: 1.45; color: var(--lg-sub); margin: 0 0 22px; }
+.lg-sheet b { color: var(--lg-text); font-weight: 600; }
+.lg-sheet-done { display: block; margin: 8px auto 0; font-weight: 600; }
+@keyframes lgFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes lgUp { from { transform: translateY(100%); } to { transform: none; } }
 
-.ref-footer-link:hover {
-  text-decoration: underline;
-}
+/* ---------- App Lock (shares the sign-in look) ---------- */
+.lk-root { position: fixed; inset: 0; z-index: 99999; }
+.lk-icon { width: 64px; height: 64px; margin: 0 auto 20px; border-radius: 18px; background: var(--lg-fill); color: var(--lg-accent); display: flex; align-items: center; justify-content: center; }
+.lk-note { margin: 0 0 16px; padding: 12px 14px; border-radius: 12px; background: var(--lg-card); box-shadow: 0 0 0 0.5px var(--lg-sep); font-size: 14px; color: var(--lg-sub); text-align: center; }
 
-@media (max-width: 480px) {
-  .ref-login-wrapper {
-    padding: 16px;
-  }
-  .ref-login-card {
-    padding: 24px;
-  }
+@media (prefers-reduced-motion: reduce) {
+  .lg-form-wrap, .lg-shake, .lg-sheet, .lg-sheet-bg { animation: none; }
 }

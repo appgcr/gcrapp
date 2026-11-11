@@ -527,7 +527,7 @@ export default function Step2LegalDocs({
                                 fontWeight: '700',
                                 fontSize: '10px'
                               }}>
-                                <CheckCircle2 size={10} /> Verified
+                                <CheckCircle2 size={10} /> {page.pendingVerification ? 'AI check pending' : 'Verified'}
                               </span>
                             </div>
                           </div>

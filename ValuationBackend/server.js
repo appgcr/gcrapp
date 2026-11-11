@@ -10,6 +10,7 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const { config, logConfigSummary } = require('./config/env');
 const seedDatabase = require('./seed');
+const { startReminderScheduler } = require('./services/reminders');
 
 const app = express();
 const PORT = config.PORT || 5001;
@@ -61,6 +62,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/cases', require('./routes/cases'));
+app.use('/api/bank', require('./routes/bank'));
 app.use('/api/upload', require('./routes/upload'));
 app.use('/api/attendance', require('./routes/attendance'));
 app.use('/api/notifications', require('./routes/notifications'));
@@ -68,6 +70,9 @@ app.use('/api/chat', require('./routes/chat'));
 app.use('/api/extract', require('./routes/extract'));
 app.use('/api/config', require('./routes/config'));
 app.use('/api/location', require('./routes/location'));
+app.use('/api/branches', require('./routes/branches'));
+app.use('/api/banks', require('./routes/banks'));
+app.use('/api/geo', require('./routes/geo'));
 
 // Mongoose Connection Lifecycle Monitoring
 mongoose.connection.on('connected', () => {
@@ -103,6 +108,8 @@ app.get('/api/health', (req, res) => {
   res.status(200).json(healthData);
 });
 
+let memoryMongoServerInstance = null;
+
 // Connect to Database & Start Server
 async function startServer() {
   let connectionUri = config.MONGODB_URI;
@@ -127,8 +134,12 @@ async function startServer() {
 
       await mongoose.connect(connectionUri, connectOptions);
       console.log(`✅ SUCCESS: Connected to MongoDB database in [${config.NODE_ENV}] mode!`);
-      // Seed database only if needed
-      await seedDatabase();
+      // Production & Staging: Never run automatic default database seeding to prevent default credentials
+      if (config.NODE_ENV !== 'production' && config.NODE_ENV !== 'staging') {
+        await seedDatabase();
+      } else {
+        console.log(`🔒 Secure Mode [${config.NODE_ENV}]: Automatic default database seeding is disabled.`);
+      }
     } catch (prodDbErr) {
       console.error(`❌ FATAL: Failed to connect to MongoDB in [${config.NODE_ENV}] mode:`, prodDbErr.message);
       console.error("   Startup aborted safely. In-memory fallback is disabled in non-development environments.");
@@ -140,8 +151,10 @@ async function startServer() {
       console.log("⚠️ No MONGODB_URI provided. Starting local in-memory MongoDB for local development...");
       try {
         const { MongoMemoryServer } = require('mongodb-memory-server');
-        const mongod = await MongoMemoryServer.create();
-        connectionUri = mongod.getUri();
+        if (!memoryMongoServerInstance) {
+          memoryMongoServerInstance = await MongoMemoryServer.create();
+        }
+        connectionUri = memoryMongoServerInstance.getUri();
         console.log(`⚡ Local MongoDB running in-memory: ${connectionUri}`);
       } catch (memErr) {
         console.error("❌ Failed to start in-memory MongoDB:", memErr.message);
@@ -160,8 +173,10 @@ async function startServer() {
       console.warn("⚠️ Configured MongoDB connection failed. Falling back to in-memory database for local testing...");
       try {
         const { MongoMemoryServer } = require('mongodb-memory-server');
-        const mongod = await MongoMemoryServer.create();
-        connectionUri = mongod.getUri();
+        if (!memoryMongoServerInstance) {
+          memoryMongoServerInstance = await MongoMemoryServer.create();
+        }
+        connectionUri = memoryMongoServerInstance.getUri();
         console.log(`⚡ Local MongoDB running in-memory: ${connectionUri}`);
         await mongoose.connect(connectionUri);
         console.log("✅ SUCCESS: Connected to local in-memory database!");
@@ -173,6 +188,13 @@ async function startServer() {
     }
   }
 
+
+  // Attach pre-branch data to a branch and number any unnumbered cases
+  await require('./services/banks').ensureBanks();
+  await require('./services/branchSetup').ensureBranchSetup();
+
+  // Automatic reminders (morning digest, check-in/out, inspections, overdue cases)
+  startReminderScheduler();
 
   app.listen(PORT, () => {
     logConfigSummary(config);

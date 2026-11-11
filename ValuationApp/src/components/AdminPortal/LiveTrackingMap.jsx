@@ -20,7 +20,7 @@ export default function LiveTrackingMap({ caseId, onClose }) {
   useEffect(() => {
     const fetchLocation = async () => {
       try {
-        const res = await fetch(`https://gcr-9ys1.onrender.com/api/cases/${caseId}`);
+        const res = await fetch(`${API_BASE_URL}/api/cases/${caseId}`);
         const data = await res.json();
         if (data.currentLocation && data.currentLocation.lat && data.currentLocation.lng) {
           setLocation({ lat: data.currentLocation.lat, lng: data.currentLocation.lng });

@@ -1,6 +1,19 @@
 const express = require('express');
 const router = express.Router();
+const Branch = require('../models/Branch');
+
+// Branch details sent with the signed-in user (null for the Super Admin)
+const bankFields = (u) => (u && u.role === 'BANK'
+  ? { bankName: u.bankName || '', bankBranch: u.bankBranch || '', designation: u.designation || '', email: u.email || '' } : {});
+const branchInfo = async (u) => {
+  if (!u?.branchId) return null;
+  const b = await Branch.findOne({ id: u.branchId }).select('id code name').lean();
+  return b ? { id: b.id, code: b.code, name: b.name } : null;
+};
 const User = require('../models/User');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const { authenticateToken, JWT_SECRET } = require('../middleware/auth');
 
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
@@ -11,16 +24,41 @@ router.post('/login', async (req, res) => {
     }
 
     const user = await User.findOne({ 
-      username: { $regex: new RegExp(`^${username.trim()}$`, 'i') },
-      password: password 
+      username: { $regex: new RegExp(`^${username.trim()}$`, 'i') }
     });
 
     if (!user) {
       return res.status(401).json({ error: 'Invalid Username or Password' });
     }
 
+    if (user.status && user.status !== 'Active') {
+      return res.status(403).json({ error: 'Account is deactivated. Please contact administrator.' });
+    }
+
+    let isMatch = false;
+    if (user.password.startsWith('$2a$') || user.password.startsWith('$2b$')) {
+      isMatch = await bcrypt.compare(password, user.password);
+    } else {
+      isMatch = (user.password === password);
+      if (isMatch) {
+        user.password = await bcrypt.hash(password, 10);
+        await user.save();
+      }
+    }
+
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Invalid Username or Password' });
+    }
+
+    const token = jwt.sign(
+      { id: user.id, username: user.username, role: user.role },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
     res.json({
       success: true,
+      token,
       user: {
         id: user.id,
         username: user.username,
@@ -29,13 +67,71 @@ router.post('/login', async (req, res) => {
         phone: user.phone,
         licenseNo: user.licenseNo,
         branch: user.branch,
-        status: user.status
+        branchId: user.branchId || null,
+        branchInfo: await branchInfo(user),
+        ...bankFields(user),
+        status: user.status,
+        faceEnrolled: user.faceEnrolled || false,
+        faceDescriptor: user.faceDescriptor || [],
+        facePhotoUrl: user.facePhotoUrl || ''
       }
     });
   } catch (err) {
     console.error("Login error:", err);
     res.status(500).json({ error: 'Server error during authentication' });
   }
+});
+
+// PUT /api/auth/me/signature  { dataUrl }  — save the engineer's digital signature (PNG / JPG, max 400 KB)
+router.put('/me/signature', authenticateToken, async (req, res) => {
+  try {
+    const dataUrl = String((req.body && req.body.dataUrl) || '');
+    if (!/^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/.test(dataUrl)) {
+      return res.status(400).json({ error: 'The signature must be a PNG or JPG image.' });
+    }
+    if (dataUrl.length > 550000) return res.status(400).json({ error: 'The signature image is too large (max 400 KB).' });
+    const bytes = Buffer.from(dataUrl.split(',')[1], 'base64');
+    const isPng = bytes.length > 60 && bytes.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))
+      && bytes.slice(12, 16).toString('latin1') === 'IHDR' && bytes.readUInt32BE(16) > 0 && bytes.readUInt32BE(20) > 0;
+    const isJpg = bytes.length > 100 && bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF;
+    const isWebp = bytes.length > 30 && bytes.slice(0, 4).toString('latin1') === 'RIFF' && bytes.slice(8, 12).toString('latin1') === 'WEBP';
+    if (!isPng && !isJpg && !isWebp) return res.status(400).json({ error: 'This file is not a readable signature image.' });
+    await User.updateOne({ id: req.user.id }, { $set: { savedSignature: dataUrl, savedSignatureAt: new Date() } });
+    res.json({ success: true, savedSignatureAt: new Date() });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not save the signature.' });
+  }
+});
+
+// DELETE /api/auth/me/signature
+router.delete('/me/signature', authenticateToken, async (req, res) => {
+  await User.updateOne({ id: req.user.id }, { $set: { savedSignature: '' }, $unset: { savedSignatureAt: 1 } });
+  res.json({ success: true });
+});
+
+// GET /api/auth/me
+router.get('/me', authenticateToken, async (req, res) => {
+  res.json({
+    success: true,
+    user: {
+      id: req.user.id,
+      username: req.user.username,
+      name: req.user.name,
+      role: req.user.role,
+      phone: req.user.phone,
+      licenseNo: req.user.licenseNo,
+      branch: req.user.branch,
+      branchId: req.user.branchId || null,
+      branchInfo: await branchInfo(req.user),
+      ...bankFields(req.user),
+      status: req.user.status,
+      faceEnrolled: req.user.faceEnrolled || false,
+      faceDescriptor: req.user.faceDescriptor || [],
+      facePhotoUrl: req.user.facePhotoUrl || '',
+      savedSignature: req.user.savedSignature || '',
+      savedSignatureAt: req.user.savedSignatureAt || null
+    }
+  });
 });
 
 const {
@@ -179,8 +275,15 @@ router.post('/webauthn/login-verify', async (req, res) => {
       passkey.counter = verification.authenticationInfo.newCounter;
       await user.save();
 
+      const token = jwt.sign(
+        { id: user.id, username: user.username, role: user.role },
+        JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+
       res.json({
         success: true,
+        token,
         user: {
           id: user.id,
           username: user.username,
@@ -189,6 +292,10 @@ router.post('/webauthn/login-verify', async (req, res) => {
           phone: user.phone,
           licenseNo: user.licenseNo,
           branch: user.branch,
+          branchId: user.branchId || null,
+          branchInfo: await branchInfo(user),
+        branchId: user.branchId || null,
+        branchInfo: await branchInfo(user),
           status: user.status
         }
       });

@@ -44,6 +44,12 @@ export function areValuesEqual(fieldKey, val1, val2) {
   if (fieldKey === 'structureType') {
     return normalizeStructureType(val1) === normalizeStructureType(val2);
   }
+  if (fieldKey === 'plotNo') {
+    const p1 = normalizePlotNo(val1);
+    const p2 = normalizePlotNo(val2);
+    if (!p1 || !p2) return false;
+    return p1 === p2;
+  }
   if (fieldKey === 'marketValue' || fieldKey === 'compositeValue') {
     return normalizeCurrency(val1) === normalizeCurrency(val2);
   }
@@ -64,7 +70,11 @@ export function normalizeFieldValue(fieldKey, rawVal) {
 }
 
 export function reconcileSingleField(fieldKey, candidateEntries) {
-  const validCandidates = candidateEntries.filter(c => !isStrictlyEmpty(c?.value));
+  const validCandidates = candidateEntries.filter(c => {
+    if (isStrictlyEmpty(c?.value)) return false;
+    const norm = normalizeFieldValue(fieldKey, c.value);
+    return !isStrictlyEmpty(norm);
+  });
 
   if (validCandidates.length === 0) {
     return createField(null, null, null, 0, null, 'EMPTY');
@@ -139,13 +149,13 @@ export function reconcileSingleField(fieldKey, candidateEntries) {
     }
     const chosenVal = normalizeFieldValue(fieldKey, bestCandidate.value);
     return createField(
-      chosenVal,
+      null,
       bestCandidate.sourceDocument,
       bestCandidate.sourcePage,
       bestCandidate.confidence || 0.75,
       `Conflict between ${validCandidates.map(c => c.sourceDocument).join(', ')}`,
       'CONFLICT',
-      { values: conflictValues }
+      { values: conflictValues, suggestedValue: chosenVal }
     );
   }
 }

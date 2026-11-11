@@ -4,19 +4,51 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Environment
+# Environment & Secrets (Never commit secrets)
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
+!.env.*.example
+!.env.development.example
+!.env.staging.example
+!.env.production.example
+
+# Android local properties & build configs
+local.properties
+*.keystore
+*.jks
+*.p12
+
+# Cloud Service Accounts & Private Keys
+serviceAccountKey*.json
+*service_account*.json
+google-services.json
+*.pem
+*.key
+*.cert
+*.crt
 
 # Build outputs
 dist/
 build/
+.gradle/
+**/build/
 ValuationBackend/uploads/
+**/uploads/
+**/temp/
 *.apk
 *.aab
+
+# Python & OCR temporary files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+venv*/
+.venv/
+ocr_service/temp/
+ocr_service/__pycache__/
 
 # Large binary / OCR training data (downloaded at runtime by tesseract.js)
 *.traineddata
@@ -40,3 +72,20 @@ coverage/
 
 # Logs
 *.log
+
+
+# Server secret files (Firebase service account etc.) — never commit
+ValuationBackend/secrets/
+
+# ---------------------------------------------------------------------------
+# Customer data, bank sample reports, database backups and test output — NEVER in Git
+# (bank samples contain real customers' names, addresses and site photos)
+# ---------------------------------------------------------------------------
+ValuationBackend/services/reports/*_source/
+ValuationBackend/backups/
+reference_documents/
+report-samples/
+reports_output/
+scratch/
+UI_UX_REVIEW/SCREENSHOTS/
+~$*.docx

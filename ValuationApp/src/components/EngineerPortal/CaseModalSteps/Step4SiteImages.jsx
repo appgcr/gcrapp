@@ -1,3 +1,4 @@
+import { MAX_SITE_PHOTOS } from '../../../utils/sitePhotos';
 import React from 'react';
 import { UploadCloud, X, Camera, ScanLine } from 'lucide-react';
 
@@ -31,7 +32,7 @@ export default function Step4SiteImages({
             <div style={{ flex: 1, minWidth: '220px' }}>
               <h4 style={{ margin: '0 0 4px 0', color: '#0369a1', fontSize: '15px' }}>Live Site Capture & Photos</h4>
               <p style={{ margin: 0, color: '#0284c7', fontSize: '13px', lineHeight: '1.4' }}>
-                Take live photos or upload property images from your device. All photos will be automatically watermarked with GPS coordinates and timestamps.
+                Take photos at the site (up to {MAX_SITE_PHOTOS}). Each photo is stamped with its real GPS location, address, date and time. Gallery photos need the phone's own location record. <strong>{siteImages.length} / {MAX_SITE_PHOTOS}</strong> added.
               </p>
             </div>
             <button
@@ -78,6 +79,7 @@ export default function Step4SiteImages({
               </div>
             ))}
             
+            {siteImages.length < MAX_SITE_PHOTOS && (<>
             <button 
               type="button"
               onClick={() => startCamera('SITE_IMAGES')} 
@@ -108,6 +110,7 @@ export default function Step4SiteImages({
               <UploadCloud size={24} strokeWidth={2.2} />
               <span style={{ fontSize: '11px', fontWeight: '600', textAlign: 'center' }}>Upload<br/>Photos</span>
             </button>
+            </>)}
           </div>
 
           <button 
@@ -117,7 +120,7 @@ export default function Step4SiteImages({
             disabled={siteImages.length === 0} 
             style={{ opacity: siteImages.length === 0 ? 0.5 : 1, marginTop: 'auto' }}
           >
-            <ScanLine size={18} /> Verify & Extract Documents
+            <ScanLine size={18} /> Continue to Signature & Submit
           </button>
         </div>
       ) : (

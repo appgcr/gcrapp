@@ -7,11 +7,39 @@ if (typeof window !== 'undefined' && pdfjs && pdfjs.GlobalWorkerOptions) {
   pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
 }
 
-const FALLBACK_PROPERTY_TYPES = ['Apartment', 'Independent House', 'Open Agriculture Land', 'Open Site'];
-const FALLBACK_PLOT_TYPES = ['Corner plot', 'Intermediary plot'];
-const FALLBACK_ROAD_TYPES = ['CC Road', 'BT', 'Metal', 'Gravel Road', 'Tar Road'];
-const FALLBACK_STRUCTURE_TYPES = ['Load bearing', 'Framed structure', 'Steel Structure'];
-const FALLBACK_FLOORING_TYPES = ['Granite', 'Tiles', 'Marble', 'Mosaic', 'Cement'];
+const FALLBACK_PROPERTY_TYPES = [
+  'Apartment',
+  'Independent House',
+  'Open Agriculture Land',
+  'Open Site',
+  'Commercial Building',
+  'Industrial Unit'
+];
+const FALLBACK_PLOT_TYPES = [
+  'Corner Plot',
+  'Intermediary Plot',
+  'Road-Facing Plot'
+];
+const FALLBACK_ROAD_TYPES = [
+  'CC Road',
+  'BT Road',
+  'Metal Road',
+  'WBM Road',
+  'Mud / Gravel Road'
+];
+const FALLBACK_STRUCTURE_TYPES = [
+  'Framed structure',
+  'Load bearing',
+  'Steel / Precast'
+];
+const FALLBACK_FLOORING_TYPES = [
+  'Granite',
+  'Tiles',
+  'Vitrified Tiles',
+  'Marble',
+  'Cement Flooring',
+  'Mosaic'
+];
 
 const DEFAULT_BANKS = [
   "State Bank of India (SBI)",
@@ -1036,7 +1064,7 @@ export const mapSaleDeedToPropertyDetails = (
 };
 
 // ── Core validation function (shared by file upload + camera capture) ─────────
-const validateDocOCR = async (imageUrlOrFile, docId, isPdf = false, rawFile = null, clientText = '') => {
+const validateDocOCR = async (imageUrlOrFile, docId, isPdf = false, rawFile = null, clientText = '', clientName = '') => {
   const rules = DOC_VALIDATION_RULES[docId];
   if (!rules) return { passed: true }; // unknown doc type — skip validation
 
@@ -1069,7 +1097,8 @@ const validateDocOCR = async (imageUrlOrFile, docId, isPdf = false, rawFile = nu
           pdfBase64: isPdf ? dataUrlToSend : null,
           docId,
           isPdf,
-          clientText
+          clientText,
+          clientName
         }),
         signal: controller.signal
       });
@@ -1077,8 +1106,8 @@ const validateDocOCR = async (imageUrlOrFile, docId, isPdf = false, rawFile = nu
 
       if (res.ok) {
         const result = await res.json();
-        const isDrawingSlot = docId === 'layoutPlan' || docId === 'buildingPlan';
-        const shouldPass = Boolean(result.passed) || isDrawingSlot || Boolean(isPdf) || Boolean(result.success);
+        // Strict: only what the server verified passes (no automatic pass for PDFs or drawings)
+        const shouldPass = Boolean(result.passed);
 
         return {
           passed: shouldPass,
@@ -1088,15 +1117,20 @@ const validateDocOCR = async (imageUrlOrFile, docId, isPdf = false, rawFile = nu
           extractedMeta: result.extractedMeta || result.canonical || result.extractedData || null,
           saleDeedIntelligence: docId === 'saleDeed' ? result : null,
           fields: result.fields || [],
-          warnings: result.warnings || []
+          warnings: result.warnings || [],
+          reason: result.reason || '',
+          warning: result.warning || '',
+          pendingVerification: Boolean(result.pendingVerification),
+          nameMismatch: Boolean(result.nameMismatch)
         };
       }
+      return { passed: false, reason: `The document could not be verified (server error ${res.status}). Please try again.` };
     }
 
-    return { passed: true };
+    return { passed: false, reason: 'The document could not be read. Please upload it again as a PDF or a clear photo.' };
   } catch (err) {
     console.warn(`Doc OCR validation note for ${docId}:`, err.message);
-    return { passed: true };
+    return { passed: false, reason: 'The document could not be verified — please check the internet connection and try again.' };
   }
 };
 
@@ -1358,8 +1392,10 @@ const applyExtractedMeta = (
     next.deedYear = deedYear;
   }
 
-  const surveyNo = getVal(meta.surveyNo);
-  if (surveyNo && /^\d{1,4}(\/\d{1,4})?$/.test(surveyNo) &&
+  // Survey numbers often carry sub-division letters, e.g. 482/1A, 347/2B1, 12A
+  const rawSurvey = getVal(meta.surveyNo);
+  const surveyNo = rawSurvey ? rawSurvey.toUpperCase().replace(/\s+/g, '') : null;
+  if (surveyNo && /^\d{1,5}[A-Z]{0,2}(\/\d{1,4}[A-Z]{0,2}\d{0,2})*$/.test(surveyNo) &&
       (isGarbage(next.surveyNo) || !/^\d/.test(String(next.surveyNo || '')))) {
     next.surveyNo = surveyNo;
     notifications.push(`Survey No. ${surveyNo} detected & auto-filled!`);

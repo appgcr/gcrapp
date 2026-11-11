@@ -1,0 +1,33 @@
+# ==============================================================================
+# GCR NATIVE ANDROID — GRADLE PROPERTIES TEMPLATE (gradle.properties.example)
+# ==============================================================================
+
+# JVM Memory and Encoding Settings
+org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+org.gradle.caching=true
+org.gradle.configuration-cache=true
+
+# Android Architecture Settings
+android.useAndroidX=true
+android.nonTransitiveRClass=true
+kotlin.code.style=official
+
+# Application Environment Switch: development | staging | production
+gcr.app.env=development
+
+# Build-time API Base URL (Must have trailing slash for Retrofit)
+gcr.api.base.url=http://10.0.2.2:5001/
+
+# Feature Flags
+gcr.enable.logging=true
+gcr.enable.offline.mode=true
+gcr.enable.gps=true
+gcr.enable.camera=true
+gcr.enable.notifications=false
+gcr.map.provider=osm
+
+# Release Signing Keystore Configuration (Keep actual secrets in CI/CD Secret Store)
+# RELEASE_STORE_FILE=keystores/release.jks
+# RELEASE_STORE_PASSWORD=
+# RELEASE_KEY_ALIAS=gcr_release_key
+# RELEASE_KEY_PASSWORD=

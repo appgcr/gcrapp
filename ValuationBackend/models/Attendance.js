@@ -5,10 +5,12 @@ const attendanceSchema = new mongoose.Schema({
   userId: { type: String, required: true },
   name: { type: String, required: true },
   timestamp: { type: Date, default: Date.now },
-  lat: { type: String, required: true },
-  lng: { type: String, required: true },
+  // Required for Clock-In / Clock-Out (checked in routes/attendance.js); empty for "Location Off"
+  lat: { type: String, default: '' },
+  lng: { type: String, default: '' },
+  accuracy: { type: Number, default: null },     // metres, from the phone's GPS
   imageUrl: { type: String, default: '' },
-  attendanceType: { type: String, enum: ['Clock-In', 'Clock-Out', 'Location Update'], required: true },
+  attendanceType: { type: String, enum: ['Clock-In', 'Clock-Out', 'Location Update', 'Location Off', 'Location On'], required: true },
   status: { type: String, enum: ['Verified', 'Pending', 'Rejected', 'Background'], default: 'Verified' },
   address: { type: String, default: '' },
   formattedTime: { type: String, default: '' },
@@ -19,5 +21,7 @@ const attendanceSchema = new mongoose.Schema({
   faceMatchScore: { type: Number, default: 0 },
   livenessVerified: { type: Boolean, default: false }
 });
+
+attendanceSchema.index({ userId: 1, timestamp: -1 });
 
 module.exports = mongoose.model('Attendance', attendanceSchema);

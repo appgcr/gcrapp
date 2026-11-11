@@ -1,0 +1,67 @@
+{
+ "clientName": "Sample Customer",
+ "clientFatherName": "S/o. Sri. Sample Father",
+ "address": "Door No : 1/1, Sample Street, Kadapa, Y.S.R. (Dt).",
+ "bankName": "Bank of Baroda",
+ "bankBranch": "Hosptal Road Branch – Kadapa",
+ "fileNumber": "SAMPLE/0001",
+ "inspectionDate": "2026-05-08",
+ "createdAt": "2026-05-08",
+ "reportFormat": {
+  "bankKey": "bob"
+ },
+ "currentLocation": {
+  "lat": 14.533639,
+  "lng": 78.755083
+ },
+ "propertyDetails": {
+  "propertyType": "Open Site",
+  "deedNo": "573/2025",
+  "deedDate": "2025-01-24",
+  "surveyNo": "50-2B",
+  "plotNo": "46, 47",
+  "guidelineRate": "1300",
+  "boundariesDoc": {
+   "north": "Site Of Plot No : 47",
+   "south": "Compound Wall",
+   "east": "30’0” Wide Road",
+   "west": "Compound Wall"
+  },
+  "boundariesActual": {
+   "north": "Site Of Plot No : 48",
+   "south": "Compound Wall",
+   "east": "30’0” Wide Road",
+   "west": "Compound Wall"
+  },
+  "report": {
+   "reportDate": "2026-05-08",
+   "village": "Thollaganganapalle",
+   "mandal": "Valluru",
+   "locationText": "Thollaganganapalle Village, Thollagangapalle Grama Panchayath, Near Vedas Public School, Kadapa To Tadipathri High Way",
+   "extentDeedRaw": "5.234 Cents",
+   "deed1PlotNo": "46",
+   "deed2No": "574/2025",
+   "deed2Date": "2025-01-24",
+   "deed2PlotNo": "47",
+   "deed2ExtentRaw": "5.757 Cents",
+   "bd2North": "Site Of Plot No : 48",
+   "bd2South": "Site Of Plot No : 46",
+   "bd2East": "30’0” Wide Road",
+   "bd2West": "Compound Wall",
+   "marketRatePerCent": "400000",
+   "dimDeedNorth": "76’0” Fts (or) 23.18 M",
+   "dimDeedSouth": "76’0” Fts (or) 23.18 M",
+   "dimDeedEast": "30’0” Fts (or) 9.15 M",
+   "dimDeedWest": "30’0” Fts (or) 9.15 M",
+   "dim2North": "76’0” Fts (or) 23.18 M",
+   "dim2South": "76’0” Fts (or) 23.18 M",
+   "dim2East": "33’0” Fts (or) 10.06 M",
+   "dim2West": "33’0” Fts (or) 10.06 M",
+   "dimTotalNorth": "76’0” Fts (or) 23.18 M",
+   "dimTotalSouth": "76’0” Fts (or) 23.18 M",
+   "dimTotalEast": "63’0” Fts (or) 19.21 M",
+   "dimTotalWest": "63’0” Fts (or) 19.21 M"
+  }
+ },
+ "_demo": "Letterhead preview only — not a real case."
+}

@@ -1,0 +1,48 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Background Rich Depth Gradient -->
+    <linearGradient id="bgGrad" x1="60" y1="20" x2="452" y2="492" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1E3A8A" />
+      <stop offset="45%" stop-color="#1D4ED8" />
+      <stop offset="100%" stop-color="#2563EB" />
+    </linearGradient>
+
+    <!-- Golden Chevron Gradient -->
+    <linearGradient id="goldGrad" x1="120" y1="120" x2="392" y2="240" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FDE047" />
+      <stop offset="40%" stop-color="#F59E0B" />
+      <stop offset="100%" stop-color="#D97706" />
+    </linearGradient>
+
+    <!-- Glass Highlights -->
+    <linearGradient id="glassBorder" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.05" />
+    </linearGradient>
+
+    <!-- Subtle Ambient Shadow -->
+    <filter id="badgeShadow" x="0" y="10" width="512" height="502" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#1E3A8A" flood-opacity="0.35" />
+    </filter>
+  </defs>
+
+  <!-- Outer Rounded Squircle Base -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bgGrad)" filter="url(#badgeShadow)" />
+  <rect x="17.5" y="17.5" width="477" height="477" rx="110.5" stroke="url(#glassBorder)" stroke-width="3" />
+
+  <!-- Subtle Inner Light Arc -->
+  <path d="M32 128C32 75 75 32 128 32H384C437 32 480 75 480 128V180C420 160 300 150 256 150C200 150 90 160 32 180V128Z" fill="white" fill-opacity="0.06" />
+
+  <!-- 1. Architectural Apex Chevron (Gold) -->
+  <path d="M120 216L256 122L392 216" stroke="url(#goldGrad)" stroke-width="32" stroke-linecap="round" stroke-linejoin="round" />
+
+  <!-- 2. Luminous Cyan Diamond Crest -->
+  <path d="M256 166L284 194L256 222L228 194Z" fill="#38BDF8" stroke="#E0F2FE" stroke-width="3" />
+
+  <!-- 3. Bold Crisp Typography "GCR" -->
+  <text x="256" y="345" font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Display', 'Segoe UI', Arial, sans-serif" font-weight="900" font-size="124" fill="#FFFFFF" text-anchor="middle" letter-spacing="4">GCR</text>
+
+  <!-- 4. Modern "VALUATION" Pill Badge -->
+  <rect x="116" y="380" width="280" height="52" rx="26" fill="rgba(255, 255, 255, 0.16)" stroke="rgba(255, 255, 255, 0.22)" stroke-width="2" />
+  <text x="256" y="416" font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Display', Arial, sans-serif" font-weight="800" font-size="26" fill="#FDE047" text-anchor="middle" letter-spacing="4.5">VALUATION</text>
+</svg>

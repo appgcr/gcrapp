@@ -1,0 +1,25 @@
+# GCR Property Valuation OCR Engine Requirements
+# Python 3.10+ / Linux & macOS & Windows
+
+# Computer Vision & Preprocessing
+opencv-python-headless>=4.8.0
+numpy>=1.24.0,<2.0.0
+Pillow>=10.0.0
+
+# PDF Parsing & Image Rendering
+pypdfium2>=4.20.0
+pdf2image>=1.16.3
+
+# Offline OCR Engines (English + Telugu)
+paddlepaddle>=2.5.0; platform_system != "Darwin" or platform_machine != "arm64"
+paddleocr>=2.7.0
+pytesseract>=0.3.10
+easyocr>=1.7.1
+
+# HTTP Server & Networking
+requests>=2.31.0
+urllib3>=2.0.0
+python-dotenv>=1.0.0
+
+# Optional Gemini Cloud Vision Client
+google-generativeai>=0.4.0

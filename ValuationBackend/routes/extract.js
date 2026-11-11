@@ -1,11 +1,15 @@
 const express = require('express');
 const router = express.Router();
+// Logged-in users only (this costs AI quota / looks up locations)
+router.use(require('../middleware/auth').authenticateToken);
 const ValuationCase = require('../models/ValuationCase');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const { config } = require('../config/env');
 
 const {
+
   createField,
   createEmptyCanonicalMetadata,
   isStrictlyEmpty,
@@ -119,6 +123,7 @@ const STRICT_DOC_KEYWORDS = {
 
 // ── 100% Free & Unlimited Local Document AI Engine Bridge ───────────────────
 const OCR_DAEMON_URL = 'http://127.0.0.1:5002';
+const { verifyDocument } = require('../services/docVerifier');
 
 const runPythonOCR = async (inputData, isPdf = false) => {
   // 1. First attempt: Fast Persistent OCR Microservice (instant, model already in RAM)
@@ -147,8 +152,19 @@ const runPythonOCR = async (inputData, isPdf = false) => {
   return new Promise((resolve) => {
     try {
       const scriptPath = path.join(__dirname, '..', 'ocr_service', 'ocr_engine.py');
-      const venvPy = 'd:\\gcr\\venv_ocr\\Scripts\\python.exe';
-      const pythonExe = fs.existsSync(venvPy) ? venvPy : 'python';
+      const resolvePythonExe = () => {
+        if (process.env.PYTHON_PATH && fs.existsSync(process.env.PYTHON_PATH)) return process.env.PYTHON_PATH;
+        const venvPy = 'd:\\gcr\\venv_ocr\\Scripts\\python.exe';
+        if (fs.existsSync(venvPy)) return venvPy;
+        if (process.platform === 'darwin') {
+          if (fs.existsSync('/usr/local/bin/python3')) return '/usr/local/bin/python3';
+          if (fs.existsSync('/opt/homebrew/bin/python3')) return '/opt/homebrew/bin/python3';
+          if (fs.existsSync('/usr/bin/python3')) return '/usr/bin/python3';
+          return 'python3';
+        }
+        return process.platform === 'win32' ? 'python' : 'python3';
+      };
+      const pythonExe = resolvePythonExe();
 
       const tempInputFile = path.join(__dirname, '..', 'ocr_service', `temp_${Date.now()}_ocr.txt`);
       fs.writeFileSync(tempInputFile, inputData, 'utf-8');
@@ -715,10 +731,16 @@ router.post('/validate-doc', async (req, res) => {
       return res.status(400).json({ passed: false, reason: 'No document data provided.' });
     }
 
+    // Strict AI check (document type + customer name). Without the AI service it is marked pending.
+    const ai = await verifyDocument({ dataUrl, docId, clientName: req.body.clientName || '' });
+    if (!ai.pendingVerification) {
+      return res.json({ ...ai, ocrText: '', snippets: [], numPages: 1 });
+    }
+
     const rules = STRICT_DOC_KEYWORDS[docId] || STRICT_DOC_KEYWORDS.saleDeed;
 
     // 1. Run 100% Free Local OCR & Clarity Engine
-    const pyResult = await runPythonOCR(dataUrl, isPdf);
+    const pyResult = await runPythonOCR(dataUrl, isPdf).catch(() => ({ text: '' }));
 
     // 2. Strict Clarity & Blur Gate (only for photos/images, never block PDFs)
     if (pyResult.is_blurred && !isPdf) {
@@ -733,6 +755,10 @@ router.post('/validate-doc', async (req, res) => {
 
     // 3. Strict Legal Keyword Validation (combines backend OCR + frontend extracted text)
     const combinedText = `${pyResult.text || ''}\n${clientText || ''}`.trim();
+    if (!combinedText) {
+      return res.json({ passed: true, pendingVerification: true, warning: ai.warning, extractedMeta: null,
+                        ocrText: '', snippets: [], numPages: pyResult.num_pages || 1, engine: ai.engine });
+    }
     const extractedText = combinedText.toLowerCase();
     const tier1Hit = rules.tier1.some(kw => matchesKeyword(extractedText, kw));
     const tier2Hits = rules.tier2.filter(kw => matchesKeyword(extractedText, kw));
@@ -747,7 +773,7 @@ router.post('/validate-doc', async (req, res) => {
       // For PDFs or valid documents, allow upload with an advisory notice
       const generalLegalKeywords = ['deed', 'document', 'stamp', 'registration', 'registrar', 'property', 'survey', 'schedule', 'extent', 'plot', 'kadapa', 'andhra', 'telangana', 'tax', 'plan', 'permit', 'sro', 'rupees', 'rs', 'విక్రయ', 'దస్తావేజు', 'హద్దులు'];
       const hasGeneralLegal = generalLegalKeywords.some(kw => extractedText.includes(kw));
-      if (hasGeneralLegal || isPdf || isDrawingSlot) {
+      if (hasGeneralLegal && isDrawingSlot) {
         return res.json({
           passed: true,
           warning: `Document verified. Please review pre-filled fields.`,
@@ -793,12 +819,19 @@ router.post('/sale-deed', async (req, res) => {
       return res.status(400).json({ passed: false, reason: 'No document data provided.' });
     }
 
-    const pyResult = await runPythonOCR(input, isPdf);
+    const ai = await verifyDocument({ dataUrl: input, docId: 'saleDeed', clientName: req.body.clientName || '' });
+    if (!ai.pendingVerification) {
+      return res.json({ ...ai, success: ai.passed, canonical: ai.extractedMeta, ocrText: '', snippets: [], numPages: 1 });
+    }
+
+    const pyResult = await runPythonOCR(input, isPdf).catch(() => ({ text: '' }));
     const canonicalMeta = extractCanonicalFromOCR(pyResult, 'saleDeed', clientText);
 
     return res.json({
       passed: true,
       success: true,
+      pendingVerification: true,
+      warning: ai.warning,
       extractedMeta: canonicalMeta,
       canonical: canonicalMeta,
       ocrText: pyResult.text || '',
@@ -987,9 +1020,96 @@ router.post('/sale-deed/feedback', (req, res) => {
   }
 });
 
-// Backward-compatibility exports
-router.inspectWithGeminiVision = async () => null;
-router.normalizeGeminiResult = (rawMeta, docId) => createEmptyCanonicalMetadata();
+// Gemini Vision API Extraction Service (Optional Cloud Vision Fallback)
+async function inspectWithGeminiVision(base64Data, mimeType = 'image/jpeg', docType = 'saleDeed') {
+  if (!config.GEMINI_ENABLED) return null;
+  const apiKey = config.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+  const models = [...new Set([config.GEMINI_MODEL, 'gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-flash-latest'].filter(Boolean))];
+
+  const prompt = `You are an expert Indian civil engineering panel valuer inspecting legal documents for SBI property valuation.
+Analyze this ${docType} document and extract key valuation metadata.
+Respond with ONLY valid JSON:
+{
+  "deedNo": "string or null",
+  "deedYear": "string or null",
+  "deedDate": "string or null",
+  "surveyNo": "string or null",
+  "plotNo": "string or null",
+  "netExtent": "string or null",
+  "unit": "Sq. Yards, Cents, or Sq. Ft",
+  "boundaries": {
+    "north": "string or null",
+    "south": "string or null",
+    "east": "string or null",
+    "west": "string or null"
+  },
+  "borrowerName": "string or null",
+  "ownerName": "string or null",
+  "doorNo": "string or null",
+  "assessmentNo": "string or null"
+}`;
+
+  for (const m of models) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${apiKey}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: prompt },
+              { inlineData: { mimeType, data: base64Data } }
+            ]
+          }],
+          generationConfig: { responseMimeType: 'application/json' }
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) {
+          return JSON.parse(text);
+        }
+      }
+    } catch (err) {
+      console.warn(`Gemini Vision fallback (${m}) failed:`, err.message);
+    }
+  }
+  return null;
+}
+
+function normalizeGeminiResult(rawMeta, docId = 'saleDeed') {
+  const canonical = createEmptyCanonicalMetadata();
+  if (!rawMeta || typeof rawMeta !== 'object') return canonical;
+
+  if (rawMeta.deedNo) canonical.deedNo = createField(normalizeDeedNo(rawMeta.deedNo), docId, 1, 0.95, rawMeta.deedNo, 'EXTRACTED');
+  if (rawMeta.deedYear) canonical.deedYear = createField(String(rawMeta.deedYear), docId, 1, 0.95, String(rawMeta.deedYear), 'EXTRACTED');
+  if (rawMeta.deedDate) canonical.deedDate = createField(rawMeta.deedDate, docId, 1, 0.90, rawMeta.deedDate, 'EXTRACTED');
+  if (rawMeta.surveyNo) canonical.surveyNo = createField(normalizeSurveyNo(rawMeta.surveyNo), docId, 1, 0.95, rawMeta.surveyNo, 'EXTRACTED');
+  if (rawMeta.plotNo) canonical.plotNo = createField(normalizePlotNo(rawMeta.plotNo), docId, 1, 0.95, rawMeta.plotNo, 'EXTRACTED');
+  if (rawMeta.netExtent) {
+    const ext = normalizeExtent(rawMeta.netExtent);
+    if (ext) canonical.netExtent = createField(ext, docId, 1, 0.90, String(rawMeta.netExtent), 'EXTRACTED');
+  }
+  if (rawMeta.boundaries) {
+    if (rawMeta.boundaries.north) canonical.boundaryNorth = createField(cleanBoundaryText(rawMeta.boundaries.north), docId, 1, 0.90, rawMeta.boundaries.north, 'EXTRACTED');
+    if (rawMeta.boundaries.south) canonical.boundarySouth = createField(cleanBoundaryText(rawMeta.boundaries.south), docId, 1, 0.90, rawMeta.boundaries.south, 'EXTRACTED');
+    if (rawMeta.boundaries.east) canonical.boundaryEast = createField(cleanBoundaryText(rawMeta.boundaries.east), docId, 1, 0.90, rawMeta.boundaries.east, 'EXTRACTED');
+    if (rawMeta.boundaries.west) canonical.boundaryWest = createField(cleanBoundaryText(rawMeta.boundaries.west), docId, 1, 0.90, rawMeta.boundaries.west, 'EXTRACTED');
+  }
+  if (rawMeta.ownerName || rawMeta.borrowerName) {
+    canonical.ownerName = createField(rawMeta.ownerName || rawMeta.borrowerName, docId, 1, 0.90, rawMeta.ownerName || rawMeta.borrowerName, 'EXTRACTED');
+  }
+  if (rawMeta.doorNo) canonical.doorNo = createField(rawMeta.doorNo, docId, 1, 0.90, rawMeta.doorNo, 'EXTRACTED');
+  if (rawMeta.assessmentNo) canonical.assessmentNo = createField(rawMeta.assessmentNo, docId, 1, 0.90, rawMeta.assessmentNo, 'EXTRACTED');
+
+  return canonical;
+}
+
+router.inspectWithGeminiVision = inspectWithGeminiVision;
+router.normalizeGeminiResult = normalizeGeminiResult;
 router.runPythonOCR = runPythonOCR;
 router.extractCanonicalFromOCR = extractCanonicalFromOCR;
 

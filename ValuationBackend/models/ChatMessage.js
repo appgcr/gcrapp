@@ -21,9 +21,13 @@ const ChatMessageSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  // Who actually wrote it when sent from the shared office inbox ('ADMIN'), e.g. "Kadapa Branch Admin"
+  sentBy: { type: String, default: '' },
+  sentByName: { type: String, default: '' },
+  readAt: { type: Date, default: null },
   attachmentType: {
     type: String,
-    enum: ['document', 'gallery', 'location', 'contact', null],
+    enum: ['document', 'gallery', 'photo', 'location', 'contact', null],
     default: null
   },
   attachmentMetadata: {
@@ -39,5 +43,7 @@ const ChatMessageSchema = new mongoose.Schema({
     default: Date.now
   }
 });
+
+ChatMessageSchema.index({ senderId: 1, receiverId: 1, timestamp: -1 });
 
 module.exports = mongoose.model('ChatMessage', ChatMessageSchema);

@@ -1,0 +1,17 @@
+## ==============================================================================
+## GCR NATIVE ANDROID — LOCAL PROPERTIES TEMPLATE (local.properties.example)
+## ==============================================================================
+## This file must NOT be checked into version control.
+## Copy this file to local.properties and supply your local SDK and build properties.
+## ==============================================================================
+
+# Location of the Android SDK on your development machine
+# macOS default:   sdk.dir=/Users/<username>/Library/Android/sdk
+# Linux default:   sdk.dir=/home/<username>/Android/Sdk
+# Windows default: sdk.dir=C\:\\Users\\<username>\\AppData\\Local\\Android\\Sdk
+sdk.dir=/Users/apple/Library/Android/sdk
+
+# Optional: Override backend REST API endpoint for local testing
+# Android Emulator host loopback: http://10.0.2.2:5001/
+# Physical device over WiFi:      http://192.168.1.xxx:5001/
+gcr.api.base.url=http://10.0.2.2:5001/

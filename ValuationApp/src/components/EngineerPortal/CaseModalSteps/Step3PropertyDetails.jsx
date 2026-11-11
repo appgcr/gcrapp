@@ -1,6 +1,8 @@
 import React from 'react';
 import { Plus, X, ChevronRight } from 'lucide-react';
-import { FLOOR_LABELS, formatCurrency, toFieldValue } from './caseModalHelpers';
+import { FLOOR_LABELS, formatCurrency, formatArea, isBuiltProperty, toFieldValue } from './caseModalHelpers';
+import BankReportDetails, { isApgb } from './BankReportDetails';
+import { useBanks, matchBank } from '../../../utils/banks';
 
 export default function Step3PropertyDetails({
   propertyDetails = {},
@@ -13,8 +15,14 @@ export default function Step3PropertyDetails({
   renderFieldBadge,
   renderConflictOptions,
   setManuallyModifiedFields,
-  handleNextToSiteImages
+  handleNextToSiteImages,
+  bankName = ''
 }) {
+  // Banks with their own exact report format get the extra report fields
+  const banks = useBanks();
+  const bankRec = matchBank(banks, bankName);
+  const hasOwnFormat = bankRec ? bankRec.format && bankRec.format !== 'standard' : isApgb(bankName);
+  const built = isBuiltProperty(propertyDetails.propertyType || '');
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', gap: '16px', paddingBottom: '16px' }}>
       
@@ -24,19 +32,10 @@ export default function Step3PropertyDetails({
           Report Category <span style={{ color: '#ef4444' }}>*</span>
           {renderFieldBadge && renderFieldBadge('propertyType')}
         </label>
-        <select
-          value={toFieldValue(propertyDetails.propertyType)}
-          onChange={e => {
-            setManuallyModifiedFields && setManuallyModifiedFields(prev => new Set(prev).add('propertyType'));
-            setPropertyDetails({...propertyDetails, propertyType: e.target.value});
-          }}
-          style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '2px solid #bae6fd', fontSize: '14px', outline: 'none', backgroundColor: 'white', fontWeight: '600' }}
-        >
-          <option value="">Select Category...</option>
-          {propertyTypes.map(pt => (
-            <option key={pt} value={pt}>{pt}</option>
-          ))}
-        </select>
+        <div data-testid="step3-category" style={{ padding: '10px 12px', borderRadius: '8px', border: '2px solid #bae6fd', fontSize: '14px', backgroundColor: 'white', fontWeight: '600', color: '#0f172a' }}>
+          {toFieldValue(propertyDetails.propertyType) || 'Not chosen — go back to Step 1'}
+        </div>
+        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '6px' }}>Chosen in Step 1 with the bank. Go back to Step 1 to change it.</div>
         {renderConflictOptions && renderConflictOptions('propertyType')}
       </div>
 
@@ -309,6 +308,7 @@ export default function Step3PropertyDetails({
       )}
 
       {/* APGB Format Details */}
+      {isApgb(bankName) && (
       <div style={{ backgroundColor: '#fef3c7', padding: '12px', borderRadius: '12px', border: '1px solid #fde047' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '700', color: '#b45309', marginBottom: '12px' }}>
           APGB Valuation Details
@@ -415,6 +415,7 @@ export default function Step3PropertyDetails({
           </div>
         </div>
       </div>
+      )}
 
       {/* Boundaries (As per documents) */}
       <div style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
@@ -557,9 +558,91 @@ export default function Step3PropertyDetails({
           </div>
         </div>
       </div>
-      
+
+      {/* Boundary Dimensions (Measurements) */}
+      <div style={{ backgroundColor: '#f0fdf4', padding: '12px', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+          <label style={{ fontSize: '14px', fontWeight: '700', color: '#166534', margin: 0 }}>
+            Boundary Dimensions / Measurements
+          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '11px', fontWeight: '600', color: '#166534' }}>Unit:</span>
+            <select
+              value={propertyDetails.dimensionUnit || 'Feet'}
+              onChange={e => {
+                setManuallyModifiedFields && setManuallyModifiedFields(prev => new Set(prev).add('dimensionUnit'));
+                setPropertyDetails({...propertyDetails, dimensionUnit: e.target.value});
+              }}
+              style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #86efac', fontSize: '12px', outline: 'none', backgroundColor: '#ffffff', color: '#166534', fontWeight: '600' }}
+            >
+              <option value="Feet">Feet (ft)</option>
+              <option value="Metres">Metres (m)</option>
+              <option value="Links">Links</option>
+            </select>
+          </div>
+        </div>
+
+        {/* As per Document */}
+        <div style={{ marginBottom: '10px' }}>
+          <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#15803d', marginBottom: '6px' }}>
+            Measurements As Per Document
+          </span>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+            {['north', 'south', 'east', 'west'].map(dir => (
+              <div key={`dim-doc-${dir}`}>
+                <label style={{ display: 'block', fontSize: '10px', fontWeight: '600', color: '#166534', textTransform: 'capitalize', marginBottom: '2px' }}>
+                  {dir}
+                </label>
+                <input
+                  type="text"
+                  placeholder={`0.00 ${propertyDetails.dimensionUnit || 'Feet'}`}
+                  value={toFieldValue(propertyDetails.dimensionsDoc?.[dir])}
+                  onChange={e => {
+                    setManuallyModifiedFields && setManuallyModifiedFields(prev => new Set(prev).add(`dimensionsDoc.${dir}`));
+                    setPropertyDetails({
+                      ...propertyDetails,
+                      dimensionsDoc: { ...(propertyDetails.dimensionsDoc || {}), [dir]: e.target.value }
+                    });
+                  }}
+                  style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #86efac', fontSize: '12px', outline: 'none', backgroundColor: '#ffffff' }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* As per Actual Inspection */}
+        <div>
+          <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#15803d', marginBottom: '6px' }}>
+            Measurements Actual on Ground
+          </span>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+            {['north', 'south', 'east', 'west'].map(dir => (
+              <div key={`dim-act-${dir}`}>
+                <label style={{ display: 'block', fontSize: '10px', fontWeight: '600', color: '#166534', textTransform: 'capitalize', marginBottom: '2px' }}>
+                  {dir}
+                </label>
+                <input
+                  type="text"
+                  placeholder={`0.00 ${propertyDetails.dimensionUnit || 'Feet'}`}
+                  value={toFieldValue(propertyDetails.dimensionsActual?.[dir])}
+                  onChange={e => {
+                    setManuallyModifiedFields && setManuallyModifiedFields(prev => new Set(prev).add(`dimensionsActual.${dir}`));
+                    setPropertyDetails({
+                      ...propertyDetails,
+                      dimensionsActual: { ...(propertyDetails.dimensionsActual || {}), [dir]: e.target.value }
+                    });
+                  }}
+                  style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #86efac', fontSize: '12px', outline: 'none', backgroundColor: '#ffffff' }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
       {/* Structural & Site Visit Details */}
       <div style={{ display: 'flex', gap: '12px' }}>
+        {built && (
         <div style={{ flex: 1 }}>
           <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '4px' }}>
             Age of Building <span style={{ color: '#ef4444' }}>*</span>
@@ -577,6 +660,7 @@ export default function Step3PropertyDetails({
           />
           {renderConflictOptions && renderConflictOptions('buildingAge')}
         </div>
+        )}
         <div style={{ flex: 1 }}>
           <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '4px' }}>
             Road Width <span style={{ color: '#ef4444' }}>*</span>
@@ -640,6 +724,7 @@ export default function Step3PropertyDetails({
           </select>
           {renderConflictOptions && renderConflictOptions('roadType')}
         </div>
+        {built && (
         <div style={{ flex: 1 }}>
           <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '4px' }}>
             Type of Structure <span style={{ color: '#ef4444' }}>*</span>
@@ -660,8 +745,10 @@ export default function Step3PropertyDetails({
           </select>
           {renderConflictOptions && renderConflictOptions('structureType')}
         </div>
+        )}
       </div>
 
+      {built && (
       <div>
         <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '4px' }}>
           Type of Flooring <span style={{ color: '#ef4444' }}>*</span>
@@ -682,6 +769,12 @@ export default function Step3PropertyDetails({
         </select>
         {renderConflictOptions && renderConflictOptions('flooringType')}
       </div>
+      )}
+
+      {/* Details the bank's own report format asks for */}
+      {hasOwnFormat && propertyDetails.propertyType && (
+        <BankReportDetails bankName={bankName} propertyDetails={propertyDetails} setPropertyDetails={setPropertyDetails} />
+      )}
 
       {/* Additions Work / Cost Estimates */}
       {['Apartment', 'Independent House'].includes(propertyDetails.propertyType) && (
@@ -780,6 +873,7 @@ export default function Step3PropertyDetails({
         </div>
       )}
 
+      {built && (<>
       {/* Site Value & Floors */}
       <div style={{ padding: '16px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', marginTop: '8px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
@@ -812,7 +906,7 @@ export default function Step3PropertyDetails({
               value={toFieldValue(propertyDetails.siteValue?.plinthArea)}
               onChange={e => {
                 setManuallyModifiedFields && setManuallyModifiedFields(prev => new Set(prev).add('siteValue'));
-                setPropertyDetails({...propertyDetails, siteValue: {...(propertyDetails.siteValue || {}), plinthArea: formatCurrency(e.target.value)}});
+                setPropertyDetails({...propertyDetails, siteValue: {...(propertyDetails.siteValue || {}), plinthArea: formatArea(e.target.value)}});
               }}
             />
           </div>
@@ -840,7 +934,7 @@ export default function Step3PropertyDetails({
                 onChange={e => {
                   setManuallyModifiedFields && setManuallyModifiedFields(prev => new Set(prev).add('siteValue'));
                   const newFloors = [...(propertyDetails.siteValue?.floors || [])];
-                  newFloors[index].value = formatCurrency(e.target.value);
+                  newFloors[index] = { ...newFloors[index], value: formatArea(e.target.value) };
                   setPropertyDetails({...propertyDetails, siteValue: {...(propertyDetails.siteValue || {}), floors: newFloors}});
                 }}
               />
@@ -848,6 +942,7 @@ export default function Step3PropertyDetails({
           ))}
         </div>
       </div>
+      </>)}
 
       <button type="button" className="btn-primary" onClick={handleNextToSiteImages} style={{ marginTop: '16px' }}>
         Next: Site Images <ChevronRight size={18} />

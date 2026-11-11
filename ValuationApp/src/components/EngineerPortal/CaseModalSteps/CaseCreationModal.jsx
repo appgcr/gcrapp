@@ -7,9 +7,12 @@ import 'react-pdf/dist/Page/TextLayer.css';
 if (typeof window !== 'undefined' && pdfjs && pdfjs.GlobalWorkerOptions) {
   pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
 }
+import { useBanks, matchBank } from '../../../utils/banks';
+import ReportViewer, { fetchReport } from '../../Shared/ReportViewer';
 import localforage from 'localforage';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../../../config/api';
+import { queueOfflineCase } from '../../../services/offlineSyncService';
 import { reconcileDocuments } from '../../../utils/reconciliation';
 import { isStrictlyEmpty } from '../../../utils/canonicalSchema';
 
@@ -19,7 +22,8 @@ import Step3PropertyDetails from './Step3PropertyDetails';
 import Step4SiteImages from './Step4SiteImages';
 import Step5ExtractedDataReview from './Step5ExtractedDataReview';
 import Step6FinalReviewSignature from './Step6FinalReviewSignature';
-import { getPageDisplayInfo, formatFileSize } from './caseModalHelpers';
+import { getPageDisplayInfo, formatFileSize, isBuiltProperty } from './caseModalHelpers';
+import { MAX_SITE_PHOTOS, currentPosition, addressFor, drawStamp, fileHash, readExifGps, imageToCanvas } from '../../../utils/sitePhotos';
 
 import {
   FALLBACK_PROPERTY_TYPES,
@@ -27,7 +31,6 @@ import {
   FALLBACK_ROAD_TYPES,
   FALLBACK_STRUCTURE_TYPES,
   FALLBACK_FLOORING_TYPES,
-  DEFAULT_BANKS,
   DOC_VALIDATION_RULES,
   computeBufferHash,
   getPdfPageCount,
@@ -57,15 +60,9 @@ export default function CaseCreationModal({
   const [clientFatherName, setClientFatherName] = useState('');
   
   // Bank & District State (Dynamic)
-  const [availableBanks, setAvailableBanks] = useState(() => {
-    try {
-      const saved = localStorage.getItem('valuation_custom_banks');
-      const custom = saved ? JSON.parse(saved) : [];
-      return Array.from(new Set([...DEFAULT_BANKS, ...custom]));
-    } catch {
-      return DEFAULT_BANKS;
-    }
-  });
+  // One bank list for the whole app (Super Admin → Settings → Banks)
+  const bankRecords = useBanks();
+  const availableBanks = bankRecords.map(b => b.name);
   const [availableDistricts, setAvailableDistricts] = useState(() => {
     try {
       const saved = localStorage.getItem('valuation_custom_districts');
@@ -95,6 +92,13 @@ export default function CaseCreationModal({
   const [siteImages, setSiteImages] = useState([]);
   const [locationData, setLocationData] = useState('Fetching location...');
   const [editingCaseId, setEditingCaseId] = useState(propEditingCaseId || null);
+  // Each case keeps its own saved draft (per engineer), so one case's half-filled form
+  // never appears inside another case.
+  const draftKey = `caseDraft:${currentUser?.id || 'me'}:${editingCaseId || 'new'}`;
+  // Don't auto-save until an assigned case has finished loading — otherwise an empty
+  // form would be saved and later "restored" over the real case details.
+  const [draftReady, setDraftReady] = useState(!propEditingCaseId);
+  const usableDraft = (d) => d && d.modalStep > 0 && String(d.clientName || '').trim();
 
   useEffect(() => {
     setEditingCaseId(propEditingCaseId || null);
@@ -124,8 +128,9 @@ export default function CaseCreationModal({
   useEffect(() => {
     const autoRestoreDraft = async () => {
       try {
-        const draft = await localforage.getItem('caseDraft');
-        if (!draft || !draft.modalStep || draft.modalStep <= 0) return;
+        if (editingCaseId) return; // assigned cases restore their draft after loading from the server
+        const draft = await localforage.getItem(draftKey);
+        if (!usableDraft(draft)) return;
 
         // Restore all state directly
         setClientName(draft.clientName || '');
@@ -170,8 +175,8 @@ export default function CaseCreationModal({
     try {
       const res = await fetch(`${API_BASE_URL}/api/attendance?userId=${currentUser?.id || 'ENG-001'}`);
       const data = await res.json();
-      const today = new Date().toLocaleDateString();
-      const todayLogs = Array.isArray(data) ? data.filter(log => new Date(log.timestamp).toLocaleDateString() === today) : [];
+      // On duty = the latest Check-In / Check-Out (location on/off events and updates don't change it)
+      const todayLogs = Array.isArray(data) ? data.filter(log => log.attendanceType === 'Clock-In' || log.attendanceType === 'Clock-Out') : [];
       const sortedLogs = [...todayLogs].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
       const lastLog = sortedLogs.length > 0 ? sortedLogs[0] : null;
       const lastAction = lastLog ? lastLog.attendanceType : null;
@@ -187,7 +192,7 @@ export default function CaseCreationModal({
     }
 
     try {
-      const draft = await localforage.getItem('caseDraft');
+      const draft = await localforage.getItem(draftKey);
       if (draft) {
         setShowDraftPrompt(draft);
       } else {
@@ -230,7 +235,7 @@ export default function CaseCreationModal({
   };
 
   const handleDiscardDraft = async () => {
-    await localforage.removeItem('caseDraft');
+    await localforage.removeItem(draftKey);
     setShowDraftPrompt(null);
     
     // Reset state
@@ -251,8 +256,8 @@ export default function CaseCreationModal({
     try {
       const res = await fetch(`${API_BASE_URL}/api/attendance?userId=${currentUser?.id || 'ENG-001'}`);
       const data = await res.json();
-      const today = new Date().toLocaleDateString();
-      const todayLogs = Array.isArray(data) ? data.filter(log => new Date(log.timestamp).toLocaleDateString() === today) : [];
+      // On duty = the latest Check-In / Check-Out (location on/off events and updates don't change it)
+      const todayLogs = Array.isArray(data) ? data.filter(log => log.attendanceType === 'Clock-In' || log.attendanceType === 'Clock-Out') : [];
       const sortedLogs = [...todayLogs].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
       const lastLog = sortedLogs.length > 0 ? sortedLogs[0] : null;
       const lastAction = lastLog ? lastLog.attendanceType : null;
@@ -388,6 +393,29 @@ export default function CaseCreationModal({
   // Final Review & Signature State
   const sigCanvas = useRef({});
   const [signatureDataUrl, setSignatureDataUrl] = useState(null);
+  // Final check: the engineer sees the finished bank-format report before submitting it
+  const [reviewSignature, setReviewSignature] = useState(null);
+  const openReportReview = (sig) => setReviewSignature(sig || '');
+  // The engineer's saved digital signature (Settings → Digital Signature)
+  const [savedSignature, setSavedSignature] = useState('');
+  useEffect(() => {
+    if (modalStep !== 7) return;
+    fetch(`${API_BASE_URL}/api/auth/me`, { cache: 'no-store' }).then(r => (r.ok ? r.json() : {}))
+      .then(d => setSavedSignature(d?.user?.savedSignature || '')).catch(() => {});
+  }, [modalStep]);
+  // Figures from the bank's own report (APGB…) for the final-step summary
+  const [bankValues, setBankValues] = useState(null);
+  useEffect(() => {
+    if (modalStep !== 7 || !editingCaseId || !bankName) { setBankValues(null); return; }  // 7 = Final Review
+    let alive = true;
+    fetch(`${API_BASE_URL}/api/cases/${editingCaseId}/report-preview?values=1`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientName, clientFatherName, bankName, bankBranch, bankDistrict, propertyDetails }),
+    }).then(r => (r.ok ? r.json() : {})).then(v => { if (alive) setBankValues(v && v.fairMarketValue ? v : null); }).catch(() => {});
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modalStep, editingCaseId, bankName]);
   const [signatureUploadUrl, setSignatureUploadUrl] = useState(null);
   const [activeSignatureTab, setActiveSignatureTab] = useState('draw'); 
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -399,16 +427,16 @@ export default function CaseCreationModal({
 
   // Auto-Save Draft — data URLs are already permanent, just save directly
   useEffect(() => {
-    if (modalStep > 0 && modalStep < 7) {
+    if (draftReady && modalStep > 0 && modalStep < 7) {
       const draft = {
         clientName, clientFatherName, bankName, bankBranch, bankDistrict,
         propertyDetails, locationData, modalStep,
         uploadedDocs, // already contains data URLs — no conversion needed
         siteImages
       };
-      localforage.setItem('caseDraft', draft).catch(err => console.error('Auto-save failed', err));
+      localforage.setItem(draftKey, draft).catch(err => console.error('Auto-save failed', err));
     }
-  }, [clientName, clientFatherName, bankName, bankBranch, bankDistrict, propertyDetails, locationData, uploadedDocs, siteImages, modalStep]);
+  }, [draftReady, clientName, clientFatherName, bankName, bankBranch, bankDistrict, propertyDetails, locationData, uploadedDocs, siteImages, modalStep]);
 
   const stopCamera = () => {
     if (streamRef.current) {
@@ -440,9 +468,6 @@ export default function CaseCreationModal({
         if (Array.isArray(cfg.roadTypes) && cfg.roadTypes.length > 0) setRoadTypes(cfg.roadTypes);
         if (Array.isArray(cfg.structureTypes) && cfg.structureTypes.length > 0) setStructureTypes(cfg.structureTypes);
         if (Array.isArray(cfg.flooringTypes) && cfg.flooringTypes.length > 0) setFlooringTypes(cfg.flooringTypes);
-        if (Array.isArray(cfg.banks) && cfg.banks.length > 0) {
-          setAvailableBanks(prev => Array.from(new Set([...prev, ...cfg.banks])));
-        }
         if (Array.isArray(cfg.districts) && cfg.districts.length > 0) {
           setAvailableDistricts(prev => Array.from(new Set([...prev, ...cfg.districts])));
         }
@@ -480,38 +505,29 @@ export default function CaseCreationModal({
         if (fullCase.sitePhotos) {
           setSiteImages(fullCase.sitePhotos.map((url, idx) => ({ id: `site_${idx}`, url, name: `Site Image ${idx + 1}` })));
         }
-        setModalStep(1);
+        // Work saved on this phone for this case (e.g. app closed mid-way) wins over the server copy
+        return localforage.getItem(draftKey).then((draft) => {
+          if (usableDraft(draft)) {
+            handleResumeDraft(draft);
+            toast('📋 Restored your unsaved work on this case.', { id: 'session-restored', duration: 3000, icon: '✅' });
+          } else {
+            setModalStep(1);
+          }
+        }).finally(() => setDraftReady(true));
       })
       .catch(err => {
+        setDraftReady(true);
         console.error('Failed to load case details', err);
         toast.error('Failed to load case details.');
       });
   }, [editingCaseId]);
 
-  const handleAddCustomBank = async (name) => {
-    const trimmed = (name || '').trim();
-    if (!trimmed) return;
-    setBankName(trimmed);
+  // Picks a bank from the list (a typed short or old name is matched to the official one)
+  const handleAddCustomBank = (name) => {
+    const bank = matchBank(bankRecords, name);
+    if (bank) setBankName(bank.name);
     setShowBankDropdown(false);
-    try {
-      await fetch(`${API_BASE_URL}/api/config/banks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bank: trimmed })
-      });
-    } catch (_) {}
-    setAvailableBanks(prev => {
-      if (prev.some(b => b.toLowerCase() === trimmed.toLowerCase())) return prev;
-      const updated = [...prev, trimmed];
-      try {
-        const saved = localStorage.getItem('valuation_custom_banks');
-        const custom = saved ? JSON.parse(saved) : [];
-        if (!custom.some(b => b.toLowerCase() === trimmed.toLowerCase())) {
-          localStorage.setItem('valuation_custom_banks', JSON.stringify([...custom, trimmed]));
-        }
-      } catch {}
-      return updated;
-    });
+    return bank;
   };
 
   const formatCurrency = (val) => {
@@ -564,8 +580,15 @@ export default function CaseCreationModal({
       toast.error("Please enter both the client's name and the bank name.");
       return;
     }
-    // Dynamically persist any new bank name or district
-    handleAddCustomBank(bankName.trim());
+    if (!propertyDetails.propertyType) {
+      toast.error('Please choose the report type (House, Apartment, Open Site, Agriculture Land…).');
+      return;
+    }
+    // The bank must be one from the list
+    if (!handleAddCustomBank(bankName.trim())) {
+      toast.error(`“${bankName.trim()}” is not in the bank list. Pick one from the list, or ask the Super Admin to add it.`);
+      return;
+    }
     if (bankDistrict.trim()) {
       setAvailableDistricts(prev => {
         if (prev.includes(bankDistrict.trim())) return prev;
@@ -678,6 +701,18 @@ export default function CaseCreationModal({
           errorMsg = `🚫 DUPLICATE DETECTED: The file "${file.name}" is identical to a document already uploaded in this session.\n\nThe system uses content-hash verification — renaming a file does not bypass detection.`;
           break;
         }
+        // Same file already used on another case?
+        try {
+          const dupRes = await fetch(`${API_BASE_URL}/api/cases/check-duplicates`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hashes: [fileHash], caseId: editingCaseId || '' }),
+          });
+          const dup = dupRes.ok ? await dupRes.json() : null;
+          if (dup && dup.duplicates && dup.duplicates.length) {
+            errorMsg = `🚫 DUPLICATE DETECTED: "${file.name}" is already used on case ${dup.duplicates[0].fileNumber}.\n\nEvery case needs its own documents. Please upload this customer's own document.`;
+            break;
+          }
+        } catch { /* offline: the server checks again when the case is saved */ }
 
         // ── 2. READ FILE AS DATA URL FIRST (reliable for OCR and UI preview) ────────
         setScanProgress(prev => ({
@@ -758,10 +793,12 @@ export default function CaseCreationModal({
           }
         }));
 
-        const validation = await validateDocOCR(dataUrl, docId, isPdf, file, clientText);
+        const validation = await validateDocOCR(dataUrl, docId, isPdf, file, clientText, clientName);
 
         if (!validation.passed) {
-          errorMsg = `⚠️ MAHE AI REJECTION:\n${validation.reason}\n\nPlease upload the correct document.`;
+          errorMsg = validation.nameMismatch
+            ? `⚠️ NAME MISMATCH — DOCUMENT REJECTED\n${validation.reason}`
+            : `⚠️ DOCUMENT REJECTED\n${validation.reason}\n\nPlease upload the correct document.`;
           break;
         }
 
@@ -873,6 +910,7 @@ export default function CaseCreationModal({
           size: file.size,
           sizeFormatted: formatFileSize(file.size),
           extension: ext,
+          pendingVerification: Boolean(validation.pendingVerification),
           uploadedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
         newHashes.push(fileHash);
@@ -941,100 +979,31 @@ export default function CaseCreationModal({
       ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
 
       if (docId === 'SITE_IMAGES') {
-        const timestamp = new Date().toLocaleString('en-US', { weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
-        
-        // Overlay Configuration
-        const overlayHeight = Math.max(160, canvas.height * 0.22);
-        const mapSize = overlayHeight - 20; 
-        const boxX = 10;
-        const boxY = canvas.height - overlayHeight - 10;
-        
-        // 1. Draw Translucent Black Box
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-        if (ctx.roundRect) {
-          ctx.beginPath();
-          ctx.roundRect(boxX, boxY, canvas.width - 20, overlayHeight, 12);
-          ctx.fill();
-        } else {
-          ctx.fillRect(boxX, boxY, canvas.width - 20, overlayHeight);
+        if (siteImages.length >= MAX_SITE_PHOTOS) {
+          stopCamera(); setActiveDocUpload(null);
+          showValidationError(`⚠️ PHOTO LIMIT REACHED\nA case can have at most ${MAX_SITE_PHOTOS} site photos. Remove one to add another.`);
+          return;
         }
-        
-        // 2. Draw Map Area (Left side)
-        const mapX = boxX + 10;
-        const mapY = boxY + 10;
-        
-        // Map background (simulating satellite view with a dark bluish-grey tint)
-        ctx.fillStyle = '#475569';
-        if (ctx.roundRect) {
-          ctx.beginPath(); ctx.roundRect(mapX, mapY, mapSize, mapSize, 8); ctx.fill();
-        } else {
-          ctx.fillRect(mapX, mapY, mapSize, mapSize);
+        // Real GPS fix at the moment of capture — no location, no photo
+        let pos;
+        try {
+          pos = await currentPosition();
+        } catch (err) {
+          stopCamera(); setActiveDocUpload(null);
+          showValidationError(`⚠️ LOCATION REQUIRED\n${err.message}`);
+          return;
         }
-        
-        // Map Grid lines to simulate roads
-        ctx.strokeStyle = '#94a3b8';
-        ctx.lineWidth = 1;
-        for(let i = 10; i < mapSize; i+= 15) {
-            ctx.beginPath(); ctx.moveTo(mapX + i, mapY); ctx.lineTo(mapX + i, mapY + mapSize); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(mapX, mapY + i); ctx.lineTo(mapX + mapSize, mapY + i); ctx.stroke();
-        }
-        
-        // Red Map Pin
-        const pinX = mapX + mapSize / 2;
-        const pinY = mapY + mapSize / 2 - 8;
-        ctx.fillStyle = '#ea4335';
-        ctx.beginPath();
-        ctx.arc(pinX, pinY, 6, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(pinX - 6, pinY);
-        ctx.lineTo(pinX + 6, pinY);
-        ctx.lineTo(pinX, pinY + 12);
-        ctx.fill();
-        ctx.fillStyle = '#7f1d1d';
-        ctx.beginPath(); ctx.arc(pinX, pinY, 2, 0, Math.PI * 2); ctx.fill(); // inner dot
-        
-        // "Google" watermark on map
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 14px sans-serif';
-        ctx.fillText('Google', mapX + 5, mapY + mapSize - 8);
-
-        // 3. Draw Text Area (Right side)
-        const textX = mapX + mapSize + 15;
-        
-        // GPS Map Camera Watermark
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '12px sans-serif';
-        ctx.textAlign = 'right';
-        ctx.fillText('🗺️ GPS Map Camera', canvas.width - 25, boxY + 25);
-        ctx.textAlign = 'left'; // reset
-
-        // Main Title (Dynamic based on user input or hardcoded for exact replica)
-        ctx.font = '500 18px sans-serif';
-        ctx.fillText('Chinna Chauku, Andhra', textX, boxY + 30);
-        ctx.fillText('Pradesh, India 🇮🇳', textX, boxY + 52);
-        
-        // Small Details
-        ctx.font = '12px sans-serif';
-        ctx.fillStyle = '#e2e8f0';
-        
-        // Address lines
-        ctx.fillText('42/337-7-2-1, Sreenivas Nagar, N.g.o Colony,', textX, boxY + 75);
-        ctx.fillText('Chinna Chauku, Andhra Pradesh 516001, India', textX, boxY + 92);
-        
-        // GPS Lat Long
-        const latLongText = locationData !== 'Fetching location...' && !locationData.includes('Supported') 
-          ? locationData.replace('Lat:', 'Lat').replace('Long:', 'Long')
-          : 'Lat 14.467982° Long 78.836882°';
-        ctx.fillText(latLongText, textX, boxY + 115);
-        
-        // Timestamp
-        ctx.fillText(timestamp, textX, boxY + 132);
-        
-        const frameUrl = canvas.toDataURL('image/jpeg');
         stopCamera();
-        setSiteImages(prev => [...prev, { id: `site_${Date.now()}`, url: frameUrl, name: `Site Image ${prev.length + 1}` }]);
         setActiveDocUpload(null);
+        const address = await addressFor(pos.lat, pos.lng);
+        drawStamp(canvas, { ...pos, address, caseLabel: [clientName, bankName].filter(Boolean).join(' · '),
+                            engineer: currentUser?.name || currentUser?.username || '' });
+        const frameUrl = canvas.toDataURL('image/jpeg', 0.9);
+        const hash = await fileHash(await (await fetch(frameUrl)).arrayBuffer());
+        setSiteImages(prev => [...prev, { id: `site_${Date.now()}`, hash, url: frameUrl, name: `Site Image ${prev.length + 1}`,
+                                          lat: pos.lat, lng: pos.lng, takenAt: pos.time.toISOString(), source: 'camera' }]);
+        setLocationData(`Lat: ${pos.lat.toFixed(6)}, Long: ${pos.lng.toFixed(6)}`);
+        toast.success('Site photo saved with location and time.');
       } else {
         const frameUrl = canvas.toDataURL('image/jpeg');
         stopCamera();
@@ -1046,7 +1015,7 @@ export default function CaseCreationModal({
         try {
           toast('Mahe AI is scanning captured document...', { icon: '🔍', duration: 2500 });
 
-          const validation = await validateDocOCR(frameUrl, docId, false);
+          const validation = await validateDocOCR(frameUrl, docId, false, null, '', clientName);
 
           if (!validation.passed) {
             showValidationError(`⚠️ MAHE AI REJECTION:\n${validation.reason}`);
@@ -1104,6 +1073,14 @@ export default function CaseCreationModal({
   };
 
   const handleNextToPropertyDetails = () => {
+    if (!uploadedDocs.saleDeed || uploadedDocs.saleDeed.length === 0) {
+      showValidationError('⚠️ SALE DEED REQUIRED\nThe Registered Sale Deed is required for every valuation. Please upload all its pages before continuing.');
+      return;
+    }
+    if (Object.values(scanningDocs || {}).some(Boolean)) {
+      toast.error('Please wait — a document is still being checked.');
+      return;
+    }
     // Sanitize any garbage / object OCR values before showing Step 3
     setPropertyDetails(prev => sanitizePropertyDetails(prev));
     setModalStep(3);
@@ -1111,11 +1088,23 @@ export default function CaseCreationModal({
 
   const handleNextToSiteImages = () => {
     const p = propertyDetails;
-    if (!p.boundariesDoc.north || !p.boundariesDoc.south || !p.boundariesDoc.east || !p.boundariesDoc.west ||
-        !p.boundariesActual.north || !p.boundariesActual.south || !p.boundariesActual.east || !p.boundariesActual.west ||
-        !p.buildingAge || !p.roadWidth || !p.propertyType || !p.plotType || !p.roadType || !p.structureType || !p.flooringType ||
-        !p.siteValue.plinthArea || p.siteValue.floors.some(f => !f.value)) {
-      toast.error("Please fill in all mandatory fields before proceeding.");
+    const built = isBuiltProperty(p.propertyType);
+    const ba = p.boundariesActual || {};
+    const missing = [];
+    ['north', 'south', 'east', 'west'].forEach(s => { if (!String(ba[s] || '').trim()) missing.push(`Boundary ${s[0].toUpperCase()}${s.slice(1)} (as per visit)`); });
+    if (!p.propertyType) missing.push('Category type');
+    if (!String(p.roadWidth || '').trim()) missing.push('Road width');
+    if (!p.plotType) missing.push('Plot type');
+    if (!p.roadType) missing.push('Road type');
+    if (built) {
+      if (String(p.buildingAge ?? '').trim() === '') missing.push('Age of building');
+      if (!p.structureType) missing.push('Type of structure');
+      if (!p.flooringType) missing.push('Type of flooring');
+      if (!String(p.siteValue?.plinthArea || '').trim()) missing.push('Plinth area value');
+      (p.siteValue?.floors || []).forEach(f => { if (!String(f.value || '').trim()) missing.push(`${f.label} area`); });
+    }
+    if (missing.length) {
+      toast.error(`Please fill in: ${missing.join(', ')}.`, { duration: 6000 });
       return;
     }
     setModalStep(4);
@@ -1244,6 +1233,8 @@ export default function CaseCreationModal({
     for (const key in uploadedDocs) {
       if (uploadedDocs[key].length > 0) {
         payloadDocs[key] = uploadedDocs[key].map(p => ({ 
+          hash: p.id,
+          pendingVerification: Boolean(p.pendingVerification),
           name: p.name, 
           isPdf: p.isPdf,
           url: p.url,
@@ -1258,18 +1249,41 @@ export default function CaseCreationModal({
     const payload = {
       clientName: clientName || 'Unknown Client',
       clientFatherName: clientFatherName,
-      bankName: bankName || 'Unknown Bank',
+      bankName: bankName || '',
       bankBranch: bankBranch,
       bankDistrict: bankDistrict,
       propertyDetails: propertyDetails,
       locationData: locationData,
       sitePhotos: siteImages.map(img => img.url),
+      photoHashes: siteImages.map(img => img.hash).filter(Boolean),
       documents: payloadDocs,
       signatureDataUrl: signatureDataUrl || signatureUploadUrl || '',
-      status: 'Pending',
+      status: editingCaseId ? 'Reviewing' : 'Pending',
       assignedEngineerId: currentUser?.id || 'UNASSIGNED',
       assignedEngineerName: currentUser?.name || currentUser?.username || 'Unknown Engineer'
     };
+
+    // If device is offline, immediately queue offline
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      try {
+        await queueOfflineCase(payload, editingCaseId);
+        await localforage.removeItem(draftKey);
+        const formattedOfflineCase = {
+          id: editingCaseId || `OFFLINE-${Date.now().toString().slice(-6)}`,
+          title: (payload.clientName && payload.bankName) ? `${payload.clientName} - ${payload.bankName}` : payload.clientName,
+          type: payload.propertyDetails?.propertyType || 'Standard Appraisal',
+          date: new Date().toLocaleDateString(),
+          status: 'Pending Sync'
+        };
+        if (onCaseSaved) onCaseSaved(formattedOfflineCase, !!editingCaseId);
+        toast.success(`Saved offline! Queued to sync automatically when reconnected.`, { icon: '💾', duration: 6000 });
+        closeModal();
+        return;
+      } catch (queueErr) {
+        toast.error(`Failed to save offline: ${queueErr.message}`);
+        return;
+      }
+    }
 
     try {
       let response;
@@ -1294,10 +1308,14 @@ export default function CaseCreationModal({
       
       const newCase = await response.json();
       
-      localforage.removeItem('caseDraft'); // Clear draft on success
+      localforage.removeItem(draftKey); // Clear draft on success
       
       const formattedNewCase = {
+        ...newCase, // name, file number, bank… so the case list shows it correctly straight away
         id: newCase.id,
+        client: newCase.clientName || 'Client',
+        bank: newCase.bankName || '',
+        fileNumber: newCase.fileNumber || '',
         title: (newCase.clientName && newCase.bankName) ? `${newCase.clientName} - ${newCase.bankName}` : newCase.clientName,
         type: newCase.propertyDetails?.propertyType || 'Standard Appraisal',
         date: new Date(newCase.createdAt).toLocaleDateString(),
@@ -1326,8 +1344,24 @@ export default function CaseCreationModal({
       
       closeModal();
     } catch (err) {
-      console.error(err);
-      toast.error("Error saving case: " + err.message);
+      console.warn('Network error while saving case, saving to offline queue:', err);
+      try {
+        await queueOfflineCase(payload, editingCaseId);
+        await localforage.removeItem(draftKey);
+        const formattedOfflineCase = {
+          id: editingCaseId || `OFFLINE-${Date.now().toString().slice(-6)}`,
+          title: (payload.clientName && payload.bankName) ? `${payload.clientName} - ${payload.bankName}` : payload.clientName,
+          type: payload.propertyDetails?.propertyType || 'Standard Appraisal',
+          date: new Date().toLocaleDateString(),
+          status: 'Pending Sync'
+        };
+        if (onCaseSaved) onCaseSaved(formattedOfflineCase, !!editingCaseId);
+        toast.success(`Network unavailable. Case saved locally and queued for auto-sync!`, { icon: '💾', duration: 7000 });
+        closeModal();
+      } catch (fallbackErr) {
+        console.error(fallbackErr);
+        toast.error("Error saving case: " + err.message);
+      }
     }
   };
 
@@ -1371,25 +1405,76 @@ export default function CaseCreationModal({
 
   const handleSiteImageUpload = async (e) => {
     const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-    for (const file of files) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setSiteImages(prev => [
-          ...prev,
-          {
-            id: `site_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-            url: event.target.result,
-            name: file.name
-          }
-        ]);
-      };
-      reader.readAsDataURL(file);
-    }
     if (e.target) e.target.value = null;
+    if (files.length === 0) return;
+    let count = siteImages.length;
+    const seen = new Set(siteImages.map(i => i.hash).filter(Boolean));
+    for (const file of files) {
+      if (count >= MAX_SITE_PHOTOS) {
+        showValidationError(`⚠️ PHOTO LIMIT REACHED\nA case can have at most ${MAX_SITE_PHOTOS} site photos. "${file.name}" and any after it were not added.`);
+        break;
+      }
+      if (!/^image\/(jpeg|jpg|png|webp|heic|heif)$/i.test(file.type)) {
+        showValidationError(`⚠️ NOT A PHOTO\n"${file.name}" is not a photo. Site images must be JPG / PNG photos of the property.`);
+        continue;
+      }
+      try {
+        const buf = await file.arrayBuffer();
+        const hash = await fileHash(buf);
+        if (seen.has(hash)) {
+          showValidationError(`🚫 DUPLICATE PHOTO\n"${file.name}" is already added to this case.`);
+          continue;
+        }
+        const dupRes = await fetch(`${API_BASE_URL}/api/cases/check-duplicates`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hashes: [hash], caseId: editingCaseId || '' }),
+        }).catch(() => null);
+        const dup = dupRes && dupRes.ok ? await dupRes.json() : null;
+        if (dup && dup.duplicates && dup.duplicates.length) {
+          showValidationError(`🚫 DUPLICATE PHOTO\n"${file.name}" is already used on case ${dup.duplicates[0].fileNumber}. Take fresh photos at this site.`);
+          continue;
+        }
+        // The phone must have recorded where and when the photo was taken
+        const gps = readExifGps(buf);
+        if (!gps || !gps.time) {
+          showValidationError(`⚠️ NO LOCATION IN PHOTO\n"${file.name}" has no GPS location / time recorded by the camera.\n\nUse "Take Photo" in the app at the site, or turn on location for the phone camera and upload the original photo.`);
+          continue;
+        }
+        const url = URL.createObjectURL(file);
+        const canvas = await imageToCanvas(url);
+        URL.revokeObjectURL(url);
+        const address = await addressFor(gps.lat, gps.lng);
+        drawStamp(canvas, { lat: gps.lat, lng: gps.lng, time: gps.time, address,
+                            caseLabel: [clientName, bankName].filter(Boolean).join(' · '),
+                            engineer: currentUser?.name || currentUser?.username || '' });
+        const stamped = canvas.toDataURL('image/jpeg', 0.9);
+        seen.add(hash);
+        count += 1;
+        setSiteImages(prev => [...prev, { id: `site_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, hash, url: stamped,
+                                          name: file.name, lat: gps.lat, lng: gps.lng, takenAt: gps.time.toISOString(), source: 'gallery' }]);
+      } catch (err) {
+        showValidationError(`⚠️ PHOTO REJECTED\n${err.message || `"${file.name}" could not be read.`}`);
+      }
+    }
   };
 
-  const handleRunSecurityExtraction = startAIExtraction;
+  // Step 4 → final step. Documents were already checked/extracted when uploaded in Step 2.
+  const handleRunSecurityExtraction = () => {
+    if (uploadedDocs.saleDeed.length === 0) {
+      toast.error("The Sale Deed is required. Please upload it in Step 2.", { duration: 5000 });
+      setModalStep(2);
+      return;
+    }
+    if (siteImages.length === 0) {
+      toast.error("Please capture at least one geo-tagged site image.");
+      return;
+    }
+    if (siteImages.length > MAX_SITE_PHOTOS) {
+      toast.error(`At most ${MAX_SITE_PHOTOS} site images are allowed.`);
+      return;
+    }
+    setModalStep(7);
+  };
 
   if (!isOpen && modalStep === 0 && !showDraftPrompt) return null;
 
@@ -1492,7 +1577,7 @@ export default function CaseCreationModal({
             {/* Back button — left side */}
             {modalStep > 1 ? (
               <button
-                onClick={() => setModalStep(prev => prev - 1)}
+                onClick={() => setModalStep(prev => (prev === 7 ? 4 : prev - 1))}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
                   display: 'flex', alignItems: 'center', gap: '2px',
@@ -1511,7 +1596,7 @@ export default function CaseCreationModal({
 
             {/* Step title — center */}
             <h2 style={{ fontSize: 'clamp(14px, 4vw, 18px)', fontWeight: '700', margin: 0, textAlign: 'center', flex: 1, minWidth: 0, lineHeight: 1.3, color: 'var(--text-primary)' }}>
-              {modalStep === 1 && "New Case Setup"}
+              {modalStep === 1 && (editingCaseId ? "Case Setup" : "New Case Setup")}
               {modalStep === 2 && "Official Legal Documents"}
               {modalStep === 3 && "Property Details"}
               {modalStep === 4 && "Site Images"}
@@ -1529,6 +1614,9 @@ export default function CaseCreationModal({
             {/* STEP 1: Case Setup */}
             {modalStep === 1 && (
               <Step1CaseSetup
+                propertyTypes={propertyTypes}
+                propertyType={propertyDetails.propertyType || ''}
+                setPropertyType={(v) => setPropertyDetails(prev => ({ ...prev, propertyType: v }))}
                 clientName={clientName}
                 setClientName={setClientName}
                 clientFatherName={clientFatherName}
@@ -1542,6 +1630,7 @@ export default function CaseCreationModal({
                 showBankDropdown={showBankDropdown}
                 setShowBankDropdown={setShowBankDropdown}
                 availableBanks={availableBanks}
+                bankRecords={bankRecords}
                 availableDistricts={availableDistricts}
                 handleAddCustomBank={handleAddCustomBank}
                 handleNextToUpload={handleNextToUpload}
@@ -1588,6 +1677,7 @@ export default function CaseCreationModal({
                 renderConflictOptions={renderConflictOptions}
                 setManuallyModifiedFields={setManuallyModifiedFields}
                 handleNextToSiteImages={handleNextToSiteImages}
+                bankName={bankName}
               />
             )}
 
@@ -1646,11 +1736,39 @@ export default function CaseCreationModal({
                 showSubmitModal={showSubmitModal}
                 setShowSubmitModal={setShowSubmitModal}
                 handleCreateCase={handleCreateCase}
+                savedSignature={savedSignature}
+                onReviewReport={editingCaseId ? openReportReview : undefined}
+                bankValues={bankValues}
               />
             )}
 
           </div>
         </div>
+      )}
+
+      {reviewSignature !== null && editingCaseId && (
+        <ReportViewer
+          title="Check the bank report"
+          subtitle={`${clientName || 'Client'} · ${bankName || ''} — this is exactly what the bank receives`}
+          fileName={`Preview_${editingCaseId}.docx`}
+          load={() => fetchReport(`${API_BASE_URL}/api/cases/${editingCaseId}/report-preview`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              clientName, clientFatherName, bankName, bankBranch, bankDistrict,
+              propertyDetails,
+              sitePhotos: siteImages.map(img => img.url),
+              signatureDataUrl: reviewSignature || signatureUploadUrl || '',
+            }),
+          })}
+          onClose={() => setReviewSignature(null)}
+          footer={(
+            <>
+              <button type="button" className="btn-secondary" onClick={() => setReviewSignature(null)}>Back to edit</button>
+              <button type="button" className="btn-primary" onClick={() => { setReviewSignature(null); handleCreateCase(); }}>Submit report</button>
+            </>
+          )}
+        />
       )}
 
     </>

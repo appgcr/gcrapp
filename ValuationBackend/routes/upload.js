@@ -2,10 +2,13 @@ const express = require('express');
 const router = express.Router();
 const fs = require('fs');
 const path = require('path');
+const { config } = require('../config/env');
+const { cloudinary } = require('../config/services');
+const { authenticateToken } = require('../middleware/auth');
 
 // POST /api/upload
-// Accepts base64 image/document string or data URI and saves locally
-router.post('/', async (req, res) => {
+// Accepts base64 image/document string or data URI and saves via Cloudinary or local storage
+router.post('/', authenticateToken, async (req, res) => {
   try {
     const { image, folder = 'sbi_valuation_cases' } = req.body;
 
@@ -13,7 +16,26 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'No image data provided for upload.' });
     }
 
-    // Determine if it's a data URI
+    // 1. If Cloudinary is configured and active, upload to Cloudinary CDN
+    if (config.STORAGE_PROVIDER === 'cloudinary' && cloudinary) {
+      try {
+        const uploadResult = await cloudinary.uploader.upload(image, {
+          folder: folder,
+          resource_type: 'auto',
+        });
+        return res.status(200).json({
+          success: true,
+          url: uploadResult.secure_url,
+          public_id: uploadResult.public_id,
+          format: uploadResult.format,
+          provider: 'cloudinary'
+        });
+      } catch (cloudErr) {
+        console.warn('⚠️ Cloudinary upload failed, falling back to local storage:', cloudErr.message);
+      }
+    }
+
+    // 2. Local Storage Provider (Default / Air-gapped / Fallback)
     let base64Data = image;
     let extension = 'png';
     
@@ -33,7 +55,7 @@ router.post('/', async (req, res) => {
     }
 
     // Ensure uploads folder exists
-    const uploadsDir = path.join(__dirname, '..', 'uploads');
+    const uploadsDir = path.resolve(config.LOCAL_UPLOAD_DIRECTORY || path.join(__dirname, '..', 'uploads'));
     if (!fs.existsSync(uploadsDir)) {
       fs.mkdirSync(uploadsDir, { recursive: true });
     }
@@ -42,24 +64,25 @@ router.post('/', async (req, res) => {
     const filename = `${folder}_${Date.now()}.${extension}`;
     const filepath = path.join(uploadsDir, filename);
 
-    // Save file
+    // Save file locally
     fs.writeFileSync(filepath, base64Data, 'base64');
     
-    const host = req.get('host') || 'localhost:5001';
+    const host = req.get('host') || `localhost:${config.PORT || 5001}`;
     const protocol = req.protocol || 'http';
     const localUrl = `${protocol}://${host}/uploads/${filename}`;
-    console.log(`✅ Local Upload Success: ${localUrl}`);
 
     res.status(200).json({
       success: true,
       url: localUrl,
       public_id: filename,
-      format: extension
+      format: extension,
+      provider: 'local'
     });
   } catch (err) {
-    console.error("❌ Local Upload Error:", err);
-    res.status(500).json({ error: err.message || 'Local upload failed.' });
+    console.error("❌ Upload Error:", err);
+    res.status(500).json({ error: err.message || 'File upload failed.' });
   }
 });
+
 
 module.exports = router;

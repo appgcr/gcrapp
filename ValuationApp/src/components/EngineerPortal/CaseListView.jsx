@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, FileText, Search, ChevronRight } from 'lucide-react';
-import toast, { Toaster } from 'react-hot-toast';
+import { FileText, Search, ChevronRight } from 'lucide-react';
+import toast from 'react-hot-toast';
+import IconTile from '../Shared/IconTile';
+import './AttendanceView.css';
 import { API_BASE_URL } from '../../config/api';
 import CaseCreationModal from './CaseModalSteps/CaseCreationModal';
 
@@ -24,7 +26,10 @@ export default function CaseListView({ onOpenCase, currentUser }) {
         });
         const formatted = myCases.map(c => ({
           id: c.id,
+          fileNumber: c.fileNumber || '',
           title: (c.clientName && c.bankName) ? `${c.clientName} - ${c.bankName}` : (c.clientName || 'Untitled Case'),
+          client: c.clientName || 'Client',
+          bank: c.bankName || '',
           type: c.propertyDetails?.propertyType || 'Standard Appraisal',
           date: new Date(c.createdAt).toLocaleDateString(),
           status: c.status || 'Pending'
@@ -36,15 +41,16 @@ export default function CaseListView({ onOpenCase, currentUser }) {
 
   const filteredCases = casesList.filter(c => 
     (c.title && c.title.toLowerCase().includes(search.toLowerCase())) ||
-    (c.id && c.id.toLowerCase().includes(search.toLowerCase()))
+    (c.id && c.id.toLowerCase().includes(search.toLowerCase())) ||
+    (c.fileNumber && c.fileNumber.toLowerCase().includes(search.toLowerCase()))
   );
 
   const checkAttendanceClockIn = async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/attendance?userId=${currentUser?.id || 'ENG-001'}`);
       const data = await res.json();
-      const today = new Date().toLocaleDateString();
-      const todayLogs = Array.isArray(data) ? data.filter(log => new Date(log.timestamp).toLocaleDateString() === today) : [];
+      // On duty = the latest Check-In / Check-Out (location on/off events and updates don't change it)
+      const todayLogs = Array.isArray(data) ? data.filter(log => log.attendanceType === 'Clock-In' || log.attendanceType === 'Clock-Out') : [];
       const sortedLogs = [...todayLogs].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
       const lastLog = sortedLogs.length > 0 ? sortedLogs[0] : null;
       const lastAction = lastLog ? lastLog.attendanceType : null;
@@ -61,13 +67,6 @@ export default function CaseListView({ onOpenCase, currentUser }) {
     }
   };
 
-  const handleNewCaseClick = async () => {
-    const isClockedIn = await checkAttendanceClockIn();
-    if (!isClockedIn) return;
-    setEditingCaseId(null);
-    setIsModalOpen(true);
-  };
-
   const handleResumeAssignedTask = async (c) => {
     const isClockedIn = await checkAttendanceClockIn();
     if (!isClockedIn) return;
@@ -76,60 +75,47 @@ export default function CaseListView({ onOpenCase, currentUser }) {
   };
 
   return (
-    <div className="case-list-view animate-fade-in" style={{ paddingBottom: '80px', position: 'relative', minHeight: 'calc(100vh - 150px)' }}>
-      <Toaster position="top-center" />
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '22px', fontWeight: '700', margin: 0 }}>My Cases</h1>
-      </div>
+    <div className="td animate-fade-in" style={{ paddingBottom: 24 }}>
+      <label className="ec-search">
+        <Search size={16} />
+        <input type="search" placeholder="Search client or file number" value={search} onChange={e => setSearch(e.target.value)} />
+      </label>
 
-      <div style={{ position: 'relative', marginBottom: '24px' }}>
-        <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-        <input 
-          type="text" 
-          placeholder="Search by address or ID..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          style={{ width: '100%', padding: '12px 12px 12px 36px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', fontSize: '14px', outline: 'none' }}
-        />
-      </div>
+      {casesList.length === 0 && <div className="td-group"><div className="td-empty">No cases assigned to you yet.</div></div>}
+      {casesList.length > 0 && filteredCases.length === 0 && <div className="td-group"><div className="td-empty">No cases match “{search}”.</div></div>}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        {filteredCases.map((c) => (
-          <div 
-            key={c.id} 
-            className="native-card" 
-            style={{ padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', margin: 0, gap: '12px' }}
-            onClick={() => {
-              if (c.status === 'Pending') {
-                handleResumeAssignedTask(c);
-              } else {
-                onOpenCase(c.id);
-              }
-            }}
-          >
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: '600', fontSize: '15px', color: 'var(--text-primary)', marginBottom: '4px', wordBreak: 'break-word' }}>{c.title}</div>
-              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px 8px', fontSize: '13px', color: 'var(--text-muted)' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><FileText size={12} /> {c.id}</span>
-                <span>•</span>
-                <span style={{ wordBreak: 'break-word' }}>{c.type}</span>
-              </div>
+      {[
+        { key: 'Returned', label: 'Returned — fix and resubmit', match: (st) => st === 'Returned', color: 'red' },
+        { key: 'Field', label: 'In field', match: (st) => !st || st === 'Pending', color: 'blue' },
+        { key: 'Review', label: 'With admin', match: (st) => st === 'Reviewing' || st === 'Completed', color: 'orange' },
+        { key: 'Done', label: 'Done', match: (st) => st === 'Approved' || st === 'Rejected', color: 'green' },
+      ].map(group => {
+        const list = filteredCases.filter(c => group.match(c.status));
+        if (!list.length) return null;
+        return (
+          <React.Fragment key={group.key}>
+            <div className="td-section">{group.label} · {list.length}</div>
+            <div className="td-group">
+              {list.map(c => (
+                <button
+                  key={c.id}
+                  className="td-row td-link"
+                  onClick={() => (c.status === 'Pending' ? handleResumeAssignedTask(c) : onOpenCase(c.id))}
+                >
+                  <IconTile icon={FileText} color={group.color} size={30} />
+                  <div className="td-main">
+                    <div className="td-title">{c.client}</div>
+                    <div className="td-sub">{c.fileNumber || `#${c.id}`}{c.bank ? ` · ${c.bank}` : ''}</div>
+                  </div>
+                  <ChevronRight size={18} className="td-chev" />
+                </button>
+              ))}
             </div>
-            <ChevronRight size={20} color="var(--text-muted)" style={{ flexShrink: 0 }} />
-          </div>
-        ))}
-      </div>
+          </React.Fragment>
+        );
+      })}
 
-      <div style={{ position: 'fixed', bottom: 'calc(64px + 16px)', right: '16px', zIndex: 90 }}>
-        <button 
-          className="btn-primary" 
-          style={{ width: '54px', height: '54px', borderRadius: '27px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(0,82,204,0.35)' }}
-          onClick={handleNewCaseClick}
-        >
-          <Plus size={24} />
-        </button>
-      </div>
-
+      {/* New cases are created and assigned by the branch admin, so engineers have no "+" here */}
       {isModalOpen && (
         <CaseCreationModal
           isOpen={isModalOpen}
