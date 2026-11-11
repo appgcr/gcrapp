@@ -254,7 +254,7 @@ function HomePage({ go }) {
 
       <section className="ps-section ps-dark" id="features">
         <div className="ps-head" data-reveal>
-          <span className="ps-kicker light">Built for trust</span>
+          <span className="ps-kicker">Built for trust</span>
           <h2>Banks get reports they can rely on</h2>
         </div>
         <div className="ps-feat">
