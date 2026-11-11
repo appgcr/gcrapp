@@ -22,7 +22,8 @@ function getApiBaseUrl() {
     }
   }
 
-  return envUrl || 'http://localhost:5001';
+  // Hosted website (Vercel) and anything else: the live server
+  return envUrl || 'https://gcrapp-api.onrender.com';
 }
 
 export const API_BASE_URL = getApiBaseUrl();

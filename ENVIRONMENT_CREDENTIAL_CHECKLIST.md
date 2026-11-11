@@ -180,7 +180,7 @@ Provide them together at the end; then the features are switched on and tested.
 
 | Item | Where | Status |
 | :--- | :--- | :---: |
-| Real privacy / support email (replaces `privacy@yourdomain.in`) | `ValuationApp/src/config/site.js` → `email` | **To do** |
+| Real privacy / support email (replaces `privacy@yourdomain.in`) | `ValuationApp/src/config/site.js` → `email` | **Done** — hello.happydooo@gmail.com |
 | Privacy Policy URL for Google Play & App Store | `https://<your-domain>/privacy` | Ready once hosted |
 | Account deletion URL (Google Play "Data deletion") | `https://<your-domain>/delete-account` | Ready once hosted |
 | Google Play "Background location" declaration + short video | Play Console → App content | **To do** (engineers' live tracking while on duty) |

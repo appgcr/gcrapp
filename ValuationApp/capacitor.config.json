@@ -10,8 +10,5 @@
         "alert"
       ]
     }
-  },
-  "android": {
-    "allowMixedContent": true
   }
 }

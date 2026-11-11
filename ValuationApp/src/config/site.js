@@ -1,6 +1,5 @@
 // Public website & legal pages — one place for the company's contact details.
-// BEFORE PUBLISHING: replace `email` with the real privacy / support mailbox
-// (it is listed in ENVIRONMENT_CREDENTIAL_CHECKLIST.md → "Before publishing").
+// email: the privacy / support mailbox shown on the website and in the store listings
 export const SITE = {
   brand: 'GCR Valuation',
   valuer: 'Er. Gouru Neelakanta Reddy',
@@ -8,7 +7,7 @@ export const SITE = {
   iiv: 'Indian Institution of Valuers, Fellow F – 13622',
   address: 'Door No. 21/659, Beside Airtel Show Room, 7 Roads, Kadapa, Y.S.R. District, Andhra Pradesh',
   phones: ['94401 64412', '90525 89896', '94400 48100'],
-  email: 'privacy@yourdomain.in', // PLACEHOLDER — replace before publishing
+  email: 'hello.happydooo@gmail.com',
   grievanceOfficer: 'Er. Gouru Neelakanta Reddy',
   policyDate: '11 November 2026',
   apps: 'GCR Valuation app for Android and iOS, and the web portal',
