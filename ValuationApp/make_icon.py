@@ -62,12 +62,21 @@ def _mark(n):
     return layer
 
 
+_MASTER = None
+
+
+def _master():
+    """The 2048px icon, drawn once and reused for every size."""
+    global _MASTER
+    if _MASTER is None:
+        _MASTER = _background(2048)
+        _MASTER.alpha_composite(_mark(2048))
+    return _MASTER
+
+
 def icon(size, rounded=False):
     """Full-bleed square icon (iOS / Play rounds it themselves); rounded=True for legacy Android."""
-    n = 2048
-    im = _background(n)
-    im.alpha_composite(_mark(n))
-    im = im.resize((size, size), Image.LANCZOS)
+    im = _master().resize((size, size), Image.LANCZOS)
     if rounded:
         mask = Image.new('L', (size * 4, size * 4), 0)
         ImageDraw.Draw(mask).rounded_rectangle((0, 0, size * 4 - 1, size * 4 - 1), radius=size * 4 * 0.22, fill=255)
@@ -115,6 +124,32 @@ def main():
         fg.save(os.path.join(folder, 'ic_launcher_foreground.png'))
         if os.path.exists(os.path.join(folder, 'ic_launcher_background.png')):
             bg.save(os.path.join(folder, 'ic_launcher_background.png'))
+    # website favicon + home-screen icon
+    icon(180).convert('RGB').save(os.path.join(HERE, 'public/apple-touch-icon.png'))
+    icon(512, rounded=True).save(os.path.join(HERE, 'public/gcr-logo.png'))
+    icon(64, rounded=True).save(os.path.join(HERE, 'public/favicon.ico'), sizes=[(16, 16), (32, 32), (48, 48), (64, 64)])
+    # launch screens: the logo centred on the screen colour
+    logo_cache = {}
+    def splash(path):
+        old = Image.open(path).convert('RGB')
+        w, h = old.size
+        bgc = old.getpixel((3, 3))
+        side = int(min(w, h) * (0.30 if w < h else 0.36))
+        if side not in logo_cache:
+            logo_cache[side] = icon(side, rounded=True)
+        out = Image.new('RGB', (w, h), bgc)
+        out.paste(logo_cache[side], ((w - side) // 2, (h - side) // 2), logo_cache[side])
+        out.save(path, optimize=True)
+    for root, _, files in os.walk(res):
+        for f in files:
+            if f == 'splash.png':
+                splash(os.path.join(root, f))
+    for f in ('splash-2732x2732.png', 'splash-2732x2732-1.png', 'splash-2732x2732-2.png'):
+        p = os.path.join(HERE, 'ios/App/App/Assets.xcassets/Splash.imageset', f)
+        out = Image.new('RGB', (2732, 2732), (242, 242, 247))
+        lg = logo_cache.setdefault(560, icon(560, rounded=True))
+        out.paste(lg, ((2732 - 560) // 2, (2732 - 560) // 2), lg)
+        out.save(p, optimize=True)
     print('icons written')
 
 
