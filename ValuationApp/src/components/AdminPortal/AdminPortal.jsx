@@ -162,7 +162,7 @@ export default function AdminPortal({ currentUser, handleLogout }) {
                   {
                     title: 'New Message from Engineer',
                     body: 'You have a new unread message in the admin portal.',
-                    id: new Date().getTime(),
+                    id: Date.now() % 2000000000, // Android needs a 32-bit id (the raw time is too big and the alert never shows)
                     schedule: { at: new Date(Date.now() + 1000) },
                     sound: null,
                     attachments: null,

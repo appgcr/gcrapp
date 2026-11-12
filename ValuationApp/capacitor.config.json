@@ -9,6 +9,10 @@
         "sound",
         "alert"
       ]
+    },
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_gcr",
+      "iconColor": "#007AFF"
     }
   }
 }
