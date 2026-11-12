@@ -34,7 +34,9 @@ export async function unregisterPush(userId) {
 
 // Phone push needs the Firebase keys (google-services.json). Without them Android's push
 // registration crashes the app, so it stays off until VITE_FCM_ENABLED=true at build time.
-const PUSH_READY = import.meta.env.VITE_FCM_ENABLED === 'true';
+// iPhone push also needs the Firebase iOS app + an Apple push key (not set up yet), so phone push is Android-only for now;
+// iPhone users still see every alert inside the app.
+const PUSH_READY = import.meta.env.VITE_FCM_ENABLED === 'true' && Capacitor.getPlatform?.() === 'android';
 
 export default function PushRegistration({ currentUser }) {
   // Bumped when the user allows notifications on the "Allow access" screen → register then
