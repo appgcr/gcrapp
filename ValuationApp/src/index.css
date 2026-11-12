@@ -43,6 +43,9 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Form controls use the app font (browsers default textareas to a monospace font) */
+textarea, input, select, button { font-family: inherit; }
+
 #root {
   width: 100%;
   margin: 0 auto;
@@ -189,7 +192,8 @@ body {
 
 .main-content {
   flex: 1;
-  padding: 76px 16px 94px; /* Space for top header and bottom tabs */
+  /* Space for the fixed header and bottom tabs, plus the iPhone notch / home bar */
+  padding: calc(76px + env(safe-area-inset-top, 0px)) 16px calc(94px + env(safe-area-inset-bottom, 0px));
   width: 100%;
   margin: 0 auto;
 }
@@ -508,7 +512,7 @@ body.dark-theme .top-header {
   }
 
   .main-content {
-    padding: 64px 12px 84px;
+    padding: calc(64px + env(safe-area-inset-top, 0px)) 12px calc(84px + env(safe-area-inset-bottom, 0px));
   }
 
   .bottom-tab-bar {

@@ -42,7 +42,7 @@
   flex: 1;
   overflow-y: auto;
   padding: 16px;
-  padding-bottom: 90px;
+  padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px));
 }
 
 .admin-nav {
@@ -361,7 +361,7 @@
   }
   .admin-main-content {
     padding: 12px 10px;
-    padding-bottom: 85px;
+    padding-bottom: calc(85px + env(safe-area-inset-bottom, 0px));
   }
   .admin-dashboard-grid {
     grid-template-columns: 1fr 1fr;

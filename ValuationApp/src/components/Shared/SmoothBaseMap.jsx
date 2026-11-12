@@ -93,8 +93,9 @@ export default function SmoothBaseMap({ onError }) {
     loadStyle()
       .then((style) => {
         if (cancelled) return;
-        layer = L.maplibreGL({ style, attribution: SMOOTH_MAP_ATTRIBUTION });
-        layer.addTo(map);
+        const l = L.maplibreGL({ style, attribution: SMOOTH_MAP_ATTRIBUTION });
+        l.addTo(map); // throws when the phone can't start the map engine (no WebGL / low memory)
+        layer = l;
       })
       .catch((err) => {
         console.warn('Smooth base map unavailable, using fallback tiles', err);
@@ -102,7 +103,8 @@ export default function SmoothBaseMap({ onError }) {
       });
     return () => {
       cancelled = true;
-      if (layer) map.removeLayer(layer);
+      // A half-started map layer can throw while being removed — never let that blank the whole page
+      if (layer) { try { map.removeLayer(layer); } catch { /* already gone */ } }
     };
   }, [map, onError]);
 
