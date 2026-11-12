@@ -1,31 +1,44 @@
 import { API_BASE_URL } from './config/api';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { Home, Bell, LayoutGrid, ClipboardList, PenSquare, Settings, ArrowLeft, LogOut, MessageCircle } from 'lucide-react';
 import { App as CapacitorApp } from '@capacitor/app';
 import AppLock from './components/Auth/AppLock';
 import LoginScreen from './components/Auth/LoginScreen';
 import PermissionsSetup, { permissionsSetupDone } from './components/Auth/PermissionsSetup';
 import LaunchSplash from './components/Shared/LaunchSplash';
-import EngineerDashboard from './components/EngineerPortal/EngineerDashboard';
-import CaseListView from './components/EngineerPortal/CaseListView';
-import CaseDetailsView from './components/EngineerPortal/CaseDetailsView';
-import AttendanceView from './components/EngineerPortal/AttendanceView';
-import AttendanceLogs from './components/EngineerPortal/AttendanceLogs';
-import SettingsView from './components/EngineerPortal/SettingsView';
-import AdminPortal from './components/AdminPortal/AdminPortal';
-import ChatSystem from './components/Shared/ChatSystem';
+const EngineerDashboard = lazy(() => import('./components/EngineerPortal/EngineerDashboard'));
+const CaseListView = lazy(() => import('./components/EngineerPortal/CaseListView'));
+const CaseDetailsView = lazy(() => import('./components/EngineerPortal/CaseDetailsView'));
+const AttendanceView = lazy(() => import('./components/EngineerPortal/AttendanceView'));
+const AttendanceLogs = lazy(() => import('./components/EngineerPortal/AttendanceLogs'));
+const SettingsView = lazy(() => import('./components/EngineerPortal/SettingsView'));
+const AdminPortal = lazy(() => import('./components/AdminPortal/AdminPortal'));
+const ChatSystem = lazy(() => import('./components/Shared/ChatSystem'));
 import NotificationBell from './components/Shared/NotificationBell';
 import GcrLogo from './components/Shared/GcrLogo';
-import LiveLocationReporter from './components/EngineerPortal/LiveLocationReporter';
-import GlobalChatWidget from './components/Shared/GlobalChatWidget';
+const LiveLocationReporter = lazy(() => import('./components/EngineerPortal/LiveLocationReporter'));
+const GlobalChatWidget = lazy(() => import('./components/Shared/GlobalChatWidget'));
 import PushRegistration, { unregisterPush } from './components/Shared/PushRegistration';
 import { GridIcon, DocIcon, CalendarIcon, ChatIcon, GearIcon } from './components/Shared/TabIcons';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 import { Toaster } from 'react-hot-toast';
 import { isAdminRole } from './utils/session';
-import PublicSite from './components/Public/PublicSite';
-import BankPortal from './components/BankPortal/BankPortal';
+const PublicSite = lazy(() => import('./components/Public/PublicSite'));
+const BankPortal = lazy(() => import('./components/BankPortal/BankPortal'));
+
+// Each portal (admin, engineer, bank, website) is loaded only when it is needed, so the
+// app starts by loading just the login screen. This is shown for the moment a part loads.
+function PartLoading() {
+  return (
+    <div className="gcr-part-loading" role="status" aria-label="Loading">
+      <span />
+      <style>{`.gcr-part-loading{display:flex;justify-content:center;align-items:center;min-height:40vh}
+        .gcr-part-loading span{width:28px;height:28px;border-radius:50%;border:3px solid rgba(0,122,255,.2);border-top-color:#007aff;animation:gcrSpin .8s linear infinite}
+        @keyframes gcrSpin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+}
 
 // Public website pages (web only; the phone app opens straight to the login)
 const LEGAL = { '/privacy': 'privacy', '/terms': 'terms', '/delete-account': 'delete-account' };
@@ -174,20 +187,20 @@ export default function App() {
 
   // Privacy policy, terms and account deletion are always reachable (store listings link to them)
   if (LEGAL[path]) {
-    return <PublicSite page={LEGAL[path]} onNavigate={navigate} loggedIn={!!currentUser} />;
+    return <Suspense fallback={<PartLoading />}><PublicSite page={LEGAL[path]} onNavigate={navigate} loggedIn={!!currentUser} /></Suspense>;
   }
 
   if (!currentUser) {
     // Website visitors see the public site first; the phone app goes straight to login
     if (!Capacitor.isNativePlatform() && path !== '/login') {
-      return <PublicSite page="home" onNavigate={navigate} />;
+      return <Suspense fallback={<PartLoading />}><PublicSite page="home" onNavigate={navigate} /></Suspense>;
     }
     return <><LaunchSplash /><LoginScreen onLogin={handleLogin} /></>;
   }
 
   // Bank employees: their own simple portal (requests + reports only)
   if (isBankRole(currentUser)) {
-    return <BankPortal currentUser={currentUser} handleLogout={handleLogout} />;
+    return <Suspense fallback={<PartLoading />}><BankPortal currentUser={currentUser} handleLogout={handleLogout} /></Suspense>;
   }
 
   if (isAppLocked) {
@@ -204,7 +217,7 @@ export default function App() {
         {/* Confirmations & errors (was missing on the admin side, so they never showed) */}
         <Toaster position="top-center" toastOptions={{ duration: 3000, style: { background: '#1c1c1e', color: '#fff', borderRadius: '14px', fontSize: '14px' } }} />
         <PushRegistration currentUser={currentUser} />
-        <AdminPortal currentUser={currentUser} handleLogout={handleLogout} />
+        <Suspense fallback={<PartLoading />}><AdminPortal currentUser={currentUser} handleLogout={handleLogout} /></Suspense>
         {permissionsOverlay}
       </>
     );
@@ -222,10 +235,12 @@ export default function App() {
       <Toaster position="top-center" toastOptions={{ duration: 4000, style: { background: '#363636', color: '#fff' } }} />
       {permissionsOverlay}
       {/* Shares live GPS with the admin map while the engineer is on duty */}
-      <LiveLocationReporter currentUser={currentUser} />
       <PushRegistration currentUser={currentUser} />
-      {/* Assistive Touch with field-work actions */}
-      <GlobalChatWidget currentUser={currentUser} unreadChats={chatUnread} />
+      <Suspense fallback={null}>
+        <LiveLocationReporter currentUser={currentUser} />
+        {/* Assistive Touch with field-work actions */}
+        <GlobalChatWidget currentUser={currentUser} unreadChats={chatUnread} />
+      </Suspense>
       {/* Enterprise App Top Header */}
       {activeTab !== 'chat' && (
         <header className="top-header eng-navbar">
@@ -291,6 +306,7 @@ export default function App() {
 
       {/* Main Scrollable Content */}
       <main key={refreshKey} className="main-content" style={activeTab === 'chat' ? { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', zIndex: 1000 } : {}}>
+        <Suspense fallback={<PartLoading />}>
         {activeTab === 'dashboard' && !selectedCaseId && (
           <EngineerDashboard onOpenCase={(id) => { setSelectedCaseId(id); setActiveTab('cases'); }} currentUser={currentUser} />
         )}
@@ -321,6 +337,7 @@ export default function App() {
         {activeTab === 'chat' && (
           <ChatSystem currentUser={currentUser} otherUserId="ADMIN" onBack={() => setActiveTab('dashboard')} />
         )}
+        </Suspense>
       </main>
 
       {/* Persistent Mobile Bottom Tab Bar */}

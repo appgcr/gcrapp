@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import {
   Camera,
   MapPin,
@@ -27,8 +27,9 @@ import {
   X
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import BiometricFaceScanner from './BiometricFaceScanner';
-import FaceEnrollmentModal from './FaceEnrollmentModal';
+// The face engine is large, so it loads only when a check-in or face set-up is opened
+const BiometricFaceScanner = lazy(() => import('./BiometricFaceScanner'));
+const FaceEnrollmentModal = lazy(() => import('./FaceEnrollmentModal'));
 import AttendanceCalendarView from './AttendanceCalendarView';
 import { API_BASE_URL } from '../../config/api';
 import IconTile from '../Shared/IconTile';
@@ -939,6 +940,7 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
         </div>
       )}
 
+      <Suspense fallback={null}>
       {/* MODAL 1: ON-DEMAND BIOMETRIC FACE SCANNER */}
       {isScannerOpen && (
         <BiometricFaceScanner
@@ -959,6 +961,7 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
           onClose={() => setIsEnrollModalOpen(false)}
         />
       )}
+      </Suspense>
     </div>
   );
 }
