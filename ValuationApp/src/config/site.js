@@ -6,7 +6,7 @@ export const SITE = {
   valuerTitle: 'B.Tech., MISTE — Civil Engineering Consultant & Approved Panel Valuer',
   iiv: 'Indian Institution of Valuers, Fellow F – 13622',
   address: 'Door No. 21/659, Beside Airtel Show Room, 7 Roads, Kadapa, Y.S.R. District, Andhra Pradesh',
-  phones: ['94401 64412', '90525 89896', '94400 48100'],
+  phones: ['90525 89896', '63030 28342', '89192 08137', '86883 96448'],
   email: 'hello.happydooo@gmail.com',
   grievanceOfficer: 'Er. Gouru Neelakanta Reddy',
   policyDate: '11 November 2026',
