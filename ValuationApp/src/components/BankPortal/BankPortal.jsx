@@ -1,4 +1,4 @@
-import PullToRefresh from '../Shared/PullToRefresh';
+import PullDownReach from '../Shared/PullDownReach';
 import React, { useCallback, useEffect, useState } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 import { Plus, FileText, LogOut, Download, Loader2, RefreshCw, KeyRound, CheckCircle2, Building2 } from 'lucide-react';
@@ -76,7 +76,7 @@ export default function BankPortal({ currentUser, handleLogout }) {
   const counts = (rows || []).reduce((a, r) => { a[r.reportReady ? 'ready' : 'open'] += 1; return a; }, { open: 0, ready: 0 });
 
   return (
-    <PullToRefresh onRefresh={load}>
+    <PullDownReach>
     <div className="bp">
       <Toaster position="top-center" />
       <header className="bp-top">
@@ -225,7 +225,7 @@ export default function BankPortal({ currentUser, handleLogout }) {
       )}
       {pwOpen && <ChangePassword user={currentUser} onClose={() => setPwOpen(false)} />}
     </div>
-    </PullToRefresh>
+    </PullDownReach>
   );
 }
 

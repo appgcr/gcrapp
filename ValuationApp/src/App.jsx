@@ -16,7 +16,7 @@ const AdminPortal = lazy(() => import('./components/AdminPortal/AdminPortal'));
 const ChatSystem = lazy(() => import('./components/Shared/ChatSystem'));
 import NotificationBell from './components/Shared/NotificationBell';
 import GcrLogo from './components/Shared/GcrLogo';
-import PullToRefresh from './components/Shared/PullToRefresh';
+import PullDownReach from './components/Shared/PullDownReach';
 const LiveLocationReporter = lazy(() => import('./components/EngineerPortal/LiveLocationReporter'));
 const GlobalChatWidget = lazy(() => import('./components/Shared/GlobalChatWidget'));
 import PushRegistration, { unregisterPush } from './components/Shared/PushRegistration';
@@ -232,7 +232,7 @@ export default function App() {
   };
 
   return (
-    <PullToRefresh onRefresh={() => setRefreshKey((k) => k + 1)} disabled={activeTab === 'chat' || !!permScreen}>
+    <PullDownReach disabled={activeTab === 'chat' || !!permScreen}>
     <div className="app-container">
       <Toaster position="top-center" toastOptions={{ duration: 4000, style: { background: '#363636', color: '#fff' } }} />
       {permissionsOverlay}
@@ -368,6 +368,6 @@ export default function App() {
       </nav>
       )}
     </div>
-    </PullToRefresh>
+    </PullDownReach>
   );
 }
