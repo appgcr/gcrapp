@@ -62,7 +62,7 @@ export default function PublicSite({ page = 'home', onNavigate, loggedIn = false
         <div className="ps-footer-grid">
           <div>
             <div className="ps-footer-brand"><img src="/gcr_logo.png" alt="" width="28" height="28" /> {SITE.brand}</div>
-            <p>{SITE.valuer}, {SITE.valuerTitle}. {SITE.iiv}.</p>
+            <p>{SITE.valuer}, {SITE.valuerTitle}.</p>
           </div>
           <div>
             <h4>Company</h4>
@@ -415,7 +415,7 @@ function HomePage({ go }) {
           <div data-reveal className="c1"><span className="ps-chip"><MapPin size={20} /></span><div><b>Head office</b><p>{SITE.address}</p></div></div>
           <div data-reveal className="c2" style={{ '--d': '90ms' }}><span className="ps-chip"><Phone size={20} /></span><div><b>Phone</b><p>{SITE.phones.map((p) => <a key={p} href={`tel:+91${p.replace(/\s/g, '')}`}>{p}</a>).reduce((a, b) => [a, ' · ', b])}</p></div></div>
           <div data-reveal className="c3"><span className="ps-chip"><Mail size={20} /></span><div><b>Email</b><p><a href={`mailto:${SITE.email}`}>{SITE.email}</a></p></div></div>
-          <div data-reveal className="c4" style={{ '--d': '90ms' }}><span className="ps-chip"><PenTool size={20} /></span><div><b>Valuer</b><p>{SITE.valuer}<br />{SITE.iiv}</p></div></div>
+          <div data-reveal className="c4" style={{ '--d': '90ms' }}><span className="ps-chip"><PenTool size={20} /></span><div><b>Valuer</b><p>{SITE.valuer}<br />{SITE.valuerTitle}</p></div></div>
         </div>
       </section>
     </main>
