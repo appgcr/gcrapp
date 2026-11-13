@@ -459,7 +459,7 @@ function Privacy() {
         <tbody>
           <tr><td>Name, username, mobile number, email, role, branch; for bank employees: bank, bank branch and designation</td><td>Staff, bank employees</td><td>To create and secure your account and show you the right work</td></tr>
           <tr><td>Password (stored only as a one-way hash)</td><td>All users</td><td>To log you in</td></tr>
-          <tr><td><b>Precise location</b> (GPS)</td><td>Field engineers</td><td>To check in / out of duty, to stamp site photos with their real position, and — <b>only while the engineer is on duty</b> — to show their live position to their branch admin, <b>including when the app is in the background or the screen is off</b>. Tracking stops at check-out.</td></tr>
+          <tr><td><b>Precise location</b> (GPS)</td><td>Field engineers and branch admins (Gouru staff)</td><td>To check in / out of duty, to stamp site photos with their real position, and to show their live position to the Gouru office (Super Admin and branch admin) <b>at all times while they are signed in on the phone app — on and off duty, including when the app is in the background or the screen is off</b>. Each staff member reads and agrees to this when they first sign in, and the time they agree is recorded. The office is alerted if location is turned off. Sharing stops when they sign out of the app.</td></tr>
           <tr><td>Approximate location from the network (IP address)</td><td>Field engineers</td><td>Only when GPS is unavailable, to resolve an approximate place for attendance</td></tr>
           <tr><td>Camera and photos</td><td>Field engineers</td><td>To take or select site photos and scan property documents</td></tr>
           <tr><td><b>Face data</b> (a face template and reference photo)</td><td>Staff who choose Face check-in</td><td>Only to confirm that the right person checks in for attendance. It is optional and can be removed by your admin.</td></tr>
@@ -474,7 +474,7 @@ function Privacy() {
 
       <h2>3. App permissions</h2>
       <ul>
-        <li><b>Location (including background, engineers only)</b> — attendance, live field map while on duty, geo-tagged photos.</li>
+        <li><b>Location (including background, Gouru staff only)</b> — attendance, 24/7 live staff map (agreed at first sign-in), geo-tagged photos.</li>
         <li><b>Camera / photos and media</b> — site photos and document scans.</li>
         <li><b>Notifications</b> — new cases, assignments, approvals and reminders.</li>
         <li><b>Biometrics</b> — optional app unlock; handled entirely by your phone.</li>

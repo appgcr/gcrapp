@@ -23,7 +23,7 @@ const isNative = () => Capacitor.isNativePlatform?.();
 const ITEMS = {
   location: {
     icon: MapPin, color: 'green', title: 'Location',
-    why: 'Mark attendance at the site and share your location with the office only while you’re on duty.',
+    why: 'Mark attendance at the site and share your location with the office at all times (24/7).',
   },
   camera: {
     icon: Camera, color: 'gray', title: 'Camera',
@@ -37,7 +37,7 @@ const ITEMS = {
   // which would stop location sharing during duty. Can't be checked — the user confirms.
   battery: {
     icon: BatteryCharging, color: 'orange', title: 'Battery',
-    why: 'Set Gouru Valuations to “Unrestricted” / “No restrictions” so your phone doesn’t stop location sharing while you’re on duty.',
+    why: 'Set Gouru Valuations to “Unrestricted” / “No restrictions” so your phone doesn’t stop location sharing.',
   },
 };
 
@@ -176,7 +176,7 @@ export default function PermissionsSetup({ currentUser, onDone, fromSettings = f
             })}
           </div>
 
-          <p className="ps-privacy">Your location is shared only while you’re on duty. Photos are used only in your valuation reports.</p>
+          <p className="ps-privacy">Your location is shared with the office 24/7, as you agreed. Photos are used only in your valuation reports.</p>
 
           <button className="lg-primary" onClick={finish}>{allGranted || fromSettings ? 'Done' : 'Continue'}</button>
           {!allGranted && !fromSettings && <button className="lg-link ps-later" onClick={finish}>Set up later</button>}

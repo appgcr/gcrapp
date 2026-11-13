@@ -55,7 +55,7 @@ BUILT FOR TRUST
 • Role-based access: everyone sees only their own work
 • Real GPS on site photos
 • Reports fingerprinted so changes can be detected
-• Location is shared only while an engineer is on duty
+• Staff location is shared with the office 24/7 (agreed at first sign-in)
 
 Accounts are created by Gouru for its staff and partner bank officers. If you need access, contact Gouru Valuations at hello.happydooo@gmail.com.
 
@@ -63,7 +63,7 @@ Accounts are created by Gouru for its staff and partner bank officers. If you ne
 Gouru Valuations is a business app used by Gouru Valuations (a property valuation firm) and the bank officers it works with. Accounts are created by Gouru only, so we have prepared review accounts on a separate demo branch with sample data (no real customers):
 • Engineer login (shown above) — has one sample site visit assigned.
 • To try the other roles: Bank officer = review.bank / <paste its password>, Branch Admin = review.admin / <paste its password>.
-Location: engineers can go "on duty"; only then is their location shared with their branch so site visits can be verified. Tracking stops when they go off duty. Camera is used for geo-tagged site photos and face check-in. Face ID is optional for quick sign-in.
+Location: this is an internal staff app. On first sign-in, engineers and branch admins read and agree (checkbox) to a policy that their location is shared with the company office at all times while signed in, for staff safety, site-visit verification and attendance. A persistent notification is shown while sharing is active, and sharing stops when they sign out. Bank users are never tracked. Camera is used for geo-tagged site photos and face check-in. Face ID is optional for quick sign-in.
 Contact: hello.happydooo@gmail.com
 
 ---
@@ -85,7 +85,7 @@ Bank property valuations: requests, site visits, AI checks and signed reports.
 | Data | Collected | Shared | Why |
 |---|---|---|---|
 | Name, email, phone number, user IDs | Yes | No | Account management, app functionality |
-| Precise location (incl. in background while on duty) | Yes | No | App functionality (site visit verification) |
+| Precise location (incl. in background, 24/7 for staff who agreed) | Yes | No | App functionality (staff safety, site visit verification, attendance) |
 | Photos | Yes | No | App functionality (site photos, documents) |
 | Files and docs | Yes | No | App functionality (property documents) |
 | Messages (in-app staff messages) | Yes | No | App functionality |
@@ -93,7 +93,7 @@ Bank property valuations: requests, site visits, AI checks and signed reports.
 | App interactions / crash logs | No | — | — |
 Data is encrypted in transit: **Yes**. Users can request deletion: **Yes** (deletion URL above).
 
-**Foreground service declaration (location):** "Engineers turn on duty mode; while on duty the app shares their location with their branch so site visits can be assigned and verified. A persistent notification is shown and tracking stops when they go off duty." Google asks for a short screen recording of going on duty.
+**Foreground service declaration (location):** "Gouru Valuations is an internal app for our own employees (field engineers and branch admins). On first sign-in each employee reads the location policy and ticks I agree; after that the app shares their location with the company office at all times while they are signed in, for staff safety, site-visit verification and attendance. A persistent notification is shown while sharing is active, and it stops when they sign out." Google asks for a short screen recording: record the first sign-in consent screen, ticking the box, and the notification appearing.
 
 ---
 

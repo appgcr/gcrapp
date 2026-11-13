@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { Home, Bell, LayoutGrid, ClipboardList, PenSquare, Settings, ArrowLeft, LogOut, MessageCircle } from 'lucide-react';
 import { App as CapacitorApp } from '@capacitor/app';
 import AppLock from './components/Auth/AppLock';
+import LocationConsent from './components/Auth/LocationConsent';
 import LoginScreen from './components/Auth/LoginScreen';
 import PermissionsSetup, { permissionsSetupDone } from './components/Auth/PermissionsSetup';
 import LaunchSplash from './components/Shared/LaunchSplash';
@@ -181,6 +182,24 @@ export default function App() {
     return () => { clearInterval(t); resume.then((l) => l.remove()); };
   }, [currentUser]);
 
+  // First sign-in: engineers and branch admins must agree to 24/7 location sharing
+  const consentKey = currentUser?.id ? `gcr_loc_consent_${currentUser.id}` : null;
+  const [consent, setConsent] = useState('checking'); // checking | needed | ok | n/a
+  useEffect(() => {
+    if (!currentUser?.id || !['ENGINEER', 'ADMIN'].includes(currentUser.role)) { setConsent('n/a'); return undefined; }
+    let gone = false;
+    setConsent(localStorage.getItem(consentKey) ? 'ok' : 'checking');
+    fetch(`${API_BASE_URL}/api/live/consent`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => {
+        if (gone) return;
+        if (d.current) { localStorage.setItem(consentKey, d.version); setConsent('ok'); }
+        else { localStorage.removeItem(consentKey); setConsent('needed'); }
+      })
+      .catch(() => { if (!gone) setConsent(localStorage.getItem(consentKey) ? 'ok' : 'needed'); });
+    return () => { gone = true; };
+  }, [currentUser?.id, currentUser?.role]);
+
   const unlockApp = () => {
     localStorage.setItem(VERIFIED_AT_KEY, String(Date.now()));
     setIsAppLocked(false);
@@ -230,7 +249,12 @@ export default function App() {
   }
 
   // Shown over the app (not instead of it), so a lock in the middle of work loses nothing
-  const lockLayer = isAppLocked ? <AppLock onUnlock={unlockApp} onFallback={handleLogout} /> : null;
+  const lockLayer = isAppLocked
+    ? <AppLock onUnlock={unlockApp} onFallback={handleLogout} />
+    : (consent === 'needed'
+      ? <LocationConsent currentUser={currentUser} onDecline={handleLogout} onAgreed={(d) => { localStorage.setItem(consentKey, d.version || '1'); setConsent('ok'); }} />
+      : null);
+  const tracking = consent === 'ok' && <Suspense fallback={null}><LiveLocationReporter currentUser={currentUser} /></Suspense>;
 
   const permissionsOverlay = permScreen && (
     <PermissionsSetup currentUser={currentUser} fromSettings={permScreen === 'settings'} onDone={() => setPermScreen(null)} />
@@ -243,6 +267,7 @@ export default function App() {
         <Toaster position="top-center" toastOptions={{ duration: 3000, style: { background: '#1c1c1e', color: '#fff', borderRadius: '14px', fontSize: '14px' } }} />
         <PushRegistration currentUser={currentUser} />
         <Suspense fallback={<PartLoading />}><AdminPortal currentUser={currentUser} handleLogout={handleLogout} /></Suspense>
+        {tracking}
         {permissionsOverlay}
         {lockLayer}
       </>
@@ -266,7 +291,7 @@ export default function App() {
       {/* Shares live GPS with the admin map while the engineer is on duty */}
       <PushRegistration currentUser={currentUser} />
       <Suspense fallback={null}>
-        <LiveLocationReporter currentUser={currentUser} />
+        {consent === 'ok' && <LiveLocationReporter currentUser={currentUser} />}
         {/* Assistive Touch with field-work actions */}
         <GlobalChatWidget currentUser={currentUser} unreadChats={chatUnread} />
       </Suspense>

@@ -41,6 +41,9 @@ const userSchema = new mongoose.Schema({
   savedSignature: { type: String, default: '' },
   savedSignatureAt: { type: Date },
   faceEnrolledAt: { type: Date },
+  // Agreed (on first sign-in) that their location is shared with the office at all times
+  locationConsentAt: { type: Date, default: null },
+  locationConsentVersion: { type: String, default: '' },
   // Per-person alert switches { categoryKey: false } — missing = on (see services/notificationCategories.js)
   notificationPrefs: { type: Map, of: Boolean, default: {} },
   // First app-open time per day (last 30 days) — used to learn each person's usual start time

@@ -2,10 +2,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { BackgroundGeolocation } from '../../utils/backgroundGeolocation';
 import { API_BASE_URL } from '../../config/api';
-import { isAdminRole } from '../../utils/session';
 
-// Sends the engineer's live position to the server while they are on duty
-// (checked in and not yet checked out today), so the admin Live Field Map is real-time.
+// Sends the live position of engineers and branch admins to the server.
+//
+// - Phone app: ALWAYS on (24/7), on or off duty — company policy the person agreed to at
+//   first sign-in. There is no switch in the app to stop it. If the phone's location is
+//   turned off or the permission removed, the office is alerted at once.
+// - Web (browser): engineers only, while on duty.
 //
 // - Phone app: uses the background-geolocation plugin, so tracking continues
 //   with the screen off, and resumes automatically if the app restarts.
@@ -15,8 +18,10 @@ import { isAdminRole } from '../../utils/session';
 // - Stops immediately on Clock-Out (AttendanceView dispatches 'gcr_duty_changed').
 
 
-const MIN_INTERVAL_MS = 15 * 1000;
+const MIN_INTERVAL_MS = 15 * 1000;          // on duty
 const HEARTBEAT_MS = 2 * 60 * 1000;
+const OFF_DUTY_MIN_INTERVAL_MS = 60 * 1000;  // off duty: gentler on the battery
+const OFF_DUTY_HEARTBEAT_MS = 5 * 60 * 1000;
 const MIN_MOVE_M = 20;
 const DUTY_RECHECK_MS = 60 * 1000;
 
@@ -50,14 +55,19 @@ export default function LiveLocationReporter({ currentUser }) {
   const native = Capacitor.isNativePlatform?.();
 
   useEffect(() => {
-    if (!currentUser?.id || isAdminRole(currentUser)) return undefined;
+    const role = currentUser?.role;
+    if (!currentUser?.id || !['ENGINEER', 'ADMIN'].includes(role)) return undefined;
+    if (!native && role !== 'ENGINEER') return undefined;
+    const always = native; // phone app: 24/7
     let cancelled = false;
+    const onDutyNow = { current: false };
 
-    const report = (type) => fetch(`${API_BASE_URL}/api/attendance`, {
+    const ping = (body) => fetch(`${API_BASE_URL}/api/live/ping`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: currentUser.id, name: currentUser.name || currentUser.username || currentUser.id, attendanceType: type }),
-    }).catch(() => {});
+      body: JSON.stringify({ ...body, platform: Capacitor.getPlatform?.() || 'web' }),
+    });
+    const report = (type) => ping({ state: type === 'Location Off' ? 'off' : 'on' }).catch(() => {});
 
     // Location turned off (or permission removed) while on duty → record it, alert the admin
     // (server side), and show the engineer a bar to turn it back on.
@@ -80,23 +90,14 @@ export default function LiveLocationReporter({ currentUser }) {
       if (!force && prev) {
         const moved = metersBetween(prev, fix);
         const since = now - prev.at;
-        if (since < MIN_INTERVAL_MS) return;
-        if (moved < MIN_MOVE_M && since < HEARTBEAT_MS) return;
+        const duty = onDutyNow.current;
+        if (since < (duty ? MIN_INTERVAL_MS : OFF_DUTY_MIN_INTERVAL_MS)) return;
+        if (moved < MIN_MOVE_M && since < (duty ? HEARTBEAT_MS : OFF_DUTY_HEARTBEAT_MS)) return;
       }
       lastSent.current = { ...fix, at: now };
-      fetch(`${API_BASE_URL}/api/attendance`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: currentUser.id,
-          name: currentUser.name || currentUser.username || currentUser.id,
-          lat: String(fix.lat),
-          lng: String(fix.lng),
-          accuracy: fix.accuracy,
-          attendanceType: 'Location Update',
-          status: 'Background',
-        }),
-      }).catch(() => { lastSent.current = prev; }); // retry on next fix
+      ping({ lat: fix.lat, lng: fix.lng, accuracy: fix.accuracy })
+        .then((r) => { if (!r.ok) lastSent.current = prev; })
+        .catch(() => { lastSent.current = prev; }); // retry on next fix
     };
 
     const onFix = (lat, lng, accuracy) => {
@@ -111,8 +112,8 @@ export default function LiveLocationReporter({ currentUser }) {
       if (native) {
         const id = await BackgroundGeolocation.addWatcher(
           {
-            backgroundMessage: 'Sharing your location with Gouru while you are on duty.',
-            backgroundTitle: 'Gouru Valuations — On duty',
+            backgroundMessage: 'Your location is shared with the Gouru office.',
+            backgroundTitle: 'Gouru Valuations — Location sharing',
             requestPermissions: true,
             stale: false,
             distanceFilter: MIN_MOVE_M,
@@ -147,9 +148,10 @@ export default function LiveLocationReporter({ currentUser }) {
 
     const sync = async () => {
       try {
-        const onDuty = await isOnDuty(currentUser.id);
+        const onDuty = role === 'ENGINEER' ? await isOnDuty(currentUser.id) : false;
         if (cancelled) return;
-        if (onDuty) await start();
+        onDutyNow.current = onDuty;
+        if (always || onDuty) await start();
         else stop();
       } catch { /* offline: keep current state */ }
     };
@@ -157,11 +159,14 @@ export default function LiveLocationReporter({ currentUser }) {
     // Heartbeat while standing still
     const heartbeat = setInterval(() => {
       if (watcher.current && latest.current && !locOff.current) send(latest.current);
-    }, HEARTBEAT_MS);
+    }, 60 * 1000);
 
     sync();
     const recheck = setInterval(sync, DUTY_RECHECK_MS);
     const onDutyChanged = () => { lastSent.current = null; sync(); };
+    // Coming back to the app: send a fresh position straight away
+    const onVisible = () => { if (!document.hidden && latest.current) { lastSent.current = null; send(latest.current); } };
+    document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('gcr_duty_changed', onDutyChanged);
 
     return () => {
@@ -169,6 +174,7 @@ export default function LiveLocationReporter({ currentUser }) {
       clearInterval(recheck);
       clearInterval(heartbeat);
       window.removeEventListener('gcr_duty_changed', onDutyChanged);
+      document.removeEventListener('visibilitychange', onVisible);
       stop();
     };
   }, [currentUser?.id, currentUser?.role, currentUser?.name, currentUser?.username]);
@@ -187,7 +193,7 @@ export default function LiveLocationReporter({ currentUser }) {
     }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 15, fontWeight: 700 }}>Location is off</div>
-        <div style={{ fontSize: 13, opacity: 0.92, lineHeight: 1.35 }}>You’re on duty — turn it back on. Your admin has been notified.</div>
+        <div style={{ fontSize: 13, opacity: 0.92, lineHeight: 1.35 }}>Location must stay on at all times. The office has been notified — please turn it back on.</div>
       </div>
       <button onClick={turnOn} style={{ flex: 'none', height: 34, padding: '0 14px', borderRadius: 17, border: 'none', background: '#fff', color: '#ff3b30', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
         Turn On

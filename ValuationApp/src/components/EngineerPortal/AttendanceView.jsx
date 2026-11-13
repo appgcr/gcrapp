@@ -588,7 +588,7 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
         throw new Error(e.error || 'Could not save. Check your internet and try again.');
       }
 
-      toast.success(scannerType_ === 'Clock-In' ? 'Checked in. Your location is shared while on duty.' : 'Checked out. Location sharing stopped.');
+      toast.success(scannerType_ === 'Clock-In' ? 'Checked in. Have a good day!' : 'Checked out.');
 
       // Live location sharing is handled by LiveLocationReporter (starts on Clock-In,
       // stops on Clock-Out, resumes after app restarts). Tell it duty status changed.
@@ -670,7 +670,7 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
               {isBlocked && !isOnDuty
                 ? `You’ve checked out ${maxDailyClockOuts} times today — that’s the daily limit.`
                 : isOnDuty
-                  ? 'Your location is shared with the office until you check out.'
+                  ? 'You’re on duty. Tap Check Out when you finish for the day.'
                   : fingerprintReady
                     ? 'Use your fingerprint or a quick selfie to start your day. Location must be on.'
                     : 'Take a quick selfie to start your day. Location must be on.'}

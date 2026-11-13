@@ -70,6 +70,7 @@ app.use('/api/chat', require('./routes/chat'));
 app.use('/api/extract', require('./routes/extract'));
 app.use('/api/config', require('./routes/config'));
 app.use('/api/location', require('./routes/location'));
+app.use('/api/live', require('./routes/live'));
 app.use('/api/branches', require('./routes/branches'));
 app.use('/api/banks', require('./routes/banks'));
 app.use('/api/geo', require('./routes/geo'));
@@ -195,6 +196,8 @@ async function startServer() {
 
   // Automatic reminders (morning digest, check-in/out, inspections, overdue cases)
   startReminderScheduler();
+  // Alerts when someone's phone stops sharing its location
+  require('./routes/live').startLiveWatchdog();
 
   app.listen(PORT, () => {
     logConfigSummary(config);

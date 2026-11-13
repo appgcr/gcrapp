@@ -138,19 +138,35 @@ export default function AdminStaff({ currentUser }) {
 
   const fetchStaffData = async () => {
       try {
-        const [usersRes, attRes] = await Promise.all([
+        const [usersRes, attRes, liveRes] = await Promise.all([
           fetch(`${API_BASE_URL}/api/users`),
-          fetch(`${API_BASE_URL}/api/attendance?date=${localYMD(new Date())}`) // today only
+          fetch(`${API_BASE_URL}/api/attendance?date=${localYMD(new Date())}`), // today only
+          fetch(`${API_BASE_URL}/api/live`).catch(() => null), // 24/7 latest positions
         ]);
         const users = await usersRes.json();
         const attendances = await attRes.json();
+        const liveRows = liveRes && liveRes.ok ? await liveRes.json().catch(() => []) : [];
+        const liveBy = new Map((Array.isArray(liveRows) ? liveRows : []).map((r) => [r.userId, r]));
+        // Latest 24/7 position as a map point (same shape as an attendance record)
+        const liveFix = (l) => (l && l.lat != null && l.lng != null && l.at
+          ? { lat: String(l.lat), lng: String(l.lng), accuracy: l.accuracy, timestamp: l.at } : null);
+        const offDutyState = (l) => (!l ? null : l.state === 'off' ? ['Location off', '#ff3b30'] : l.state === 'silent' ? ['No signal', '#ff9500'] : ['Off duty · live', '#5856d6']);
 
         const staff = users.filter(u => u.role === 'ENGINEER');
-        setBranchAdmins(users.filter(u => u.role === 'ADMIN').map(u => ({
-          ...u,
-          displayName: u.name || u.username,
-          initials: (u.name || u.username).split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
-        })));
+        setBranchAdmins(users.filter(u => u.role === 'ADMIN').map(u => {
+          const l = liveBy.get(u.id);
+          const st = !l ? ['No location yet', '#8e8e93'] : l.state === 'off' ? ['Location off', '#ff3b30'] : l.state === 'silent' ? ['No signal', '#ff9500'] : ['Live', '#1e3a8a'];
+          return {
+            ...u,
+            displayName: u.name || u.username,
+            initials: (u.name || u.username).split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
+            lastLog: liveFix(l),
+            seenAt: l?.lastSeenAt || null,
+            liveState: l?.state || null,
+            mapStatus: st[0],
+            statusColor: st[1],
+          };
+        }));
 
         const enrichedStaff = staff.map(user => {
           const userLogs = (Array.isArray(attendances) ? attendances : [])
@@ -162,15 +178,19 @@ export default function AdminStaff({ currentUser }) {
           const lastDutyEvent = userLogs.find(l => l.attendanceType === 'Clock-In' || l.attendanceType === 'Clock-Out');
           const onDuty = lastDutyEvent?.attendanceType === 'Clock-In';
           // Position = newest record with coordinates (live updates included)
-          const lastFix = userLogs.find(l => l.lat && l.lng && !isNaN(parseFloat(l.lat)) && !isNaN(parseFloat(l.lng))) || null;
+          const attFix = userLogs.find(l => l.lat && l.lng && !isNaN(parseFloat(l.lat)) && !isNaN(parseFloat(l.lng))) || null;
+          const live = liveBy.get(user.id);
+          const lf = liveFix(live);
+          const lastFix = lf && (!attFix || new Date(lf.timestamp) > new Date(attFix.timestamp)) ? lf : attFix;
           const ageMs = lastFix ? Date.now() - new Date(lastFix.timestamp).getTime() : null;
           const isStale = onDuty && (ageMs === null || ageMs > STALE_MS);
 
           // Engineer switched location off while on duty (latest tracking event)
           const lastTrack = userLogs.find(l => ['Location Off', 'Location On', 'Location Update', 'Clock-In'].includes(l.attendanceType));
           const locationOff = onDuty && lastTrack?.attendanceType === 'Location Off';
-          const status = !onDuty ? 'Off Duty' : locationOff ? 'Location off' : isStale ? 'Signal lost' : 'On Duty';
-          const statusColor = !onDuty ? '#8e8e93' : locationOff ? '#ff3b30' : isStale ? '#ff9500' : '#34c759';
+          const off = offDutyState(live);
+          const status = !onDuty ? (off ? off[0] : 'Off Duty') : (locationOff || live?.state === 'off') ? 'Location off' : isStale ? 'Signal lost' : 'On Duty';
+          const statusColor = !onDuty ? (off ? off[1] : '#8e8e93') : (locationOff || live?.state === 'off') ? '#ff3b30' : isStale ? '#ff9500' : '#34c759';
 
           const names = (user.name || user.username).split(' ');
           let initials = names[0].charAt(0).toUpperCase();
@@ -185,6 +205,7 @@ export default function AdminStaff({ currentUser }) {
             statusColor,
             checkedInAt: onDuty ? lastDutyEvent.timestamp : null,
             lastLog: lastFix,
+            seenAt: live?.lastSeenAt || null,
             pings: userLogs.filter(l => l.attendanceType === 'Location Update').length,
           };
         });
@@ -242,7 +263,11 @@ export default function AdminStaff({ currentUser }) {
     );
   }
 
-  const onMap = engineers.filter(e => e.onDuty && e.lastLog);
+  // 24/7: everyone with a known position is on the map (Super Admin also sees branch admins)
+  const onMap = [
+    ...engineers.filter(e => e.lastLog),
+    ...(superAdmin ? branchAdmins.filter(a => a.lastLog).map(a => ({ ...a, status: a.mapStatus, isAdmin: true })) : []),
+  ];
   const activeStaffCount = engineers.filter(e => e.onDuty).length;
   const points = onMap.map(e => [parseFloat(e.lastLog.lat), parseFloat(e.lastLog.lng)]);
 
@@ -414,7 +439,7 @@ export default function AdminStaff({ currentUser }) {
       <div className="gcr-section-head" style={{ alignItems: 'center', marginBottom: '14px' }}>
         <div>
           <h2 className="gcr-section-title" style={{ fontSize: '22px' }}>Live Tracking</h2>
-          <p className="gcr-section-sub">Engineers share location only while on duty</p>
+          <p className="gcr-section-sub">Staff locations are shared 24/7 from the phone app</p>
         </div>
         <button className="st-add" onClick={() => setIsModalOpen(true)}>
           <Plus size={17} strokeWidth={2.4} /> Add Engineer
@@ -453,12 +478,12 @@ export default function AdminStaff({ currentUser }) {
                 ) : null}
                 <Marker
                   position={[parseFloat(eng.lastLog.lat), parseFloat(eng.lastLog.lng)]}
-                  icon={createLiveIcon(eng.initials, eng.statusColor, eng.status === 'On Duty')}
+                  icon={createLiveIcon(eng.initials, eng.statusColor, eng.status === 'On Duty' || eng.status === 'Live' || eng.status === 'Off duty · live')}
                   eventHandlers={{ click: () => setFocusId(eng.id) }}
                 >
                   <Popup>
                     <strong>{eng.displayName}</strong><br />
-                    {eng.status === 'Signal lost' ? 'No update for over 5 min' : 'On duty'}<br />
+                    {eng.isAdmin ? 'Branch Admin · ' : ''}{eng.status === 'Signal lost' ? 'No update for over 5 min' : eng.status}<br />
                     Last update: {timeAgoShort(new Date(eng.lastLog.timestamp))}
                   </Popup>
                 </Marker>
@@ -469,8 +494,8 @@ export default function AdminStaff({ currentUser }) {
 
           {onMap.length === 0 && (
             <div className="st-map-empty">
-              <strong>No engineers on duty</strong>
-              <span>Their live location appears here after they check in.</span>
+              <strong>No locations yet</strong>
+              <span>People appear here once they sign in on the phone app.</span>
             </div>
           )}
           {/* Map credits are required by the free map's licence. Like Apple Maps / Mapbox,
@@ -508,7 +533,7 @@ export default function AdminStaff({ currentUser }) {
             onClick={() => {
               setSelectedStaff(eng);
               setResetResult(null);
-              if (eng.onDuty && eng.lastLog) setFocusId(eng.id);
+              if (eng.lastLog) setFocusId(eng.id);
             }}
           >
             <div className="st-avatar" style={{ boxShadow: `0 0 0 2px #fff, 0 0 0 4px ${eng.statusColor}` }}>{eng.initials}</div>
@@ -519,10 +544,12 @@ export default function AdminStaff({ currentUser }) {
                   ? <>Updated {timeAgoShort(new Date(eng.lastLog.timestamp))} · checked in {new Date(eng.checkedInAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}</>
                   : eng.onDuty
                     ? 'Checked in · waiting for first location'
-                    : 'Location sharing off'}
+                    : eng.lastLog
+                      ? <>Off duty · seen {timeAgoShort(new Date(eng.seenAt || eng.lastLog.timestamp))}</>
+                      : 'No location yet — not signed in on the app'}
               </div>
             </div>
-            <span className={`gcr-badge ${eng.status === 'On Duty' ? 'green' : eng.status === 'Signal lost' ? 'orange' : eng.status === 'Location off' ? 'red' : 'gray'}`}>{eng.status}</span>
+            <span className={`gcr-badge ${eng.status === 'On Duty' ? 'green' : (eng.status === 'Signal lost' || eng.status === 'No signal') ? 'orange' : eng.status === 'Location off' ? 'red' : eng.status === 'Off duty · live' ? 'blue' : 'gray'}`}>{eng.status === 'Off duty · live' ? 'Off duty' : eng.status}</span>
           </div>
         ))}
       </div>
@@ -537,13 +564,13 @@ export default function AdminStaff({ currentUser }) {
             <div style={{ padding: '8px 16px 18px', fontSize: '14px', color: 'var(--gcr-label-3)' }}>No branch admins yet. Open Branches to add one.</div>
           )}
           {branchAdmins.map((a) => (
-            <div key={a.id} className="st-row" onClick={() => openPerson(a)}>
+            <div key={a.id} className="st-row" onClick={() => { openPerson(a); if (a.lastLog) setFocusId(a.id); }}>
               <div className="st-avatar st-avatar-admin">{a.initials}</div>
               <div className="st-main">
                 <div className="st-name">{a.displayName}{showBranchChip && branchCode(a.branchId) && <span className="st-chip">{branchCode(a.branchId)}</span>}</div>
-                <div className="st-sub">@{a.username}{a.phone ? ` · ${a.phone}` : ''}</div>
+                <div className="st-sub">@{a.username}{a.seenAt ? <> · seen {timeAgoShort(new Date(a.seenAt))}</> : ' · no location yet'}</div>
               </div>
-              <span className={`gcr-badge ${a.status === 'Inactive' ? 'gray' : 'blue'}`}>{a.status === 'Inactive' ? 'Inactive' : 'Admin'}</span>
+              <span className={`gcr-badge ${a.status === 'Inactive' ? 'gray' : a.liveState === 'off' ? 'red' : a.liveState === 'silent' ? 'orange' : a.liveState === 'live' ? 'green' : 'gray'}`}>{a.status === 'Inactive' ? 'Inactive' : a.mapStatus}</span>
             </div>
           ))}
         </div>
