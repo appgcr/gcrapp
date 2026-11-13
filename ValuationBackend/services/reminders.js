@@ -1,5 +1,5 @@
 /**
- * GCR Valuation System — Automatic reminder scheduler
+ * Gouru Valuations System — Automatic reminder scheduler
  *
  * Runs on the backend (works even when phones/apps are closed). Every minute it
  * checks five rules in India Standard Time and sends alerts through notify()
@@ -197,7 +197,7 @@ async function ruleLocationSilence(ctx) {
       await send(`${key}:self`, 'locationSilence', {
         to: e.id, type: 'location_silent', priority: 'urgent', now: ctx.now,
         title: 'Turn on your location',
-        message: 'You are on duty but your location is not reaching the office. Open GCR and keep location on.',
+        message: 'You are on duty but your location is not reaching the office. Open Gouru Valuations and keep location on.',
       });
       count += 1;
     }
@@ -231,7 +231,7 @@ async function ruleMorningDigest(ctx) {
     const first = (a.name || '').split(' ')[0];
     const sent = await send(`digest:${a.id}:${ist.ymd}`, 'morningDigest', {
       to: a.id, type: 'morning_digest', priority: 'digest', now: ctx.now,
-      title: first && first.toLowerCase() !== 'super' ? `Good morning, ${first}` : 'Good morning — today at GCR',
+      title: first && first.toLowerCase() !== 'super' ? `Good morning, ${first}` : 'Good morning — today at Gouru Valuations',
       message,
     });
     if (sent) count += 1;

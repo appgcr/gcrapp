@@ -49,7 +49,7 @@ export default function SettingsView({ currentUser, handleLogout }) {
       phone: currentUser?.phone || 'Not Set',
       email: currentUser?.email || 'Not Set',
       address: 'Kadapa, Y.S.R District, Andhra Pradesh',
-      bio: 'Technical Valuation Engineer at GCR Panel.'
+      bio: 'Technical Valuation Engineer at Gouru Panel.'
     };
   });
 
@@ -206,7 +206,7 @@ export default function SettingsView({ currentUser, handleLogout }) {
             <button type="button" className="ios-row ios-signout" onClick={handleLogout}>Sign Out</button>
           </div>
 
-          <div className="ios-version">GCR Valuation · Version {pkg.version}<br />Developed by MSTechHive</div>
+          <div className="ios-version">Gouru Valuations · Version {pkg.version}<br />Developed by MSTechHive</div>
         </>
       )}
 

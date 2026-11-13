@@ -142,7 +142,7 @@ const {
 } = require('@simplewebauthn/server');
 
 // WebAuthn Config
-const rpName = process.env.WEBAUTHN_RP_NAME || 'GCR Valuations App';
+const rpName = process.env.WEBAUTHN_RP_NAME || 'Gouru Valuations';
 const rpID = process.env.WEBAUTHN_RP_ID || 'localhost';
 const origin = process.env.WEBAUTHN_ORIGIN || `http://${rpID}:5173`;
 

@@ -1,7 +1,7 @@
 // Public website & legal pages — one place for the company's contact details.
 // email: the privacy / support mailbox shown on the website and in the store listings
 export const SITE = {
-  brand: 'GCR Valuation',
+  brand: 'Gouru Valuations',
   valuer: 'Er. Gouru Neelakanta Reddy',
   valuerTitle: 'B.Tech., MISTE — Civil Engineering Consultant & Approved Panel Valuer',
   iiv: 'Indian Institution of Valuers, Fellow F – 13622',
@@ -10,7 +10,7 @@ export const SITE = {
   email: 'hello.happydooo@gmail.com',
   grievanceOfficer: 'Er. Gouru Neelakanta Reddy',
   policyDate: '11 November 2026',
-  apps: 'GCR Valuation app for Android and iOS, and the web portal',
+  apps: 'Gouru Valuations app for Android and iOS, and the web portal',
 };
 
 // Banks whose own report formats are built into the app.

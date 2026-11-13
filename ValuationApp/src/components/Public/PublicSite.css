@@ -1,4 +1,4 @@
-/* ============================================================ GCR public website */
+/* ============================================================ Gouru public website */
 /* The app's #root hides sideways overflow, which would stop the sticky menu; on the website use clip instead. */
 #root:has(> .ps) { overflow-x: clip; }
 .ps {

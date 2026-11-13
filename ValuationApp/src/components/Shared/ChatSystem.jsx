@@ -366,7 +366,7 @@ function Thread({ currentUser, engineerId, conv, caseId, onBack, isMini, onRead 
     <div className={`ch-thread ${isMini ? 'mini' : ''}`}>
       <header className="ch-head">
         {onBack && <button className="ch-back" onClick={onBack} aria-label="Back"><ChevronLeft size={26} /></button>}
-        <span className={`ch-avatar sm ${admin ? '' : 'office'}`} style={admin ? avatarStyle(engineerId) : undefined}>{admin ? initials(title) : 'GCR'}</span>
+        <span className={`ch-avatar sm ${admin ? '' : 'office'}`} style={admin ? avatarStyle(engineerId) : undefined}>{admin ? initials(title) : 'GV'}</span>
         <div className="ch-head-text">
           <b>{title}</b>
           <span>{subtitle}</span>

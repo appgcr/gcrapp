@@ -6,7 +6,7 @@ import { authHeaders } from '../Shared/authHeaders';
 import StaffFormSheet from './StaffFormSheet';
 
 /**
- * Bank employees who send valuation requests to this GCR branch (Super Admin: the branch being viewed,
+ * Bank employees who send valuation requests to this Gouru branch (Super Admin: the branch being viewed,
  * or all). They log in on the website / app and only see their own requests.
  */
 export default function BankUsersPanel({ superAdmin, branches = [], scope = 'all' }) {
@@ -85,7 +85,7 @@ export default function BankUsersPanel({ superAdmin, branches = [], scope = 'all
                 <div style={{ fontSize: 13, color: '#475569' }}>
                   {[u.designation, u.bankName, u.bankBranch].filter(Boolean).join(' · ')}{u.phone ? ` · ${u.phone}` : ''}
                 </div>
-                {superAdmin && <div style={{ fontSize: 12, color: '#94a3b8' }}>Sends to GCR {branchName(u.branchId) || u.branchId}</div>}
+                {superAdmin && <div style={{ fontSize: 12, color: '#94a3b8' }}>Sends to Gouru {branchName(u.branchId) || u.branchId}</div>}
               </div>
               <button className="fs-icon" title="New password" aria-label={`New password for ${u.name}`} onClick={() => resetPassword(u)} disabled={busyId === u.id}>
                 {busyId === u.id ? <Loader2 size={16} className="spin" /> : <KeyRound size={16} />}

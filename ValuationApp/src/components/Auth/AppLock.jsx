@@ -30,7 +30,7 @@ export default function AppLock({ onUnlock, onFallback }) {
   const handleBiometricUnlock = async () => {
     try {
       await NativeBiometric.verifyIdentity({
-        reason: "Unlock GCR App",
+        reason: "Unlock Gouru Valuations",
         title: "App Locked",
         subtitle: "Verify your identity to open the app",
         description: "Use your fingerprint or FaceID"
@@ -48,7 +48,7 @@ export default function AppLock({ onUnlock, onFallback }) {
         <div className="lg-form-wrap" style={{ textAlign: 'center' }}>
           <header className="lg-head">
             <div className="lg-logo"><GcrLogo size={76} /></div>
-            <h2>GCR is locked</h2>
+            <h2>Gouru is locked</h2>
             <p>Verify it’s you to continue.</p>
           </header>
           {isAvailable ? (

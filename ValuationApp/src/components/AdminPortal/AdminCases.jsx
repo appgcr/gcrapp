@@ -684,7 +684,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
                   )}
                   {pickedBank && !showBankDropdown && (
                     <span style={{ fontSize: '12px', color: '#248a3d', fontWeight: 600 }}>
-                      ✓ {pickedBank.format === 'standard' ? 'Report: standard GCR format (this bank’s own format isn’t added yet)' : `Report: ${pickedBank.shortName || pickedBank.name}’s own format`}
+                      ✓ {pickedBank.format === 'standard' ? 'Report: standard Gouru format (this bank’s own format isn’t added yet)' : `Report: ${pickedBank.shortName || pickedBank.name}’s own format`}
                     </span>
                   )}
                   {newTask.bankName.trim() && !pickedBank && !showBankDropdown && (

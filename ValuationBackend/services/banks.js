@@ -4,7 +4,7 @@ const Bank = require('../models/Bank');
 
 // Report layouts that are installed (services/reports). Others print the standard report.
 const FORMATS = [
-  { key: 'standard', label: 'Standard GCR report' },
+  { key: 'standard', label: 'Standard Gouru report' },
   { key: 'apgb', label: 'APGB (bank’s own format)' },
   { key: 'bob', label: 'Bank of Baroda (bank’s own format)' },
   { key: 'boi', label: 'Bank of India (bank’s own format)' },

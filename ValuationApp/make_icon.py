@@ -1,64 +1,136 @@
 #!/usr/bin/env python3
-"""GCR Valuation app icon (v2): roof + window mark, "GCR" wordmark and a spaced "VALUATION" line.
+"""Gouru Valuations app icon (premium): deep-navy badge, metallic gold roof, fine gold frame,
+white "GOURU" wordmark and gold "VALUATIONS" between two thin gold rules.
 
-    python3 make_icon.py            → writes every iOS / Android / Play Store icon
-
-The wordmark and the line below never touch, so the icon stays readable at small sizes.
+    python3 make_icon.py            → writes every iOS / Android / Play Store icon, splash and favicon
 """
 import os
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageChops
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 HEAVY = ('/System/Library/Fonts/Avenir Next.ttc', 8)   # Avenir Next Heavy
 DEMI = ('/System/Library/Fonts/Avenir Next.ttc', 2)    # Avenir Next Demi Bold
 
-TOP, BOTTOM = (37, 99, 235), (30, 58, 138)            # blue gradient
-GOLD, CYAN, WHITE, SOFT = (251, 191, 36), (56, 189, 248), (255, 255, 255), (191, 219, 254)
+WORD, SUB = 'GOURU', 'VALUATIONS'                      # brand name on the icon
+NAVY_A, NAVY_B = (27, 58, 138), (7, 18, 52)            # top-left → bottom-right
+GLOW = (64, 120, 235)
+GOLD_LIGHT, GOLD, GOLD_DEEP = (254, 236, 160), (245, 180, 40), (180, 105, 12)
+WHITE, GOLD_TEXT = (255, 255, 255), (246, 200, 92)
+
+
+def _ramp(n, angle=0):
+    """n×n 0..255 ramp (0 = start colour) at the given angle (degrees, 0 = top→bottom)."""
+    g = Image.linear_gradient('L').resize((n * 2, n * 2))
+    return g.rotate(angle, resample=Image.BICUBIC).crop((n // 2, n // 2, n // 2 + n, n // 2 + n))
+
+
+def _fill(n, c1, c2, angle=0):
+    return Image.composite(Image.new('RGB', (n, n), c2), Image.new('RGB', (n, n), c1), _ramp(n, angle))
+
+
+def _gold(n, y0=0.0, y1=1.0):
+    """Metallic gold band between y0 and y1 (fractions of n): light → rich → deep, flat outside."""
+    a, b = int(n * y0), max(int(n * y0) + 2, int(n * y1))
+    h = b - a
+    half = Image.linear_gradient('L').resize((n, h // 2 + 1))
+    up = Image.composite(Image.new('RGB', half.size, GOLD), Image.new('RGB', half.size, GOLD_LIGHT), half)
+    down = Image.composite(Image.new('RGB', half.size, GOLD_DEEP), Image.new('RGB', half.size, GOLD), half)
+    out = Image.new('RGB', (n, n), GOLD_LIGHT)
+    out.paste(up, (0, a)); out.paste(down, (0, a + h // 2))
+    out.paste(Image.new('RGB', (n, max(1, n - b)), GOLD_DEEP), (0, b))
+    return out
 
 
 def _background(n):
-    bg = Image.new('RGB', (n, n))
-    px = bg.load()
-    for y in range(n):
-        for x in range(n):
-            t = min(1.0, max(0.0, (0.75 * y + 0.25 * x) / n))
-            px[x, y] = tuple(int(TOP[i] + (BOTTOM[i] - TOP[i]) * t) for i in range(3))
+    bg = _fill(n, NAVY_A, NAVY_B, angle=45)
     glow = Image.new('L', (n, n), 0)
-    ImageDraw.Draw(glow).ellipse((-0.2 * n, -0.45 * n, 0.9 * n, 0.45 * n), fill=34)
-    glow = glow.filter(ImageFilter.GaussianBlur(n * 0.08))
-    bg.paste(Image.new('RGB', (n, n), (255, 255, 255)), (0, 0), glow)
+    ImageDraw.Draw(glow).ellipse((-0.15 * n, -0.55 * n, 0.95 * n, 0.42 * n), fill=120)
+    bg.paste(Image.new('RGB', (n, n), GLOW), (0, 0), glow.filter(ImageFilter.GaussianBlur(n * 0.12)))
     return bg.convert('RGBA')
 
 
+def _spaced(d, text, font, tracking):
+    widths = [d.textlength(c, font=font) for c in text]
+    return widths, sum(widths) + tracking * (len(text) - 1)
+
+
 def _mark(n):
-    """Transparent layer with the roof, window and text, drawn on an n×n canvas."""
-    layer = Image.new('RGBA', (n, n), (0, 0, 0, 0))
-    d = ImageDraw.Draw(layer)
+    """Transparent layer with the frame, roof, window and text, drawn on an n×n canvas."""
     s = n / 1024.0
-    # roof (rounded chevron)
-    w = int(66 * s)
-    pts = [(250 * s, 432 * s), (512 * s, 262 * s), (774 * s, 432 * s)]
-    d.line(pts, fill=GOLD, width=w, joint='curve')
+    layer = Image.new('RGBA', (n, n), (0, 0, 0, 0))
+    gold = _gold(n).convert('RGBA')                          # frame
+    roof_gold = _gold(n, 0.25, 0.46).convert('RGBA')         # roof + window: sheen across the mark
+
+    # fine gold frame
+    frame = Image.new('L', (n, n), 0)
+    fd = ImageDraw.Draw(frame)
+    inset, rad = 58 * s, 168 * s
+    fd.rounded_rectangle((inset, inset, n - inset, n - inset), radius=rad, outline=185, width=max(1, int(5 * s)))
+    layer.paste(gold, (0, 0), frame)
+
+    # metallic gold roof with a soft shadow
+    roof = Image.new('L', (n, n), 0)
+    rd = ImageDraw.Draw(roof)
+    w = int(56 * s)
+    pts = [(268 * s, 432 * s), (512 * s, 278 * s), (756 * s, 432 * s)]
+    rd.line(pts, fill=255, width=w, joint='curve')
     for x, y in (pts[0], pts[2]):
-        d.ellipse((x - w / 2, y - w / 2, x + w / 2, y + w / 2), fill=GOLD)
-    # window (diamond)
-    cx, cy, r = 512 * s, 392 * s, 46 * s
-    d.polygon([(cx, cy - r), (cx + r, cy), (cx, cy + r), (cx - r, cy)], fill=CYAN)
-    # GCR
-    f = ImageFont.truetype(HEAVY[0], int(292 * s), index=HEAVY[1])
-    box = d.textbbox((0, 0), 'GCR', font=f)
-    tw, th = box[2] - box[0], box[3] - box[1]
-    d.text(((n - tw) / 2 - box[0], 498 * s - box[1]), 'GCR', font=f, fill=WHITE)
-    # VALUATION (letter-spaced, clear gap under GCR)
-    f2 = ImageFont.truetype(DEMI[0], int(70 * s), index=DEMI[1])
-    word, gap = 'VALUATION', 15 * s
-    widths = [d.textlength(c, font=f2) for c in word]
-    total = sum(widths) + gap * (len(word) - 1)
-    x = (n - total) / 2
-    y = 498 * s + th + 70 * s
-    for c, cw in zip(word, widths):
-        d.text((x, y), c, font=f2, fill=SOFT)
-        x += cw + gap
+        rd.ellipse((x - w / 2, y - w / 2, x + w / 2, y + w / 2), fill=255)
+    shadow = Image.new('RGBA', (n, n), (0, 0, 10, 0))
+    shadow.putalpha(roof.point(lambda v: int(v * 0.45)).filter(ImageFilter.GaussianBlur(14 * s)))
+    layer.alpha_composite(shadow, (0, int(10 * s)))
+    layer.paste(roof_gold, (0, 0), roof)
+
+    # window: a cut diamond, gold edge with a light centre
+    cx, cy, r = 512 * s, 384 * s, 40 * s
+    dm = Image.new('L', (n, n), 0)
+    ImageDraw.Draw(dm).polygon([(cx, cy - r), (cx + r, cy), (cx, cy + r), (cx - r, cy)], fill=255)
+    layer.paste(roof_gold, (0, 0), dm)
+    d = ImageDraw.Draw(layer)
+    r2 = r * 0.55
+    d.polygon([(cx, cy - r2), (cx + r2, cy), (cx, cy + r2), (cx - r2, cy)], fill=(255, 250, 230, 255))
+
+    # GOURU — white, slightly tracked, with a soft drop shadow
+    tracking = 8 * s
+    size = 250
+    while True:
+        f = ImageFont.truetype(HEAVY[0], int(size * s), index=HEAVY[1])
+        widths, tw = _spaced(d, WORD, f, tracking)
+        if tw <= 700 * s or size <= 120:
+            break
+        size -= 4
+    box = d.textbbox((0, 0), WORD, font=f)
+    th = box[3] - box[1]
+    f2 = ImageFont.truetype(DEMI[0], int(50 * s), index=DEMI[1])
+    t2 = 13 * s
+    w2, sw = _spaced(d, SUB, f2, t2)
+    sub_box = d.textbbox((0, 0), SUB, font=f2)
+    sub_h = sub_box[3] - sub_box[1]
+    space = 58 * s
+    top = 486 * s + ((380 * s) - (th + space + sub_h)) / 2
+
+    txt = Image.new('L', (n, n), 0)
+    td = ImageDraw.Draw(txt)
+    x = (n - tw) / 2
+    for c, cw in zip(WORD, widths):
+        td.text((x - box[0] * 0, top - box[1]), c, font=f, fill=255)
+        x += cw + tracking
+    sh = Image.new('RGBA', (n, n), (0, 0, 20, 0))
+    sh.putalpha(txt.point(lambda v: int(v * 0.5)).filter(ImageFilter.GaussianBlur(12 * s)))
+    layer.alpha_composite(sh, (0, int(9 * s)))
+    layer.paste(Image.new('RGBA', (n, n), WHITE + (255,)), (0, 0), txt)
+
+    # VALUATIONS in gold between two thin gold rules
+    y = top + th + space
+    x = (n - sw) / 2
+    for c, cw in zip(SUB, w2):
+        d.text((x, y - sub_box[1]), c, font=f2, fill=GOLD_TEXT)
+        x += cw + t2
+    mid = y + sub_h / 2
+    rule, pad = 64 * s, 26 * s
+    lw = max(1, int(4 * s))
+    d.line([((n - sw) / 2 - pad - rule, mid), ((n - sw) / 2 - pad, mid)], fill=GOLD_TEXT, width=lw)
+    d.line([((n + sw) / 2 + pad, mid), ((n + sw) / 2 + pad + rule, mid)], fill=GOLD_TEXT, width=lw)
     return layer
 
 

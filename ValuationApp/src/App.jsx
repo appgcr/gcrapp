@@ -253,7 +253,7 @@ export default function App() {
             <>
               <GcrLogo size={30} />
               <div className="eng-nav-stack">
-                <span className="eng-nav-title">{({ forms: 'Today', cases: 'My Cases', dashboard: 'Dashboard', settings: 'Settings', logs: 'Attendance' })[activeTab] || 'GCR Valuation'}</span>
+                <span className="eng-nav-title">{({ forms: 'Today', cases: 'My Cases', dashboard: 'Dashboard', settings: 'Settings', logs: 'Attendance' })[activeTab] || 'Gouru Valuations'}</span>
                 <span className="eng-nav-sub">{currentUser.branchInfo ? `${currentUser.branchInfo.name} Branch` : 'Field Engineer'}</span>
               </div>
             </>

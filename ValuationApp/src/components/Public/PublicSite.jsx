@@ -21,7 +21,7 @@ export default function PublicSite({ page = 'home', onNavigate, loggedIn = false
   }, []);
   useEffect(() => { window.scrollTo(0, 0); setMenu(false); }, [page]);
   useEffect(() => {
-    const titles = { home: 'GCR Valuation — Bank property valuation', privacy: 'Privacy Policy — GCR Valuation', terms: 'Terms of Use — GCR Valuation', 'delete-account': 'Delete your account — GCR Valuation' };
+    const titles = { home: 'Gouru Valuations — Bank property valuation', privacy: 'Privacy Policy — Gouru Valuations', terms: 'Terms of Use — Gouru Valuations', 'delete-account': 'Delete your account — Gouru Valuations' };
     document.title = titles[page] || titles.home;
   }, [page]);
 
@@ -205,7 +205,7 @@ function CountUp({ to, suffix = '' }) {
 
 /** The hero demo card: the 5 steps tick through by themselves, then start again. */
 function LiveTracker() {
-  const steps = ['Received by GCR', 'Engineer assigned', 'Site visit done', 'Under GCR review', 'Report ready'];
+  const steps = ['Received by Gouru', 'Engineer assigned', 'Site visit done', 'Under Gouru review', 'Report ready'];
   const [at, setAt] = React.useState(reduceMotion() ? 5 : 1);
   useEffect(() => {
     if (reduceMotion()) return undefined;
@@ -247,8 +247,8 @@ function HomePage({ go }) {
   useReveal();
   usePointerFx();
   const steps = [
-    { icon: Send, t: 'Bank sends the request', d: 'The bank officer logs in and sends the customer, property and loan details to the GCR branch.', c: 'c1' },
-    { icon: UserCheck, t: 'Branch assigns an engineer', d: 'The GCR branch admin picks a field engineer and fixes the site visit.', c: 'c2' },
+    { icon: Send, t: 'Bank sends the request', d: 'The bank officer logs in and sends the customer, property and loan details to the Gouru branch.', c: 'c1' },
+    { icon: UserCheck, t: 'Branch assigns an engineer', d: 'The Gouru branch admin picks a field engineer and fixes the site visit.', c: 'c2' },
     { icon: Camera, t: 'Site inspection', d: 'Documents checked by AI, geo-tagged and time-stamped site photos.', c: 'c3' },
     { icon: ClipboardCheck, t: 'Review & signature', d: 'Report built in the bank’s own format, reviewed and digitally signed.', c: 'c4' },
     { icon: Download, t: 'Bank downloads it', d: 'The approved report appears in the bank portal the moment it is approved.', c: 'c5' },
@@ -281,7 +281,7 @@ function HomePage({ go }) {
             <Words text="— in one app." start={3} />
           </h1>
           <p>
-            GCR Valuation connects banks, branch offices and field engineers. Requests, AI-checked documents,
+            Gouru Valuations connects banks, branch offices and field engineers. Requests, AI-checked documents,
             geo-tagged photos and digitally signed reports — in each bank’s own format.
           </p>
           <div className="ps-cta">
@@ -401,7 +401,7 @@ function HomePage({ go }) {
         <div className="ps-sparks" aria-hidden="true">{Array.from({ length: 14 }, (_, i) => <i key={i} style={{ '--k': i }} />)}</div>
         <div>
           <h2>Ready to send your next valuation?</h2>
-          <p>Bank officers and GCR staff sign in with the login given by GCR.</p>
+          <p>Bank officers and Gouru staff sign in with the login given by Gouru.</p>
         </div>
         <a className="ps-btn ps-white" data-magnet href="/login" onClick={go('/login')}><LogIn size={18} /> Login now <ArrowRight size={18} className="ps-arrow" /></a>
       </section>
@@ -447,11 +447,11 @@ function Privacy() {
 
       <h2>1. Who uses the Services</h2>
       <ul>
-        <li><b>GCR staff</b> — field engineers, branch admins and head office.</li>
+        <li><b>Gouru staff</b> — field engineers, branch admins and head office.</li>
         <li><b>Bank employees</b> — officers of our client banks who send valuation requests and download reports.</li>
         <li><b>Property owners / borrowers</b> do not use the apps, but their details appear in the documents and reports we prepare for the bank.</li>
       </ul>
-      <p>Accounts are created only by GCR. The Services are for professional use and are not meant for anyone under 18.</p>
+      <p>Accounts are created only by Gouru. The Services are for professional use and are not meant for anyone under 18.</p>
 
       <h2>2. Data we collect</h2>
       <table className="ps-table">
@@ -568,7 +568,7 @@ function DeleteAccount() {
       <h2>How to ask</h2>
       <ol>
         <li>Email <a href={`mailto:${SITE.email}?subject=Account%20deletion%20request`}>{SITE.email}</a> from the email or mobile number on your account, with your name, username and branch / bank — or</li>
-        <li>Ask your GCR branch admin, or call {SITE.phones[0]}.</li>
+        <li>Ask your Gouru branch admin, or call {SITE.phones[0]}.</li>
       </ol>
       <p>We confirm your identity, then close the account and confirm when it is done.</p>
       <h2>What is deleted</h2>

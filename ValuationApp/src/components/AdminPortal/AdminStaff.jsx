@@ -300,7 +300,7 @@ export default function AdminStaff({ currentUser }) {
                 )}
               </div>
               {pwInfo?.password && selectedStaff.phone && (
-                <a className="pf-row pf-action" href={`https://wa.me/${String(selectedStaff.phone).replace(/\D/g, '').replace(/^(?!91)(\d{10})$/, '91$1')}?text=${encodeURIComponent(`Your GCR Valuation login\nUsername: ${selectedStaff.username}\nPassword: ${pwInfo.password}`)}`} target="_blank" rel="noopener noreferrer">
+                <a className="pf-row pf-action" href={`https://wa.me/${String(selectedStaff.phone).replace(/\D/g, '').replace(/^(?!91)(\d{10})$/, '91$1')}?text=${encodeURIComponent(`Your Gouru Valuations login\nUsername: ${selectedStaff.username}\nPassword: ${pwInfo.password}`)}`} target="_blank" rel="noopener noreferrer">
                   <MessageCircle size={16} /> Send Login on WhatsApp
                 </a>
               )}
@@ -326,7 +326,7 @@ export default function AdminStaff({ currentUser }) {
                 <div className="pf-result-actions">
                   <button onClick={() => copyText(`Username: ${selectedStaff.username}\nPassword: ${resetResult}`, 'Login details copied')}><Copy size={15} /> Copy</button>
                   {selectedStaff.phone && (
-                    <a href={`https://wa.me/${String(selectedStaff.phone).replace(/\D/g, '').replace(/^(?!91)(\d{10})$/, '91$1')}?text=${encodeURIComponent(`Your GCR Valuation login\nUsername: ${selectedStaff.username}\nTemporary password: ${resetResult}\nPlease change it after you sign in.`)}`} target="_blank" rel="noopener noreferrer">
+                    <a href={`https://wa.me/${String(selectedStaff.phone).replace(/\D/g, '').replace(/^(?!91)(\d{10})$/, '91$1')}?text=${encodeURIComponent(`Your Gouru Valuations login\nUsername: ${selectedStaff.username}\nTemporary password: ${resetResult}\nPlease change it after you sign in.`)}`} target="_blank" rel="noopener noreferrer">
                       <MessageCircle size={15} /> WhatsApp
                     </a>
                   )}

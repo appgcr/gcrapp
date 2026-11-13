@@ -260,7 +260,7 @@ export default function AdminSettings({ currentUser, handleLogout }) {
       </div>
 
       <div className="ios-version">
-        GCR Valuation · Version {pkg.version}<br />Developed by MSTechHive
+        Gouru Valuations · Version {pkg.version}<br />Developed by MSTechHive
       </div>
 
       <IosSettingsStyles />

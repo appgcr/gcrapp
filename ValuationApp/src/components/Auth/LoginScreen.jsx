@@ -92,7 +92,7 @@ export default function LoginScreen({ onLogin }) {
       <aside className="lg-brand" aria-hidden="true">
         <div className="lg-brand-top">
           <GcrLogo size={44} />
-          <span>GCR Valuation</span>
+          <span>Gouru Valuations</span>
         </div>
         <div className="lg-brand-body">
           <h1>From site visit to signed report — in one place.</h1>
@@ -109,7 +109,7 @@ export default function LoginScreen({ onLogin }) {
         <div className="lg-form-wrap">
           <header className="lg-head">
             <div className="lg-logo"><GcrLogo size={76} /></div>
-            <h2>{remembered ? 'Welcome back' : 'Sign in to GCR'}</h2>
+            <h2>{remembered ? 'Welcome back' : 'Sign in to Gouru'}</h2>
             <p>{remembered ? `Signing in as ${remembered}` : 'Use the login your administrator gave you.'}</p>
           </header>
 
@@ -197,8 +197,8 @@ export default function LoginScreen({ onLogin }) {
             <button className="lg-sheet-x" onClick={() => setShowHelp(false)} aria-label="Close"><X size={18} /></button>
             <div className="lg-sheet-icon"><ShieldCheck size={26} /></div>
             <h3 id="lg-help-title">Forgot your password?</h3>
-            <p>Your GCR administrator issues every login. Ask them to open <b>Staff → your name</b> — they can see your password or give you a new one in seconds.</p>
-            <a className="lg-primary" href="mailto:support@gcrvaluations.com?subject=GCR%20Valuation%20login%20help"><Mail size={17} /> Email Support</a>
+            <p>Your Gouru administrator issues every login. Ask them to open <b>Staff → your name</b> — they can see your password or give you a new one in seconds.</p>
+            <a className="lg-primary" href="mailto:hello.happydooo@gmail.com?subject=Gouru%20Valuations%20login%20help"><Mail size={17} /> Email Support</a>
             <button className="lg-link lg-sheet-done" onClick={() => setShowHelp(false)}>Done</button>
           </div>
         </div>

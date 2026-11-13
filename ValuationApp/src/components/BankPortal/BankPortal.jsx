@@ -5,7 +5,7 @@ import { API_BASE_URL } from '../../config/api';
 import ReportViewer, { fetchReport } from '../Shared/ReportViewer';
 import './BankPortal.css';
 
-const STEPS = ['Received by GCR', 'Engineer assigned', 'Site visit done', 'Under GCR review', 'Report ready'];
+const STEPS = ['Received by Gouru', 'Engineer assigned', 'Site visit done', 'Under Gouru review', 'Report ready'];
 const EMPTY = {
   clientName: '', clientFatherName: '', clientPhone: '', clientAddress: '', propertyType: '', propertyAddress: '',
   surveyNo: '', extent: '', loanPurpose: '', loanAmount: '', bankBranch: '', contactPerson: '', contactPhone: '', notes: '', urgency: 'Normal',
@@ -13,7 +13,7 @@ const EMPTY = {
 const PURPOSES = ['Housing Loan', 'Mortgage / LAP', 'Construction Loan', 'Plot Purchase Loan', 'Agriculture Loan', 'Business / Commercial Loan', 'Revaluation', 'Other'];
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
 
-/** Bank employee's portal: send valuation requests to GCR and follow them until the report is ready. */
+/** Bank employee's portal: send valuation requests to Gouru and follow them until the report is ready. */
 export default function BankPortal({ currentUser, handleLogout }) {
   const [me, setMe] = useState(null);
   const [rows, setRows] = useState(null);
@@ -65,7 +65,7 @@ export default function BankPortal({ currentUser, handleLogout }) {
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || 'Could not send the request.');
-      toast.success(`Sent to GCR as ${d.fileNumber}`);
+      toast.success(`Sent to Gouru as ${d.fileNumber}`);
       setForm({ ...EMPTY, bankBranch: me?.bankBranch || '' });
       setTab('list');
       load();
@@ -81,7 +81,7 @@ export default function BankPortal({ currentUser, handleLogout }) {
         <div className="bp-brand">
           <img src="/gcr_logo.png" alt="" width="34" height="34" />
           <div>
-            <div className="bp-brand-name">GCR Valuation</div>
+            <div className="bp-brand-name">Gouru Valuations</div>
             <div className="bp-brand-sub">Bank portal</div>
           </div>
         </div>
@@ -100,7 +100,7 @@ export default function BankPortal({ currentUser, handleLogout }) {
           <div>
             <h1>Valuation requests</h1>
             <p>
-              Requests go straight to GCR{me?.gcrBranch ? ` ${me.gcrBranch.name}` : ''}. The branch assigns an engineer, the site is inspected
+              Requests go straight to Gouru{me?.gcrBranch ? ` ${me.gcrBranch.name}` : ''}. The branch assigns an engineer, the site is inspected
               and you can download the signed report here as soon as it is approved.
             </p>
           </div>
@@ -122,7 +122,7 @@ export default function BankPortal({ currentUser, handleLogout }) {
             <div className="bp-empty">
               <Building2 size={30} />
               <h3>No requests yet</h3>
-              <p>Send your first valuation request to GCR.</p>
+              <p>Send your first valuation request to Gouru.</p>
               <button className="bp-btn bp-primary" onClick={() => setTab('new')}><Plus size={16} /> New request</button>
             </div>
           ) : (
@@ -194,13 +194,13 @@ export default function BankPortal({ currentUser, handleLogout }) {
               <label>Priority
                 <select value={form.urgency} onChange={set('urgency')}><option>Normal</option><option>Urgent</option></select>
               </label>
-              <label className="bp-wide">Notes for GCR<textarea rows={3} value={form.notes} onChange={set('notes')} placeholder="Anything the engineer should know (timings, documents with the customer…)" /></label>
+              <label className="bp-wide">Notes for Gouru<textarea rows={3} value={form.notes} onChange={set('notes')} placeholder="Anything the engineer should know (timings, documents with the customer…)" /></label>
             </fieldset>
 
             <div className="bp-form-foot">
-              <p className="bp-muted">The customer’s documents (sale deed, plan, tax receipt…) are collected and checked by the GCR engineer at the site.</p>
+              <p className="bp-muted">The customer’s documents (sale deed, plan, tax receipt…) are collected and checked by the Gouru engineer at the site.</p>
               <button type="submit" className="bp-btn bp-primary" disabled={busy} data-testid="send-request">
-                {busy ? <Loader2 size={16} className="spin" /> : <Plus size={16} />} Send to GCR
+                {busy ? <Loader2 size={16} className="spin" /> : <Plus size={16} />} Send to Gouru
               </button>
             </div>
           </form>
@@ -209,7 +209,7 @@ export default function BankPortal({ currentUser, handleLogout }) {
 
       <footer className="bp-foot">
         <a href="/privacy" target="_blank" rel="noreferrer">Privacy Policy</a> · <a href="/terms" target="_blank" rel="noreferrer">Terms</a>
-        {me?.gcrBranch?.phone ? <> · GCR {me.gcrBranch.name}: {me.gcrBranch.phone}</> : null}
+        {me?.gcrBranch?.phone ? <> · Gouru {me.gcrBranch.name}: {me.gcrBranch.phone}</> : null}
       </footer>
 
       {viewing && (

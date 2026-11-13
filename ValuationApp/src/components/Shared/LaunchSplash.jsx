@@ -18,7 +18,7 @@ export default function LaunchSplash({ minMs = 900 }) {
     <div className={`ls-root ${phase === 'leave' ? 'ls-leave' : ''}`} aria-hidden="true">
       <div className="ls-center">
         <div className="ls-logo"><GcrLogo size={96} /></div>
-        <div className="ls-name">GCR Valuation</div>
+        <div className="ls-name">Gouru Valuations</div>
       </div>
       <div className="ls-foot">
         <span className="ls-bar"><span /></span>

@@ -111,7 +111,7 @@ export default function AttendanceLogs() {
     const one = exportFor ? people.find((p) => p.id === exportFor) : null;
     const subset = one ? [one] : people;
     const slug = (one ? one.name : 'All').replace(/[^A-Za-z0-9]+/g, '_');
-    return { one, subset, file: `GCR_Attendance_${slug}_${toYMD(range.start)}_to_${toYMD(addDays(range.end, -1))}` };
+    return { one, subset, file: `Gouru_Attendance_${slug}_${toYMD(range.start)}_to_${toYMD(addDays(range.end, -1))}` };
   };
 
   const runExport = async (kind) => {

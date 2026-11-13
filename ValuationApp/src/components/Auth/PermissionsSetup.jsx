@@ -37,7 +37,7 @@ const ITEMS = {
   // which would stop location sharing during duty. Can't be checked — the user confirms.
   battery: {
     icon: BatteryCharging, color: 'orange', title: 'Battery',
-    why: 'Set GCR to “Unrestricted” / “No restrictions” so your phone doesn’t stop location sharing while you’re on duty.',
+    why: 'Set Gouru Valuations to “Unrestricted” / “No restrictions” so your phone doesn’t stop location sharing while you’re on duty.',
   },
 };
 
@@ -65,7 +65,7 @@ async function check(kind) {
 
 async function request(kind) {
   if (kind === 'battery') {
-    // Opens GCR's app settings → Battery. We can't read the setting back, so we trust the tap.
+    // Opens Gouru's app settings → Battery. We can't read the setting back, so we trust the tap.
     try { await BackgroundGeolocation.openSettings(); } catch { /* ignore */ }
     try { localStorage.setItem('gcr_battery_ok', '1'); } catch { /* ignore */ }
     return 'granted';
@@ -136,7 +136,7 @@ export default function PermissionsSetup({ currentUser, onDone, fromSettings = f
             <p className="ps-sub">
               {isAdminRole(currentUser)
                 ? 'Turn on alerts so you know the moment a report is ready for review.'
-                : 'GCR Valuation needs these to work in the field. You can change them anytime in Settings.'}
+                : 'Gouru Valuations needs these to work in the field. You can change them anytime in Settings.'}
             </p>
           </header>
 
@@ -153,7 +153,7 @@ export default function PermissionsSetup({ currentUser, onDone, fromSettings = f
                     {st === 'denied' && (
                       <div className="ps-blocked">
                         {isNative()
-                          ? 'Blocked — turn it on in your phone’s Settings → GCR Valuation.'
+                          ? 'Blocked — turn it on in your phone’s Settings → Gouru Valuations.'
                           : 'Blocked — tap the lock icon in the address bar and allow it for this site.'}
                       </div>
                     )}

@@ -122,7 +122,7 @@ export default function StaffFormSheet({ role = 'ENGINEER', branches, defaultBra
           {role === 'ADMIN'
             ? 'A Branch Admin manages only this branch: its cases, engineers, attendance and approvals.'
             : isBank
-            ? 'This bank employee can send valuation requests to this GCR branch, follow their progress and download approved reports. They cannot see anything else.'
+            ? 'This bank employee can send valuation requests to this Gouru branch, follow their progress and download approved reports. They cannot see anything else.'
             : 'Share this login with the engineer. You can see it again anytime from their profile.'}
         </p>
       </form>

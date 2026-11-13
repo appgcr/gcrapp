@@ -1,6 +1,6 @@
 {
   "appId": "com.appgcr.valuationapp",
-  "appName": "GCR Valuation",
+  "appName": "Gouru Valuations",
   "webDir": "dist",
   "plugins": {
     "PushNotifications": {

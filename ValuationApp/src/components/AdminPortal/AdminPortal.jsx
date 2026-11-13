@@ -246,7 +246,7 @@ export default function AdminPortal({ currentUser, handleLogout }) {
         <div className="admin-sidebar-header">
           <GcrLogo size={38} />
           <div>
-            <div className="admin-sidebar-brand">GCR VALUATION</div>
+            <div className="admin-sidebar-brand">GOURU VALUATIONS</div>
             <div className="admin-sidebar-sub">Enterprise Credit Suite</div>
           </div>
         </div>
@@ -319,7 +319,7 @@ export default function AdminPortal({ currentUser, handleLogout }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
               <button
                 onClick={() => setActiveTab('dashboard')}
-                title="GCR Valuation"
+                title="Gouru Valuations"
                 aria-label="Go to dashboard"
                 style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex' }}
               >

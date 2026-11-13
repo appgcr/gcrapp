@@ -10,8 +10,8 @@ export const generateValuationReport = async (caseData) => {
   
   // Header
   doc.setFontSize(20);
-  doc.setTextColor(3, 70, 200); // GCR Blue
-  doc.text("GCR Valuation Services", 105, 20, { align: "center" });
+  doc.setTextColor(3, 70, 200); // Gouru Blue
+  doc.text("Gouru Valuations", 105, 20, { align: "center" });
   
   doc.setFontSize(14);
   doc.setTextColor(0, 0, 0);
@@ -74,7 +74,7 @@ export const generateValuationReport = async (caseData) => {
   
   doc.text("_______________________", 14, finalY);
   doc.text("Authorized Signature", 14, finalY + 6);
-  doc.text("GCR Valuation Services", 14, finalY + 12);
+  doc.text("Gouru Valuations", 14, finalY + 12);
   
   doc.text("_______________________", 140, finalY);
   doc.text(`Engineer: ${caseData.assignedEngineerName || 'N/A'}`, 140, finalY + 6);

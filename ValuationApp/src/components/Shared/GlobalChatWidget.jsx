@@ -13,7 +13,7 @@ import { API_BASE_URL } from '../../config/api';
 import { authHeaders } from './authHeaders';
 import { isAdminRole, isSuperAdmin } from '../../utils/session';
 
-// GCR Assistive Touch — modelled on iPhone (Settings › Accessibility › Touch › AssistiveTouch).
+// Gouru Assistive Touch — modelled on iPhone (Settings › Accessibility › Touch › AssistiveTouch).
 //
 //  Button  · tap = open menu · double-tap = Back to Top · long-press = Messages
 //          · drag anywhere, snaps to the nearest side · fades when idle · red badge for unread chats

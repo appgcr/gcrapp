@@ -1,8 +1,8 @@
-// Bank employees (role BANK): send valuation requests to their GCR branch and follow them.
-//   GET  /api/bank/me                 — account, bank, GCR branch, property types
-//   POST /api/bank/requests           — new valuation request → GCR branch admin's "Unassigned" list
+// Bank employees (role BANK): send valuation requests to their Gouru branch and follow them.
+//   GET  /api/bank/me                 — account, bank, Gouru branch, property types
+//   POST /api/bank/requests           — new valuation request → Gouru branch admin's "Unassigned" list
 //   GET  /api/bank/requests           — my requests with their progress
-//   GET  /api/bank/requests/:id/report — the approved report (only once GCR has approved it)
+//   GET  /api/bank/requests/:id/report — the approved report (only once Gouru Valuations has approved it)
 // Everything else is refused for bank logins (see middleware/auth.js).
 const express = require('express');
 const router = express.Router();
@@ -22,12 +22,12 @@ const PHONE = /^[6-9]\d{9}$/;
 function stage(c) {
   const assigned = c.assignedEngineerId && c.assignedEngineerId !== 'UNASSIGNED';
   if (c.status === 'Approved') return { key: 'approved', label: 'Report ready', step: 5 };
-  if (c.status === 'Rejected') return { key: 'closed', label: 'Closed by GCR', step: 5 };
-  if (c.status === 'Reviewing' || c.status === 'Completed') return { key: 'review', label: 'Under GCR review', step: 4 };
+  if (c.status === 'Rejected') return { key: 'closed', label: 'Closed by Gouru', step: 5 };
+  if (c.status === 'Reviewing' || c.status === 'Completed') return { key: 'review', label: 'Under Gouru review', step: 4 };
   if (c.status === 'Returned') return { key: 'review', label: 'Being corrected', step: 4 };
   if (assigned && (c.sitePhotos || []).length) return { key: 'visit', label: 'Site visit done', step: 3 };
   if (assigned) return { key: 'assigned', label: 'Engineer assigned', step: 2 };
-  return { key: 'received', label: 'Received by GCR', step: 1 };
+  return { key: 'received', label: 'Received by Gouru', step: 1 };
 }
 
 function view(c) {
@@ -55,9 +55,9 @@ router.post('/requests', onlyBank, async (req, res) => {
     const u = req.user;
     const b = req.body || {};
     const branch = await Branch.findOne({ id: u.branchId, status: { $ne: 'Inactive' } });
-    if (!branch) return res.status(400).json({ error: 'Your account is not linked to an active GCR branch. Please contact GCR.' });
+    if (!branch) return res.status(400).json({ error: 'Your account is not linked to an active Gouru branch. Please contact Gouru Valuations.' });
     const bank = await findBank(u.bankName);
-    if (!bank) return res.status(400).json({ error: 'Your bank is not set up with GCR yet. Please contact GCR.' });
+    if (!bank) return res.status(400).json({ error: 'Your bank is not set up with Gouru Valuations yet. Please contact Gouru Valuations.' });
 
     const clientName = clean(b.clientName, 120);
     const clientPhone = clean(b.clientPhone, 15).replace(/\D/g, '');
@@ -130,7 +130,7 @@ router.get('/requests', onlyBank, async (req, res) => {
 router.get('/requests/:id/report', onlyBank, async (req, res, next) => {
   const c = await ValuationCase.findOne({ id: req.params.id, 'requestedBy.id': req.user.id }).select('id status').lean();
   if (!c) return res.status(404).json({ error: 'Request not found.' });
-  if (c.status !== 'Approved') return res.status(403).json({ error: 'The report can be downloaded once GCR has approved it.' });
+  if (c.status !== 'Approved') return res.status(403).json({ error: 'The report can be downloaded once Gouru Valuations has approved it.' });
   // Hand over to the normal report route (same archive, same signed file the admin approved).
   // Its own checks still run: the case must belong to this bank employee.
   const casesRouter = require('./cases');

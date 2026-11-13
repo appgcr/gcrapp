@@ -1,4 +1,4 @@
-# GCR Valuation — store listing text (App Store + Google Play)
+# Gouru Valuations — store listing text (App Store + Google Play)
 
 Copy each block into the matching box. Reviewer logins are NOT in this file — they are in the private
 `ValuationBackend/secrets/store-review-logins.txt` (never commit them).
@@ -15,14 +15,14 @@ Copy each block into the matching box. Reviewer logins are NOT in this file — 
 | Account deletion URL (Google Play) | https://gcrapp-lilac.vercel.app/delete-account |
 | Contact email | hello.happydooo@gmail.com |
 | Category | Business |
-| Copyright (App Store) | 2026 GCR Valuation |
+| Copyright (App Store) | 2026 Gouru Valuations |
 | Price | Free, no in-app purchases, no ads |
 
 ---
 
 ## App Store
 
-**Name (30):** GCR Valuation
+**Name (30):** Gouru Valuations
 
 **Subtitle (30):** Bank property valuation
 
@@ -33,7 +33,7 @@ Bank requests, site visits, AI-checked documents and digitally signed reports in
 valuation,property,bank,valuer,site visit,engineer,report,loan,mortgage,survey,inspection,Kadapa
 
 **Description:**
-GCR Valuation is the working app of GCR, an approved panel valuer in Andhra Pradesh. It connects bank officers, GCR branch offices and field engineers so every property valuation moves from request to signed report in one place.
+Gouru Valuations is the working app of Gouru Valuations, an approved panel valuer in Andhra Pradesh. It connects bank officers, Gouru branch offices and field engineers so every property valuation moves from request to signed report in one place.
 
 FOR BANK OFFICERS
 • Send a valuation request with the customer, property and loan details
@@ -57,10 +57,10 @@ BUILT FOR TRUST
 • Reports fingerprinted so changes can be detected
 • Location is shared only while an engineer is on duty
 
-Accounts are created by GCR for its staff and partner bank officers. If you need access, contact GCR at hello.happydooo@gmail.com.
+Accounts are created by Gouru for its staff and partner bank officers. If you need access, contact Gouru Valuations at hello.happydooo@gmail.com.
 
 **App Review → Notes:**
-GCR Valuation is a business app used by GCR (a property valuation firm) and the bank officers it works with. Accounts are created by GCR only, so we have prepared review accounts on a separate demo branch with sample data (no real customers):
+Gouru Valuations is a business app used by Gouru Valuations (a property valuation firm) and the bank officers it works with. Accounts are created by Gouru only, so we have prepared review accounts on a separate demo branch with sample data (no real customers):
 • Engineer login (shown above) — has one sample site visit assigned.
 • To try the other roles: Bank officer = review.bank / <paste its password>, Branch Admin = review.admin / <paste its password>.
 Location: engineers can go "on duty"; only then is their location shared with their branch so site visits can be verified. Tracking stops when they go off duty. Camera is used for geo-tagged site photos and face check-in. Face ID is optional for quick sign-in.
@@ -70,7 +70,7 @@ Contact: hello.happydooo@gmail.com
 
 ## Google Play
 
-**App name (30):** GCR Valuation
+**App name (30):** Gouru Valuations
 
 **Short description (80):**
 Bank property valuations: requests, site visits, AI checks and signed reports.

@@ -653,7 +653,7 @@ body.dark-theme .ios-tabbar {
 body.dark-theme .ios-tabbar .ios-tab.active { color: #0a84ff; }
 
 /* ==========================================================================
-   GCR design tokens — one accent, one type scale (Admin dashboard pass)
+   Gouru design tokens — one accent, one type scale (Admin dashboard pass)
    ========================================================================== */
 :root {
   --gcr-accent: #007aff;

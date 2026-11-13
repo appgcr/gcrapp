@@ -1,4 +1,4 @@
-// GCR attendance register — one shared calculation for the Excel (.xlsx) and PDF exports.
+// Gouru attendance register — one shared calculation for the Excel (.xlsx) and PDF exports.
 //
 // Register = one row per engineer per day in the period (absent days included):
 //   Date · Day · Engineer · ID · Check-in (first) · Check-out (last) · Hours · Status · Late · Face verified · Places
@@ -14,7 +14,7 @@ import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 
 export const LATE_AFTER = { h: 10, m: 0 }; // 10:00 AM
-const COMPANY = 'GCR Valuation';
+const COMPANY = 'Gouru Valuations';
 
 const pad = (n) => String(n).padStart(2, '0');
 const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;

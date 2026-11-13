@@ -1,5 +1,5 @@
 /**
- * GCR Valuation System — Notification service (in-app record + phone push) with smart timing
+ * Gouru Valuations System — Notification service (in-app record + phone push) with smart timing
  *
  * notify({ to, title, message, caseId, type, priority, now })
  *   to:       a user id / username, or 'ADMIN' for the admins: every Super Admin, plus the
@@ -246,7 +246,7 @@ function notifyCaseChange(before, after, actor = {}, now = new Date()) {
   if (bankUser) {
     if (engineer && engineer !== before.assignedEngineerId) {
       notifyLater({ to: bankUser, type: 'bank_request_update', caseId: id, priority: 'normal', now,
-        title: 'Engineer assigned', message: `Your request ${ref}${client} has been given to a GCR engineer for the site visit.` });
+        title: 'Engineer assigned', message: `Your request ${ref}${client} has been given to a Gouru engineer for the site visit.` });
     }
     if (after.status === 'Approved' && before.status !== 'Approved') {
       notifyLater({ to: bankUser, type: 'bank_request_update', caseId: id, priority: 'normal', now,

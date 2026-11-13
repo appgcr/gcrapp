@@ -111,8 +111,8 @@ export default function LiveLocationReporter({ currentUser }) {
       if (native) {
         const id = await BackgroundGeolocation.addWatcher(
           {
-            backgroundMessage: 'Sharing your location with GCR while you are on duty.',
-            backgroundTitle: 'GCR — On duty',
+            backgroundMessage: 'Sharing your location with Gouru while you are on duty.',
+            backgroundTitle: 'Gouru Valuations — On duty',
             requestPermissions: true,
             stale: false,
             distanceFilter: MIN_MOVE_M,

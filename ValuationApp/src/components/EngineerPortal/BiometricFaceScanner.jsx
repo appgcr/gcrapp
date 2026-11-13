@@ -70,7 +70,7 @@ export default function BiometricFaceScanner({
       } catch (err) {
         console.error('Camera Access Error:', err);
         setCameraError(err?.name === 'NotAllowedError'
-          ? 'Camera is blocked. Allow camera for GCR (Settings → App Permissions), or take a selfie below.'
+          ? 'Camera is blocked. Allow camera for Gouru (Settings → App Permissions), or take a selfie below.'
           : 'Camera not available. Take a selfie below instead.');
         setIsModelLoading(false);
       }
@@ -389,11 +389,11 @@ export default function BiometricFaceScanner({
             const textX = 20;
             ctx.fillStyle = '#38bdf8';
             ctx.font = 'bold 16px sans-serif';
-            ctx.fillText(`GCR VALUATION SYSTEM • ${attendanceType.toUpperCase()} VERIFIED`, textX, boxY + 28);
+            ctx.fillText(`GOURU VALUATIONS • ${attendanceType.toUpperCase()} VERIFIED`, textX, boxY + 28);
 
             ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 13px sans-serif';
-            ctx.fillText(`Staff: ${currentUser?.name || 'Engineer'} (${currentUser?.username || 'GCR'})`, textX, boxY + 52);
+            ctx.fillText(`Staff: ${currentUser?.name || 'Engineer'} (${currentUser?.username || 'Gouru'})`, textX, boxY + 52);
 
             const nowStr = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
             ctx.fillStyle = '#cbd5e1';
