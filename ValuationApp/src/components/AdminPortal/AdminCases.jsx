@@ -614,7 +614,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
                           <option value="">Choose branch…</option>
                           {branches.filter((b) => b.status !== 'Inactive').map((b) => <option key={b.id} value={b.id}>{b.name} ({b.code})</option>)}
                         </select>
-                        <span style={{ fontSize: '12px', color: '#8e8e93' }}>The file number is created from this branch, e.g. GCR/{branchById(newTask.branchId)?.code || 'KDP'}/…</span>
+                        <span style={{ fontSize: '12px', color: '#8e8e93' }}>The file number is created from this branch, e.g. GOURU/{branchById(newTask.branchId)?.code || 'KDP'}/…</span>
                       </div>
                     )}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>

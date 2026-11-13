@@ -157,7 +157,7 @@ function NewBranchSheet({ onClose, onCreated }) {
           <label className="fs-row"><span>Name</span><input value={form.name} onChange={setName} placeholder="e.g. Tirupati" autoFocus /></label>
           <label className="fs-row"><span>Code</span><input value={form.code} onChange={(e) => { setCodeTouched(true); setForm((f) => ({ ...f, code: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5) })); }} placeholder="2–5 letters" autoCapitalize="characters" /></label>
         </div>
-        <p className="fs-foot">The code appears in every file number, e.g. <b>GCR/{form.code || 'TPT'}/2026/11/0001</b>. It can’t be changed after the first case.</p>
+        <p className="fs-foot">The code appears in every file number, e.g. <b>GOURU/{form.code || 'TPT'}/2026/11/0001</b>. It can’t be changed after the first case.</p>
         <div className="fs-section">Contact (optional)</div>
         <div className="fs-group">
           <label className="fs-row"><span>Address</span><input value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} placeholder="Office address" /></label>

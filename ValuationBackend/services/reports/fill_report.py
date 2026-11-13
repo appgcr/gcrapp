@@ -123,6 +123,52 @@ def fill_text(paragraph, fields):
         set_run_text(run, new)
     if dropped:
         tidy_separators(paragraph)
+    if 'fileNo' in keys:
+        if '\t' in paragraph.text:
+            pin_file_no_right(paragraph)
+        else:
+            extra = len(str(value_of(fields, 'fileNo'))) - len('GCR/KDP/2026/11/0001')
+            if extra > 0:
+                give_back_spaces(paragraph, extra)
+
+
+def pin_file_no_right(paragraph):
+    """'… Valuers F – 13622.<tab><tab><tab><tab> FILE NO – GOURU/KDP/2026/11/0001': the run of tabs
+    becomes one right-aligned tab at the right margin, so the file number ends at the margin and never
+    wraps onto a second line, whatever its length (GCR/… or GOURU/…)."""
+    from docx.enum.text import WD_TAB_ALIGNMENT
+    tab_runs = [r for r in paragraph.runs if r.text and set(r.text) == {'\t'}]
+    if not tab_runs:
+        return
+    tab_runs[0].text = '\t'
+    for r in tab_runs[1:]:
+        r.text = ''
+    try:
+        sec = paragraph.part.package.main_document_part.document.sections[0]
+        width = sec.page_width - sec.left_margin - sec.right_margin
+        paragraph.paragraph_format.tab_stops.add_tab_stop(width, WD_TAB_ALIGNMENT.RIGHT)
+    except Exception as e:  # never stop a report over a layout nicety
+        print('fileNo tab stop skipped:', repr(e), file=sys.stderr)
+
+
+def give_back_spaces(paragraph, count):
+    """The templates leave room for a 20-character file number (GCR/KDP/2026/11/0001). A longer one
+    (GOURU/KDP/2026/11/0001) takes that many spaces back from the padding on the same line, so the
+    rest of the line (e.g. the date on the right) stays where the bank's format puts it."""
+    for run in paragraph.runs:
+        t = run.text
+        while count > 0:
+            m = re.search(r' {2,}', t)
+            if not m:
+                break
+            take = min(count, len(m.group(0)) - 1)     # always keep one space between items
+            t = t[:m.start()] + ' ' * (len(m.group(0)) - take) + '\x00' + t[m.end():]
+            count -= take
+        t = t.replace('\x00', '')
+        if t != run.text:
+            run.text = t
+        if count <= 0:
+            return
 
 
 def drop_unused_images(doc):

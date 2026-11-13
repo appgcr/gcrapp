@@ -217,7 +217,7 @@ function LiveTracker() {
     <div className="ps-hero-card" aria-hidden="true">
       <div className="ps-mock-head">
         <span className="ps-mock-bank"><Landmark size={16} /></span>
-        <div><b>Valuation request</b><small>GCR/KDP/2026/11/0021 · Open site</small></div>
+        <div><b>Valuation request</b><small>GOURU/KDP/2026/11/0021 · Open site</small></div>
         <span className={`ps-mock-pill ${done === 5 ? 'ok' : ''}`}>{done === 5 ? 'Ready' : 'Live'}</span>
       </div>
       <div className="ps-mock-bar"><span style={{ width: `${(done / 5) * 100}%` }} /></div>
