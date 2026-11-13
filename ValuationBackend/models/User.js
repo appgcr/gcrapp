@@ -43,6 +43,8 @@ const userSchema = new mongoose.Schema({
   faceEnrolledAt: { type: Date },
   // Agreed (on first sign-in) that their location is shared with the office at all times
   locationConsentAt: { type: Date, default: null },
+  // Engineer may file their own cases (self cases) and submit them to the admin — switched on by an admin
+  canSelfCase: { type: Boolean, default: false },
   locationConsentVersion: { type: String, default: '' },
   // Per-person alert switches { categoryKey: false } — missing = on (see services/notificationCategories.js)
   notificationPrefs: { type: Map, of: Boolean, default: {} },

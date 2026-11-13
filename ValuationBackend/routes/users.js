@@ -215,6 +215,7 @@ router.post('/', authenticateToken, requireRole('SUPER_ADMIN', 'ADMIN'), async (
       phone: phone || '',
       licenseNo: licenseNo || '',
       branch: branch || branchDoc.name,
+      canSelfCase: role === 'ENGINEER' && req.body.canSelfCase === true,
       ...(role === 'BANK' ? {
         bankName: bankRec.name,
         bankBranch: String(req.body.bankBranch).trim().slice(0, 120),
@@ -270,6 +271,8 @@ router.put('/:username', authenticateToken, async (req, res) => {
 
     const allowed = manages ? ['name', 'phone', 'branch', 'licenseNo', 'status'] : ['name', 'phone', 'password'];
     if (manages && target.role === 'BANK') allowed.push('bankBranch', 'designation', 'email');
+    if (manages && target.role === 'ENGINEER') allowed.push('canSelfCase');
+    if (req.body.canSelfCase !== undefined && allowed.includes('canSelfCase')) req.body.canSelfCase = req.body.canSelfCase === true;
     // Super Admin may move a Branch Admin / Engineer to another branch
     if (manages && isSuper(req.user) && req.body.branchId !== undefined && target.role !== 'SUPER_ADMIN') {
       if (!(await Branch.exists({ id: req.body.branchId }))) return res.status(400).json({ error: 'Branch not found.' });

@@ -85,6 +85,7 @@ const valuationCaseSchema = new mongoose.Schema({
   
   status: { type: String, enum: ['Pending', 'Reviewing', 'Returned', 'Completed', 'Approved', 'Rejected'], default: 'Pending' },
   assignedEngineerId: { type: String, default: 'UNASSIGNED' },
+  selfFiled: { type: Boolean, default: false }, // filed by the engineer themself (self case)
   assignedEngineerName: { type: String, default: 'Unknown' },
   rejectionReason: { type: String, default: '' },
   returnedBy: { type: String, default: '' },

@@ -1128,3 +1128,7 @@ body.dark-theme .ed-week b { color: #fff; }
 .td-method-cancel { width: 100%; height: 48px; border: 0; border-radius: 14px; background: rgba(120,130,150,.12); color: inherit; font: inherit; font-weight: 600; cursor: pointer; }
 @keyframes tdFade { from { opacity: 0; } }
 @keyframes tdUp { from { transform: translateY(100%); } }
+
+/* Self cases: "+ New case" on My Cases */
+.ec-new { width: 100%; height: 48px; margin-bottom: 10px; border: 0; border-radius: 13px; background: #007aff; color: #fff; font: inherit; font-size: 16.5px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; }
+.ec-new:active { opacity: .85; }

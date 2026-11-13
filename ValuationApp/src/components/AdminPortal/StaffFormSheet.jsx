@@ -20,7 +20,7 @@ export function suggestPassword() {
  */
 export default function StaffFormSheet({ role = 'ENGINEER', branches, defaultBranchId = '', onClose, onCreated }) {
   const [form, setForm] = useState({ name: '', username: '', phone: '', password: suggestPassword(), branchId: defaultBranchId || branches?.[0]?.id || '',
-    bankName: '', bankBranch: '', designation: '', email: '' });
+    bankName: '', bankBranch: '', designation: '', email: '', canSelfCase: false });
   const isBank = role === 'BANK';
   const [banks, setBanks] = useState([]);
   useEffect(() => {
@@ -47,6 +47,7 @@ export default function StaffFormSheet({ role = 'ENGINEER', branches, defaultBra
         body: JSON.stringify({
           name: form.name.trim(), username: form.username.trim(), password: form.password.trim(),
           phone: form.phone || undefined, role, branchId: branches ? form.branchId : undefined,
+          ...(role === 'ENGINEER' ? { canSelfCase: form.canSelfCase } : {}),
           ...(isBank ? { bankName: form.bankName, bankBranch: form.bankBranch.trim(), designation: form.designation.trim(), email: form.email.trim() } : {}),
         }),
       });
@@ -107,6 +108,21 @@ export default function StaffFormSheet({ role = 'ENGINEER', branches, defaultBra
           <label className="fs-row"><span>Mobile</span><input value={form.phone} onChange={set('phone')} placeholder={isBank ? 'Required, 10 digits' : '10 digits'} inputMode="numeric" autoComplete="off" /></label>
           {isBank && <label className="fs-row"><span>Email</span><input value={form.email} onChange={set('email')} placeholder="Optional" type="email" autoCapitalize="none" autoComplete="off" /></label>}
         </div>
+
+        {role === 'ENGINEER' && (
+          <>
+            <div className="fs-section">Permissions</div>
+            <div className="fs-group">
+              <label className="fs-row fs-row-switch">
+                <span>Self cases<small>Can file their own cases and submit them to you for review</small></span>
+                <span className="gv-switch">
+                  <input type="checkbox" checked={form.canSelfCase} onChange={(e) => setForm((f) => ({ ...f, canSelfCase: e.target.checked }))} aria-label="Allow self cases" />
+                  <i />
+                </span>
+              </label>
+            </div>
+          </>
+        )}
 
         <div className="fs-section">Login</div>
         <div className="fs-group">

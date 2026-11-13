@@ -106,11 +106,31 @@ router.get('/:id', authenticateToken, async (req, res) => {
 });
 
 // POST /api/cases — Initial Case Creation (Bank is Optional)
-router.post('/', authenticateToken, requireRole('SUPER_ADMIN', 'ADMIN'), async (req, res) => {
+// Who may create a case: admins, or an engineer an admin has allowed to file self cases
+async function canCreateCase(req, res, next) {
+  if (['SUPER_ADMIN', 'ADMIN'].includes(req.user?.role)) return next();
+  if (req.user?.role === 'ENGINEER') {
+    const me = await User.findOne({ id: req.user.id }).select('id name username branchId canSelfCase status').lean();
+    if (me?.canSelfCase && me.status !== 'Inactive' && me.branchId) { req.selfCaseEngineer = me; return next(); }
+    return res.status(403).json({ error: 'Your admin has not allowed you to file your own cases.' });
+  }
+  return res.status(403).json({ error: 'Access denied.' });
+}
+
+router.post('/', authenticateToken, canCreateCase, async (req, res) => {
   try {
+    // Self case: only the basic request details; the case is the engineer's own and goes to their branch
+    const selfEng = req.selfCaseEngineer;
+    if (selfEng) {
+      const pick = ['clientName', 'clientPhone', 'bankName', 'address', 'locationData', 'note'];
+      const body = {};
+      for (const k of pick) if (req.body[k] !== undefined) body[k] = typeof req.body[k] === 'string' ? req.body[k].slice(0, 500) : req.body[k];
+      if (!String(body.clientName || '').trim()) return res.status(400).json({ error: 'Enter the customer name.' });
+      req.body = { ...body, branchId: selfEng.branchId, assignedEngineerId: selfEng.id, assignedEngineerName: selfEng.name || selfEng.username, status: 'Pending', selfFiled: true };
+    }
     // Which branch owns the case: a Branch Admin's own; the Super Admin chooses
     // (or it's the branch they're viewing / the only branch)
-    let branchId = isSuper(req.user) ? (req.body.branchId || branchScope(req)) : req.user.branchId;
+    let branchId = selfEng ? selfEng.branchId : isSuper(req.user) ? (req.body.branchId || branchScope(req)) : req.user.branchId;
     if (!branchId && isSuper(req.user)) {
       const all = await Branch.find({ status: { $ne: 'Inactive' } }).select('id').lean();
       if (all.length === 1) branchId = all[0].id;
@@ -169,6 +189,14 @@ router.post('/', authenticateToken, requireRole('SUPER_ADMIN', 'ADMIN'), async (
 
     const newCase = new ValuationCase(caseData);
     const saved = await newCase.save();
+    if (selfEng) {
+      notifyLater({
+        to: 'ADMIN', branchId: saved.branchId, type: 'case_created', caseId: saved.id, priority: 'normal',
+        title: 'Self case filed',
+        message: `${selfEng.name || selfEng.username} filed their own case ${saved.fileNumber}${saved.clientName ? ` · ${saved.clientName}` : ''}${saved.bankName ? ` (${saved.bankName})` : ''}. It comes to you for review when they submit it.`,
+      });
+      return res.status(201).json(saved);
+    }
     notifyLater({
       to: 'ADMIN', branchId: saved.branchId, type: 'case_created', caseId: saved.id, priority: 'normal',
       title: 'New case request',

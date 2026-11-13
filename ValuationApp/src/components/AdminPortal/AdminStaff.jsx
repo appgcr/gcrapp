@@ -149,6 +149,7 @@ export default function AdminStaff({ currentUser }) {
   };
 
   const [lastSync, setLastSync] = useState(null);
+  const [savingSelfCase, setSavingSelfCase] = useState(false);
   const [, setTick] = useState(0); // re-render every few seconds so "x sec ago" stays fresh
   const [focusId, setFocusId] = useState(null);
   const fittedOnce = useRef(false);
@@ -346,6 +347,27 @@ export default function AdminStaff({ currentUser }) {
 
 
   // Profile sheet for an engineer or branch admin (password, reset, contact)
+  // Admin switches "Self cases" on/off for an engineer
+  const toggleSelfCase = async (on) => {
+    const who = selectedStaff;
+    setSavingSelfCase(true);
+    setSelectedStaff((s) => ({ ...s, canSelfCase: on }));
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/users/${encodeURIComponent(who.id)}`, {
+        method: 'PUT', headers: authHeaders(), body: JSON.stringify({ canSelfCase: on }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Could not save');
+      setEngineers((list) => list.map((e) => (e.id === who.id ? { ...e, canSelfCase: on } : e)));
+      toast.success(on ? `${who.displayName} can now file their own cases` : `Self cases turned off for ${who.displayName}`);
+    } catch (err) {
+      setSelectedStaff((s) => ({ ...s, canSelfCase: !on }));
+      toast.error(err.message);
+    } finally {
+      setSavingSelfCase(false);
+    }
+  };
+
   const renderProfile = () => (
         <div className="pf-backdrop" onClick={closeProfile}>
           <div className="pf-sheet" role="dialog" aria-modal="true" aria-label={`${selectedStaff.displayName} profile`} onClick={(e) => e.stopPropagation()}>
@@ -368,6 +390,21 @@ export default function AdminStaff({ currentUser }) {
                 )}
                 {selectedStaff.phone && <a className="pf-row pf-link" href={`tel:${selectedStaff.phone}`}><span>Phone</span><span>{selectedStaff.phone}</span></a>}
               </div>
+            )}
+
+            {selectedStaff.role === 'ENGINEER' && (
+              <>
+                <div className="pf-section">Permissions</div>
+                <div className="pf-group">
+                  <label className="pf-row fs-row-switch" style={{ cursor: 'pointer' }}>
+                    <span>Self cases<small>Can file their own cases and submit them to you</small></span>
+                    <span className="gv-switch">
+                      <input type="checkbox" checked={!!selectedStaff.canSelfCase} disabled={savingSelfCase} onChange={(e) => toggleSelfCase(e.target.checked)} aria-label="Allow self cases" />
+                      <i />
+                    </span>
+                  </label>
+                </div>
+              </>
             )}
 
             <div className="pf-section">Login</div>
