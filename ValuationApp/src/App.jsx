@@ -46,6 +46,10 @@ const LEGAL = { '/privacy': 'privacy', '/terms': 'terms', '/delete-account': 'de
 const cleanPath = () => (window.location.pathname.replace(/\/+$/, '') || '/');
 const isBankRole = (u) => u?.role === 'BANK';
 
+// Phone app: fingerprint / Face ID is asked again this often, even while in use
+const RELOCK_MS = 20 * 60 * 1000;
+const VERIFIED_AT_KEY = 'gcr_verified_at';
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('forms'); // forms (attendance), cases, dashboard, settings
   const [selectedCaseId, setSelectedCaseId] = useState(null);
@@ -163,6 +167,25 @@ export default function App() {
     return () => clearInterval(t);
   }, [currentUser?.id, activeTab]);
 
+  // Ask for the fingerprint / Face ID again every 20 minutes in the phone app,
+  // even while it is being used. The lock covers the screen, so open work is kept.
+  useEffect(() => {
+    if (!currentUser || isBankRole(currentUser) || !Capacitor.isNativePlatform()) return undefined;
+    const check = () => {
+      const at = Number(localStorage.getItem(VERIFIED_AT_KEY)) || 0;
+      if (Date.now() - at >= RELOCK_MS) setIsAppLocked(true);
+    };
+    check();
+    const t = setInterval(check, 15000);
+    const resume = CapacitorApp.addListener('appStateChange', ({ isActive }) => { if (isActive) check(); });
+    return () => { clearInterval(t); resume.then((l) => l.remove()); };
+  }, [currentUser]);
+
+  const unlockApp = () => {
+    localStorage.setItem(VERIFIED_AT_KEY, String(Date.now()));
+    setIsAppLocked(false);
+  };
+
   // Lets the floating Assistive Touch menu lock the app on demand
   useEffect(() => {
     const lock = () => { if (currentUser) setIsAppLocked(true); };
@@ -172,6 +195,7 @@ export default function App() {
 
   const handleLogin = (user) => {
     setCurrentUser(user);
+    localStorage.setItem(VERIFIED_AT_KEY, String(Date.now()));
     setIsAppLocked(false);
     localStorage.setItem('sbi_valuation_current_user_v3', JSON.stringify(user));
     if (cleanPath() === '/login') navigate('/');
@@ -183,6 +207,7 @@ export default function App() {
     setIsAppLocked(false);
     localStorage.removeItem('sbi_valuation_current_user_v3');
     localStorage.removeItem('token');
+    localStorage.removeItem(VERIFIED_AT_KEY);
     if (!Capacitor.isNativePlatform()) navigate('/login');
   };
 
@@ -204,9 +229,8 @@ export default function App() {
     return <Suspense fallback={<PartLoading />}><BankPortal currentUser={currentUser} handleLogout={handleLogout} /></Suspense>;
   }
 
-  if (isAppLocked) {
-    return <><LaunchSplash /><AppLock onUnlock={() => setIsAppLocked(false)} onFallback={handleLogout} /></>;
-  }
+  // Shown over the app (not instead of it), so a lock in the middle of work loses nothing
+  const lockLayer = isAppLocked ? <AppLock onUnlock={unlockApp} onFallback={handleLogout} /> : null;
 
   const permissionsOverlay = permScreen && (
     <PermissionsSetup currentUser={currentUser} fromSettings={permScreen === 'settings'} onDone={() => setPermScreen(null)} />
@@ -220,6 +244,7 @@ export default function App() {
         <PushRegistration currentUser={currentUser} />
         <Suspense fallback={<PartLoading />}><AdminPortal currentUser={currentUser} handleLogout={handleLogout} /></Suspense>
         {permissionsOverlay}
+        {lockLayer}
       </>
     );
   }
@@ -232,7 +257,9 @@ export default function App() {
   };
 
   return (
-    <PullDownReach disabled={activeTab === 'chat' || !!permScreen}>
+    <>
+    {lockLayer}
+    <PullDownReach disabled={activeTab === 'chat' || !!permScreen || isAppLocked}>
     <div className="app-container">
       <Toaster position="top-center" toastOptions={{ duration: 4000, style: { background: '#363636', color: '#fff' } }} />
       {permissionsOverlay}
@@ -369,5 +396,6 @@ export default function App() {
       )}
     </div>
     </PullDownReach>
+    </>
   );
 }

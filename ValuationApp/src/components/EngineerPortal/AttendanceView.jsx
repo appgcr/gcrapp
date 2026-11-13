@@ -24,8 +24,12 @@ import {
   Compass,
   ArrowRight,
   ExternalLink,
+  Fingerprint,
+  ScanFace,
   X
 } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
+import { NativeBiometric } from '@capgo/capacitor-native-biometric';
 import toast from 'react-hot-toast';
 // The face engine is large, so it loads only when a check-in or face set-up is opened
 const BiometricFaceScanner = lazy(() => import('./BiometricFaceScanner'));
@@ -148,6 +152,16 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
   const [isEnrollModalOpen, setIsEnrollModalOpen] = useState(false);
   const [maxDailyClockOuts, setMaxDailyClockOuts] = useState(3);
   const [lightboxRecord, setLightboxRecord] = useState(null);
+  // Fingerprint / Face ID saved on this phone can be used instead of the selfie
+  const [fingerprintReady, setFingerprintReady] = useState(false);
+  const [methodFor, setMethodFor] = useState(null); // 'Clock-In' | 'Clock-Out' while the choice sheet is open
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    NativeBiometric.isAvailable({ useFallback: false })
+      .then((r) => setFingerprintReady(!!r?.isAvailable))
+      .catch(() => setFingerprintReady(false));
+  }, []);
 
   // 1. Live digital clock ticker
   useEffect(() => {
@@ -455,6 +469,13 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
       return;
     }
 
+    // Phone has a fingerprint / Face ID saved → let them pick face selfie or fingerprint
+    if (fingerprintReady) { setMethodFor(type); return; }
+    openFaceScan(type);
+  };
+
+  const openFaceScan = (type) => {
+    setMethodFor(null);
     // High Security Check: Has this staff member enrolled their face profile?
     if (!currentUser?.faceEnrolled || !currentUser?.faceDescriptor || currentUser.faceDescriptor.length === 0) {
       toast('Please complete 1-time Face Biometric Setup first.', { icon: '🛡️' });
@@ -466,6 +487,27 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
     setIsScannerOpen(true);
   };
 
+  // Check in / out with the fingerprint (or Face ID) saved on this phone + live location
+  const checkWithFingerprint = async (type) => {
+    setMethodFor(null);
+    try {
+      await NativeBiometric.verifyIdentity({
+        reason: type === 'Clock-In' ? 'Check in to Gouru Valuations' : 'Check out of Gouru Valuations',
+        title: type === 'Clock-In' ? 'Check in' : 'Check out',
+        subtitle: currentUser?.name || '',
+        description: 'Touch the fingerprint sensor or look at the phone',
+        negativeButtonText: 'Cancel',
+        useFallback: false,
+        maxAttempts: 3,
+      });
+    } catch (e) {
+      toast.error('Fingerprint not verified. Try again or use the face check.');
+      return;
+    }
+    setScannerType(type);
+    await handleCaptureSuccess({ photo: null, verifiedBy: 'Fingerprint' }, type);
+  };
+
   // Called when face is enrolled successfully in FaceEnrollmentModal
   const handleFaceEnrolled = (updatedUser) => {
     setCurrentUser(updatedUser);
@@ -474,14 +516,15 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
   };
 
   // 9. Submit Attendance Record to Backend
-  const handleCaptureSuccess = async (biometricPayload) => {
+  const handleCaptureSuccess = async (biometricPayload, typeOverride) => {
+    const scannerType_ = typeOverride || scannerType;
     setIsScannerOpen(false);
     setIsSubmitting(true);
 
-    let finalImageUrl = biometricPayload.photo;
+    let finalImageUrl = biometricPayload.photo || '';
 
     // Upload via backend upload service
-    try {
+    if (biometricPayload.photo) try {
       const uploadRes = await fetch(`${API_BASE_URL}/api/upload`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -523,13 +566,14 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
       lat: location?.lat != null ? Number(location.lat).toFixed(6) : (biometricPayload.lat ? Number(biometricPayload.lat).toFixed(6) : ''),
       lng: location?.lng != null ? Number(location.lng).toFixed(6) : (biometricPayload.lng ? Number(biometricPayload.lng).toFixed(6) : ''),
       imageUrl: finalImageUrl,
-      attendanceType: scannerType,
+      attendanceType: scannerType_,
       status: 'Verified',
       address: addressData?.fullAddress || biometricPayload.address || (addressData?.title ? `${addressData.title}, ${addressData.subtitle}` : 'Live Verified Field Territory'),
       accuracy: location?.accuracy ?? null,
       faceVerified: !!biometricPayload.faceVerified,
       faceMatchScore: biometricPayload.faceMatchScore || 0,
-      livenessVerified: !!biometricPayload.livenessVerified
+      livenessVerified: !!biometricPayload.livenessVerified,
+      verifiedBy: biometricPayload.verifiedBy || 'Face'
     };
 
     try {
@@ -544,7 +588,7 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
         throw new Error(e.error || 'Could not save. Check your internet and try again.');
       }
 
-      toast.success(scannerType === 'Clock-In' ? 'Checked in. Your location is shared while on duty.' : 'Checked out. Location sharing stopped.');
+      toast.success(scannerType_ === 'Clock-In' ? 'Checked in. Your location is shared while on duty.' : 'Checked out. Location sharing stopped.');
 
       // Live location sharing is handled by LiveLocationReporter (starts on Clock-In,
       // stops on Clock-Out, resumes after app restarts). Tell it duty status changed.
@@ -627,7 +671,9 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
                 ? `You’ve checked out ${maxDailyClockOuts} times today — that’s the daily limit.`
                 : isOnDuty
                   ? 'Your location is shared with the office until you check out.'
-                  : 'Take a quick selfie to start your day. Location must be on.'}
+                  : fingerprintReady
+                    ? 'Use your fingerprint or a quick selfie to start your day. Location must be on.'
+                    : 'Take a quick selfie to start your day. Location must be on.'}
             </p>
 
             {/* Location */}
@@ -936,6 +982,26 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
                 📍 {lightboxRecord.address || `Lat: ${lightboxRecord.lat}, Lng: ${lightboxRecord.lng}`}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Choose how to check in / out */}
+      {methodFor && (
+        <div className="td-method-back" onClick={() => setMethodFor(null)}>
+          <div className="td-method" role="dialog" aria-label={methodFor === 'Clock-In' ? 'Check in with' : 'Check out with'} onClick={(e) => e.stopPropagation()}>
+            <div className="td-method-grab" />
+            <h3>{methodFor === 'Clock-In' ? 'Check in with' : 'Check out with'}</h3>
+            <p>Your live location is recorded either way.</p>
+            <button className="td-method-opt" onClick={() => checkWithFingerprint(methodFor)}>
+              <span className="ic fp"><Fingerprint size={24} /></span>
+              <span><b>Fingerprint</b><em>The fingerprint or Face ID saved on this phone</em></span>
+            </button>
+            <button className="td-method-opt" onClick={() => openFaceScan(methodFor)}>
+              <span className="ic face"><ScanFace size={24} /></span>
+              <span><b>Face check</b><em>Selfie matched with your registered face</em></span>
+            </button>
+            <button className="td-method-cancel" onClick={() => setMethodFor(null)}>Cancel</button>
           </div>
         </div>
       )}

@@ -248,6 +248,8 @@ router.post('/', authenticateToken, async (req, res) => {
     if (!payload.name && payload.engineerName) {
       payload.name = payload.engineerName;
     }
+    if (!['Face', 'Fingerprint'].includes(payload.verifiedBy)) payload.verifiedBy = '';
+    if (payload.verifiedBy === 'Fingerprint') { payload.faceVerified = false; payload.livenessVerified = false; payload.faceMatchScore = 0; }
     if (payload.verificationMethod === 'FACE_BIOMETRIC' || payload.livenessScore >= 0.8) {
       payload.faceVerified = true;
       payload.livenessVerified = true;

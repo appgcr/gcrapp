@@ -218,6 +218,7 @@ export default function AttendanceLogs() {
                       <div className="at-event-main">
                         <div className="at-event-title">{isIn ? 'Checked in' : 'Checked out'} · {fmtTime(r.timestamp)}
                           {r.faceVerified && <span className="at-face"><ShieldCheck size={13} /> Face verified</span>}
+                          {r.verifiedBy === 'Fingerprint' && <span className="at-face"><ShieldCheck size={13} /> Fingerprint verified</span>}
                         </div>
                         {(r.address || (r.lat && r.lng)) && (
                           <a className="at-place" href={`https://www.google.com/maps?q=${encodeURIComponent(r.lat && r.lng ? `${r.lat},${r.lng}` : r.address)}`} target="_blank" rel="noopener noreferrer">

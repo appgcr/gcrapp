@@ -19,7 +19,8 @@ const attendanceSchema = new mongoose.Schema({
   workDurationFormatted: { type: String, default: '' },
   faceVerified: { type: Boolean, default: false },
   faceMatchScore: { type: Number, default: 0 },
-  livenessVerified: { type: Boolean, default: false }
+  livenessVerified: { type: Boolean, default: false },
+  verifiedBy: { type: String, enum: ['Face', 'Fingerprint', ''], default: '' } // how the check-in was confirmed
 });
 
 attendanceSchema.index({ userId: 1, timestamp: -1 });

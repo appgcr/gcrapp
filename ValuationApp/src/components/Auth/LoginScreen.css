@@ -135,7 +135,7 @@
 @keyframes lgUp { from { transform: translateY(100%); } to { transform: none; } }
 
 /* ---------- App Lock (shares the sign-in look) ---------- */
-.lk-root { position: fixed; inset: 0; z-index: 99999; }
+.lk-root { position: fixed; inset: 0; z-index: 99999; background: var(--lg-bg); overflow-y: auto; }
 .lk-icon { width: 64px; height: 64px; margin: 0 auto 20px; border-radius: 18px; background: var(--lg-fill); color: var(--lg-accent); display: flex; align-items: center; justify-content: center; }
 .lk-note { margin: 0 0 16px; padding: 12px 14px; border-radius: 12px; background: var(--lg-card); box-shadow: 0 0 0 0.5px var(--lg-sep); font-size: 14px; color: var(--lg-sub); text-align: center; }
 
