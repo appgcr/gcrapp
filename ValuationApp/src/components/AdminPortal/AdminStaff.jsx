@@ -35,6 +35,26 @@ const timeAgoShort = (date) => {
   return `${h} hr ago`;
 };
 
+// Straight-line distance in km between two { lat, lng } points
+const kmBetween = (a, b) => {
+  const R = 6371;
+  const toRad = (x) => (x * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+};
+const fmtKm = (km) => (km < 1 ? `${Math.round(km * 1000)} m` : `${km < 10 ? km.toFixed(1) : Math.round(km)} km`);
+const fmtMin = (m) => (m == null ? '' : m < 60 ? `${m} min` : `${Math.floor(m / 60)} hr ${m % 60} min`);
+
+// "You are here" marker for the person viewing the map
+const meIcon = L.divIcon({
+  className: 'gcr-me-marker',
+  html: '<span class="me-halo"></span><span class="me-dot"></span>',
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
+});
+
 // Initials avatar marker with a pulsing ring while live
 const createLiveIcon = (initials, color, live) => L.divIcon({
   className: 'gcr-live-marker',
@@ -135,6 +155,47 @@ export default function AdminStaff({ currentUser }) {
   const [useFallbackTiles, setUseFallbackTiles] = useState(false);
   const [showCredits, setShowCredits] = useState(false);
   const handleMapError = useCallback(() => setUseFallbackTiles(true), []);
+
+  // Where the viewer (Super Admin / admin) is right now — distances are measured from here
+  const [myPos, setMyPos] = useState(null);
+  const [myPosError, setMyPosError] = useState('');
+  useEffect(() => {
+    if (!navigator.geolocation) { setMyPosError('Location not available on this device'); return undefined; }
+    const id = navigator.geolocation.watchPosition(
+      (p) => { setMyPos({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy }); setMyPosError(''); },
+      (e) => setMyPosError(e.code === 1 ? 'Allow location to see distances' : 'Finding your location…'),
+      { enableHighAccuracy: true, maximumAge: 15000, timeout: 30000 },
+    );
+    return () => navigator.geolocation.clearWatch(id);
+  }, []);
+
+  // Road distance + drive time from the viewer to each person (refreshed every 2 min, or when someone moves)
+  const [road, setRoad] = useState({});
+  // When the viewer's own position first arrives, fit the map again so it includes them
+  const hadPos = useRef(false);
+  useEffect(() => {
+    if (!myPos || hadPos.current) return undefined;
+    hadPos.current = true;
+    setTimeout(() => { fittedOnce.current = false; setTick((n) => n + 1); }, 900);
+    return undefined;
+  }, [myPos]);
+  const roadReq = useRef({ at: 0, key: '' });
+  useEffect(() => {
+    if (!myPos) return;
+    const people = [...engineers, ...branchAdmins].filter((p) => p.lastLog)
+      .map((p) => ({ id: p.id, lat: Number(parseFloat(p.lastLog.lat).toFixed(3)), lng: Number(parseFloat(p.lastLog.lng).toFixed(3)) }));
+    if (!people.length) return;
+    // ~100 m grid: only ask again when someone (or the viewer) has really moved, or every 2 minutes
+    const key = `${myPos.lat.toFixed(3)},${myPos.lng.toFixed(3)}|${people.map((p) => `${p.id}:${p.lat},${p.lng}`).join(';')}`;
+    if (key === roadReq.current.key && Date.now() - roadReq.current.at < 2 * 60 * 1000) return;
+    if (Date.now() - roadReq.current.at < 20 * 1000) return; // never more than every 20 s
+    roadReq.current = { at: Date.now(), key };
+    const exact = [...engineers, ...branchAdmins].filter((p) => p.lastLog).map((p) => ({ id: p.id, lat: parseFloat(p.lastLog.lat), lng: parseFloat(p.lastLog.lng) }));
+    fetch(`${API_BASE_URL}/api/live/road`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: { lat: myPos.lat, lng: myPos.lng }, to: exact }),
+    }).then((r) => (r.ok ? r.json() : {})).then((d) => { if (d && typeof d === 'object') setRoad(d); }).catch(() => {});
+  }, [myPos, engineers, branchAdmins]);
 
   const fetchStaffData = async () => {
       try {
@@ -270,6 +331,19 @@ export default function AdminStaff({ currentUser }) {
   ];
   const activeStaffCount = engineers.filter(e => e.onDuty).length;
   const points = onMap.map(e => [parseFloat(e.lastLog.lat), parseFloat(e.lastLog.lng)]);
+  if (myPos && points.length) points.push([myPos.lat, myPos.lng]);
+  const posOf = (p) => (p?.lastLog ? { lat: parseFloat(p.lastLog.lat), lng: parseFloat(p.lastLog.lng) } : null);
+  const distOf = (p) => {
+    const q = posOf(p);
+    if (!myPos || !q) return null;
+    return { km: kmBetween(myPos, q), road: road[p.id] || null };
+  };
+  const distText = (p) => {
+    const d = distOf(p);
+    if (!d) return '';
+    return d.road ? `${fmtKm(d.road.km)} by road · ${fmtMin(d.road.min)} drive · ${fmtKm(d.km)} straight` : `${fmtKm(d.km)} away (straight line)`;
+  };
+
 
   // Profile sheet for an engineer or branch admin (password, reset, contact)
   const renderProfile = () => (
@@ -453,6 +527,9 @@ export default function AdminStaff({ currentUser }) {
             {activeStaffCount} on duty{lastSync ? ` · updated ${timeAgoShort(lastSync)}` : ''}
           </span>
         </div>
+        <div className="st-me-line">
+          {myPos ? <><span className="st-me-dot" /> Distances from your location (±{Math.round(myPos.accuracy || 0)} m)</> : <>📍 {myPosError || 'Finding your location…'}</>}
+        </div>
 
         <div className={`st-map ${showCredits ? 'show-credits' : ''}`}>
           <MapContainer center={DEFAULT_CENTER} zoom={12} style={{ height: '100%', width: '100%' }} zoomControl={false} attributionControl={false}>
@@ -485,10 +562,19 @@ export default function AdminStaff({ currentUser }) {
                     <strong>{eng.displayName}</strong><br />
                     {eng.isAdmin ? 'Branch Admin · ' : ''}{eng.status === 'Signal lost' ? 'No update for over 5 min' : eng.status}<br />
                     Last update: {timeAgoShort(new Date(eng.lastLog.timestamp))}
+                    {distOf(eng) && <><br /><b>{fmtKm(distOf(eng).km)}</b> from you (straight line){distOf(eng).road && <><br /><b>{fmtKm(distOf(eng).road.km)}</b> by road · {fmtMin(distOf(eng).road.min)} drive</>}</>}
                   </Popup>
                 </Marker>
               </React.Fragment>
             ))}
+            {myPos && (
+              <>
+                {myPos.accuracy && myPos.accuracy < 500 ? <Circle center={[myPos.lat, myPos.lng]} radius={myPos.accuracy} pathOptions={{ color: '#007aff', weight: 1, fillOpacity: 0.08 }} /> : null}
+                <Marker position={[myPos.lat, myPos.lng]} icon={meIcon} zIndexOffset={1000}>
+                  <Popup><strong>You are here</strong><br />Distances are measured from this point</Popup>
+                </Marker>
+              </>
+            )}
             <MapController points={points} focus={onMap.find(e => e.id === focusId)} fittedOnce={fittedOnce} />
           </MapContainer>
 
@@ -548,6 +634,7 @@ export default function AdminStaff({ currentUser }) {
                       ? <>Off duty · seen {timeAgoShort(new Date(eng.seenAt || eng.lastLog.timestamp))}</>
                       : 'No location yet — not signed in on the app'}
               </div>
+              {distText(eng) && <div className="st-dist">{distText(eng)}</div>}
             </div>
             <span className={`gcr-badge ${eng.status === 'On Duty' ? 'green' : (eng.status === 'Signal lost' || eng.status === 'No signal') ? 'orange' : eng.status === 'Location off' ? 'red' : eng.status === 'Off duty · live' ? 'blue' : 'gray'}`}>{eng.status === 'Off duty · live' ? 'Off duty' : eng.status}</span>
           </div>
@@ -569,6 +656,7 @@ export default function AdminStaff({ currentUser }) {
               <div className="st-main">
                 <div className="st-name">{a.displayName}{showBranchChip && branchCode(a.branchId) && <span className="st-chip">{branchCode(a.branchId)}</span>}</div>
                 <div className="st-sub">@{a.username}{a.seenAt ? <> · seen {timeAgoShort(new Date(a.seenAt))}</> : ' · no location yet'}</div>
+                {distText(a) && <div className="st-dist">{distText(a)}</div>}
               </div>
               <span className={`gcr-badge ${a.status === 'Inactive' ? 'gray' : a.liveState === 'off' ? 'red' : a.liveState === 'silent' ? 'orange' : a.liveState === 'live' ? 'green' : 'gray'}`}>{a.status === 'Inactive' ? 'Inactive' : a.mapStatus}</span>
             </div>
@@ -657,6 +745,13 @@ function StaffStyles() {
         }
         .st-main { flex: 1; min-width: 0; }
         .st-name { font-size: 16px; font-weight: 600; color: var(--gcr-label); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .st-dist { font-size: 13px; font-weight: 600; color: #0062cc; margin-top: 2px; white-space: normal; line-height: 1.35; }
+        .st-me-line { display: flex; align-items: center; gap: 6px; padding: 0 16px 10px; font-size: 12.5px; color: var(--gcr-label-3); }
+        .st-me-dot { width: 9px; height: 9px; border-radius: 50%; background: #007aff; box-shadow: 0 0 0 3px rgba(0,122,255,.2); }
+        .gcr-me-marker { position: relative; }
+        .gcr-me-marker .me-dot { position: absolute; left: 4px; top: 4px; width: 14px; height: 14px; border-radius: 50%; background: #007aff; border: 2.5px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+        .gcr-me-marker .me-halo { position: absolute; inset: -6px; border-radius: 50%; background: rgba(0,122,255,.22); animation: mePulse 2s ease-out infinite; }
+        @keyframes mePulse { 0% { transform: scale(.5); opacity: 1; } 100% { transform: scale(1.4); opacity: 0; } }
         .st-sub { font-size: 13px; color: var(--gcr-label-3); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .gcr-live-marker { position: relative; }
         .gcr-live-marker .pulse {

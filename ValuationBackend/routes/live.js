@@ -93,6 +93,35 @@ router.post('/ping', async (req, res) => {
   }
 });
 
+// POST /api/live/road — { from: {lat,lng}, to: [{id,lat,lng}] } → road distance (km) and drive time (min)
+// from the viewer to each person, using OpenStreetMap road data (OSRM). Only coordinates are sent.
+router.post('/road', async (req, res) => {
+  try {
+    if (!['ADMIN', 'SUPER_ADMIN'].includes(req.user.role)) return res.status(403).json({ error: 'Admins only.' });
+    const ok = (p) => p && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng));
+    const from = req.body?.from;
+    const to = (Array.isArray(req.body?.to) ? req.body.to : []).filter(ok).slice(0, 90);
+    if (!ok(from) || to.length === 0) return res.json({});
+    const pts = [from, ...to].map((p) => `${Number(p.lng).toFixed(6)},${Number(p.lat).toFixed(6)}`).join(';');
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 12000);
+    const r = await fetch(`https://router.project-osrm.org/table/v1/driving/${pts}?sources=0&annotations=distance,duration`, {
+      signal: ctrl.signal, headers: { 'User-Agent': 'GouruValuations/1.0' },
+    }).finally(() => clearTimeout(timer));
+    const d = await r.json();
+    if (d.code !== 'Ok') return res.json({});
+    const out = {};
+    to.forEach((p, i) => {
+      const m = d.distances?.[0]?.[i + 1];
+      const s = d.durations?.[0]?.[i + 1];
+      if (Number.isFinite(m)) out[p.id] = { km: Math.round(m / 100) / 10, min: Number.isFinite(s) ? Math.round(s / 60) : null };
+    });
+    res.json(out);
+  } catch (err) {
+    res.json({}); // road distance is a nice-to-have; straight-line distance still shows
+  }
+});
+
 // GET /api/live — latest position of every engineer / branch admin this person may see
 router.get('/', async (req, res) => {
   try {

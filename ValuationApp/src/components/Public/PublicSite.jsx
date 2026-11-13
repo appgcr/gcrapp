@@ -486,7 +486,7 @@ function Privacy() {
       <p>
         To check that an uploaded document is the right kind (for example, a sale deed and not a tax receipt) and to read its
         details, the file is sent securely to <b>Google’s Gemini API</b>, which returns the text and details to us. Addresses for
-        site photos are looked up from the GPS position with <b>OpenStreetMap (Nominatim)</b>. Approximate network location uses
+        site photos are looked up from the GPS position with <b>OpenStreetMap (Nominatim)</b>. Road distances on the staff map are calculated with the <b>OSRM</b> routing service (only map coordinates are sent, no names). Approximate network location uses
         <b> ip-api.com</b> only when GPS is unavailable.
       </p>
 
