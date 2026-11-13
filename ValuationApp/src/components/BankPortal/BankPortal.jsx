@@ -1,3 +1,4 @@
+import PullToRefresh from '../Shared/PullToRefresh';
 import React, { useCallback, useEffect, useState } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 import { Plus, FileText, LogOut, Download, Loader2, RefreshCw, KeyRound, CheckCircle2, Building2 } from 'lucide-react';
@@ -24,7 +25,7 @@ export default function BankPortal({ currentUser, handleLogout }) {
   const [pwOpen, setPwOpen] = useState(false);
 
   const load = useCallback(() => {
-    fetch(`${API_BASE_URL}/api/bank/requests`, { cache: 'no-store' })
+    return fetch(`${API_BASE_URL}/api/bank/requests`, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(r)))
       .then(setRows)
       .catch(() => { setRows([]); toast.error('Could not load your requests.'); });
@@ -75,6 +76,7 @@ export default function BankPortal({ currentUser, handleLogout }) {
   const counts = (rows || []).reduce((a, r) => { a[r.reportReady ? 'ready' : 'open'] += 1; return a; }, { open: 0, ready: 0 });
 
   return (
+    <PullToRefresh onRefresh={load}>
     <div className="bp">
       <Toaster position="top-center" />
       <header className="bp-top">
@@ -223,6 +225,7 @@ export default function BankPortal({ currentUser, handleLogout }) {
       )}
       {pwOpen && <ChangePassword user={currentUser} onClose={() => setPwOpen(false)} />}
     </div>
+    </PullToRefresh>
   );
 }
 

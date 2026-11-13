@@ -17,6 +17,7 @@ import GlobalChatWidget from '../Shared/GlobalChatWidget';
 import BroadcastSheet from './BroadcastSheet';
 import { GridIcon, DocIcon, CalendarIcon, PeopleIcon, GearIcon } from '../Shared/TabIcons';
 import GcrLogo from '../Shared/GcrLogo';
+import PullToRefresh from '../Shared/PullToRefresh';
 import { toast } from 'react-hot-toast';
 
 export default function AdminPortal({ currentUser, handleLogout }) {
@@ -240,6 +241,7 @@ export default function AdminPortal({ currentUser, handleLogout }) {
   };
 
   return (
+    <PullToRefresh onRefresh={() => setRefreshKey((k) => k + 1)} scrollSelector=".admin-main-content" disabled={activeTab === 'chat'}>
     <div className="admin-portal-wrapper">
       {/* Enterprise Desktop Sidebar (Rendered on >= 1024px) */}
       <aside className="admin-desktop-sidebar">
@@ -395,5 +397,6 @@ export default function AdminPortal({ currentUser, handleLogout }) {
         ))}
       </nav>
     </div>
+    </PullToRefresh>
   );
 }
