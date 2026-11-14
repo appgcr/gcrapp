@@ -94,6 +94,10 @@ body.dark-theme .ch-head { background: rgba(28, 28, 30, 0.92); box-shadow: 0 0.5
 .ch-bubble.att.document .ch-meta, .ch-bubble.att.location .ch-meta { position: static; float: right; background: none; color: inherit; opacity: 0.75; padding: 0; margin: 4px 6px 2px 10px; }
 .ch-photo { display: block; border: none; padding: 0; background: none; cursor: zoom-in; }
 .ch-photo img { display: block; width: 240px; max-width: 100%; max-height: 320px; object-fit: cover; border-radius: 14px; }
+.ch-photo.loading img { min-height: 180px; background: rgba(120, 120, 128, 0.18); }
+.ch-photo-missing { width: 220px; max-width: 100%; height: 132px; border-radius: 14px; background: rgba(255, 255, 255, 0.16); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center; font-size: 14px; font-weight: 600; padding: 0 12px 18px; }
+.ch-photo-missing small { font-size: 12px; font-weight: 400; opacity: 0.8; }
+.ch-msg.them .ch-photo-missing { background: rgba(120, 120, 128, 0.12); color: var(--ch-sub); }
 .ch-doc, .ch-loc { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 14px; text-decoration: none; color: inherit; min-width: 210px; }
 .ch-msg.me .ch-doc, .ch-msg.me .ch-loc { background: rgba(255, 255, 255, 0.16); }
 .ch-msg.them .ch-doc, .ch-msg.them .ch-loc { background: rgba(118, 118, 128, 0.1); }

@@ -1,11 +1,38 @@
 import { API_BASE_URL } from '../../config/api';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, Send, Search, Check, CheckCheck, Plus, Camera, ImageIcon, FileText, MapPin, Loader2, X, Phone, ChevronDown, AlertCircle, Clock, Megaphone } from 'lucide-react';
+import { ChevronLeft, Send, Search, Check, CheckCheck, Plus, Camera, ImageIcon, FileText, MapPin, Loader2, X, Phone, ChevronDown, AlertCircle, Clock, Megaphone, ImageOff } from 'lucide-react';
 import BranchSwitcher from '../AdminPortal/BranchSwitcher';
 import toast from 'react-hot-toast';
 import CryptoJS from 'crypto-js';
 import { isAdminRole, isSuperAdmin } from '../../utils/session';
 import './ChatSystem.css';
+import { uploadDocumentFile, resolveDocUrl } from '../../utils/docFiles';
+
+// Attachment links: stored-file links get the server address; old http links from the
+// server get https (the app blocks insecure pictures)
+const fileLink = (url) => {
+  const u = resolveDocUrl(url);
+  return typeof u === 'string' ? u.replace(/^http:\/\/(?!localhost|127\.0\.0\.1|10\.|192\.168\.)/, 'https://') : u;
+};
+
+// A chat photo: grey box while it loads, a clear card if the file is gone
+function ChatPhoto({ url, onOpen }) {
+  const [state, setState] = useState('loading');
+  if (state === 'error') {
+    return (
+      <div className="ch-photo-missing">
+        <ImageOff size={22} />
+        <span>Photo not available</span>
+        <small>Ask the sender to share it again</small>
+      </div>
+    );
+  }
+  return (
+    <button className={`ch-photo ${state === 'loading' ? 'loading' : ''}`} onClick={() => onOpen(fileLink(url))}>
+      <img src={fileLink(url)} alt="Photo" loading="lazy" onLoad={() => setState('ok')} onError={() => setState('error')} />
+    </button>
+  );
+}
 
 // Office ↔ staff chat. Each engineer has one conversation with their office (branch admins
 // + Super Admin answer it together). Admins see every engineer they manage.
@@ -70,7 +97,6 @@ const compressImage = (file) => new Promise((resolve, reject) => {
   r.onerror = reject;
   r.readAsDataURL(file);
 });
-const readAsDataUrl = (file) => new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = reject; r.readAsDataURL(file); });
 
 async function api(path, opts = {}) {
   const res = await fetch(`${API_BASE_URL}${path}`, { ...opts, headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) } });
@@ -333,9 +359,9 @@ function Thread({ currentUser, engineerId, conv, caseId, onBack, isMini, onRead 
   const onDoc = async (e) => {
     const file = e.target.files?.[0]; e.target.value = '';
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) { toast.error('Files must be under 10 MB'); return; }
     setSheet(false); setBusy(true);
-    try { send({ text: file.name, attachmentType: 'document', attachmentUrl: await upload(await readAsDataUrl(file)), attachmentMetadata: { size: file.size } }); }
+    // Any size: streamed into the server's file storage, the message keeps the link
+    try { send({ text: file.name, attachmentType: 'document', attachmentUrl: `${API_BASE_URL}${await uploadDocumentFile(file)}`, attachmentMetadata: { size: file.size } }); }
     catch (err) { toast.error(err.message || 'Could not send file'); } finally { setBusy(false); }
   };
   const onLocation = () => {
@@ -451,10 +477,10 @@ function Bubble({ m, mine, sameRun, showName, onOpenPhoto, onRetry }) {
       {showName && <div className="ch-name">{m.sentByName}</div>}
       <div className={`ch-bubble ${type ? `att ${type}` : ''}`}>
         {type === 'photo' && (
-          <button className="ch-photo" onClick={() => onOpenPhoto(m.attachmentUrl)}><img src={m.attachmentUrl} alt="Photo" loading="lazy" /></button>
+          <ChatPhoto url={m.attachmentUrl} onOpen={onOpenPhoto} />
         )}
         {type === 'document' && (
-          <a className="ch-doc" href={m.attachmentUrl} target="_blank" rel="noopener noreferrer">
+          <a className="ch-doc" href={fileLink(m.attachmentUrl)} target="_blank" rel="noopener noreferrer">
             <span className="ch-doc-icon"><FileText size={20} /></span>
             <span className="ch-doc-name">{text || 'Document'}</span>
           </a>
