@@ -6,8 +6,8 @@ import React, { useEffect, useRef, useState } from 'react';
  *  • Drag down from the top of a screen → the whole screen follows the finger; let go past a short
  *    distance and it settles about 40% down the display and STAYS there, with a navy area and a gold
  *    handle above it — the top of the app is now within thumb reach.
- *  • Back to full screen: swipe up, tap the navy area, or simply use the app (tap a button, scroll) —
- *    the screen slides back up, as on iPhone.
+ *  • Taps and scrolling work on the lowered screen, and it stays down (e.g. while switching tabs).
+ *  • Back to full screen: swipe up, or tap the navy area.
  *
  * props
  *   scrollSelector — CSS selector of the element that scrolls (omit when the page itself scrolls)
@@ -90,9 +90,8 @@ export default function PullDownReach({ scrollSelector, disabled = false, childr
           if (e.cancelable) e.preventDefault();
           set(Math.max(0, Math.min(lowerTo(), d.from + dy)), 'dragging');
           d.moved = true;
-        } else if (!d.moved) {                           // scrolling the lowered screen → back to full screen, like iPhone
+        } else if (!d.moved) {                           // dragging down on the lowered screen just scrolls it
           drag.current = null;
-          raise();
         }
         return;
       }
@@ -113,7 +112,7 @@ export default function PullDownReach({ scrollSelector, disabled = false, childr
       const d = drag.current; drag.current = null;
       if (!d) return;
       if (d.mode === 'lowered') {
-        if (!d.moved) return;                            // a tap: handled by the click listener below
+        if (!d.moved) return;                            // a tap: it works on the lowered screen, which stays down
         if (offsetRef.current < lowerTo() - 50) raise(); else set(lowerTo(), 'lowered');
         return;
       }
@@ -122,17 +121,10 @@ export default function PullDownReach({ scrollSelector, disabled = false, childr
       else raise();
     };
 
-    // While lowered, using the app (a tap on the screen) brings it back up after the tap does its job
-    const onClick = (e) => {
-      if (phaseRef.current !== 'lowered') return;
-      if (pageRef.current?.contains(e.target)) setTimeout(raise, 0);
-    };
-
     window.addEventListener('touchstart', onStart, { passive: true });
     window.addEventListener('touchmove', onMove, { passive: false });
     window.addEventListener('touchend', onEnd);
     window.addEventListener('touchcancel', onEnd);
-    window.addEventListener('click', onClick, true);
     const onResize = () => { if (phaseRef.current === 'lowered') set(lowerTo(), 'lowered'); };
     window.addEventListener('resize', onResize);
     return () => {
@@ -140,7 +132,6 @@ export default function PullDownReach({ scrollSelector, disabled = false, childr
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onEnd);
       window.removeEventListener('touchcancel', onEnd);
-      window.removeEventListener('click', onClick, true);
       window.removeEventListener('resize', onResize);
     };
   }, [disabled, scrollSelector]);
