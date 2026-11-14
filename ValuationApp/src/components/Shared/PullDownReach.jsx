@@ -6,8 +6,8 @@ import React, { useEffect, useRef, useState } from 'react';
  *  • Drag down from the top of a screen → the whole screen follows the finger; let go past a short
  *    distance and it settles about 40% down the display and STAYS there, with a navy area and a gold
  *    handle above it — the top of the app is now within thumb reach.
- *  • Taps and scrolling work on the lowered screen, and it stays down (e.g. while switching tabs).
- *  • Back to full screen: swipe up, or tap the navy area.
+ *  • Taps and scrolling (up and down) work on the lowered screen, and it stays down.
+ *  • Back to full screen: tap the navy area, or swipe up on it.
  *
  * props
  *   scrollSelector — CSS selector of the element that scrolls (omit when the page itself scrolls)
@@ -48,7 +48,7 @@ export default function PullDownReach({ scrollSelector, disabled = false, childr
   };
   const lowerTo = () => Math.round(window.innerHeight * LOWER_RATIO);
   const raise = () => {
-    // Back to the transform at the same spot first (no jump), then slide up on the next frames
+    // Back to the transform at the same spot first (no jump), then slide up on the next frames.
     setSettled(false); clearTimeout(settleTimer.current);
     phaseRef.current = 'moving'; setPhase('moving');
     requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -86,11 +86,11 @@ export default function PullDownReach({ scrollSelector, disabled = false, childr
       const dx = Math.abs(e.touches[0].clientX - d.x);
       if (d.mode === 'lowered') {
         if (Math.abs(dy) < 8 && dx < 8) return;
-        if (dy < 0 || !d.onPage) {                       // swipe up (or drag on the navy area) → follow, then go back
+        if (!d.onPage) {                                 // drag on the navy area → follow, then go back
           if (e.cancelable) e.preventDefault();
           set(Math.max(0, Math.min(lowerTo(), d.from + dy)), 'dragging');
           d.moved = true;
-        } else if (!d.moved) {                           // dragging down on the lowered screen just scrolls it
+        } else if (!d.moved) {                           // on the lowered screen a drag (up or down) scrolls it
           drag.current = null;
         }
         return;
@@ -139,7 +139,7 @@ export default function PullDownReach({ scrollSelector, disabled = false, childr
   const active = phase !== 'idle';
   const animate = (phase === 'lowered' || phase === 'moving') && !settled;
   return (
-    <div className={`reach ${active ? 'reach-on' : ''}`} ref={rootRef}>
+    <div className={`reach ${active ? 'reach-on' : ''} ${settled ? 'reach-settled' : ''}`} ref={rootRef}>
       {active && (
         <button type="button" className="reach-top" style={{ height: offset + 2 }} onClick={raise} aria-label="Back to full screen">
           <svg className="reach-handle" width="38" height="12" viewBox="0 0 38 12" aria-hidden="true" style={{ opacity: Math.min(1, Math.max(0, (offset - 30) / 40)) }}>
@@ -151,7 +151,7 @@ export default function PullDownReach({ scrollSelector, disabled = false, childr
         ref={pageRef}
         className={`reach-page ${animate ? 'reach-anim' : ''}`}
         style={active ? {
-          ...(settled ? { top: offset, transform: 'none' } : { transform: `translate3d(0, ${offset}px, 0)` }),
+          ...(settled ? { top: offset, transform: 'none', '--reach-offset': `${offset}px` } : { transform: `translate3d(0, ${offset}px, 0)` }),
           borderRadius: offset > 4 ? '30px 30px 0 0' : 0
         } : undefined}
       >
@@ -165,6 +165,11 @@ export default function PullDownReach({ scrollSelector, disabled = false, childr
         .reach-handle { transition: opacity .15s; filter: drop-shadow(0 2px 6px rgba(0,0,0,.35)); }
         .reach-on .reach-page { position: relative; z-index: 1; overflow: hidden; background: var(--bg-app, #f2f2f7);
           box-shadow: 0 -12px 34px rgba(0,0,0,.4); }
+        /* Lowered: the navy area sits above the page so its taps never reach the page, and the admin
+           layout (which scrolls inside itself) shrinks to the space left so it scrolls to the end */
+        .reach-settled .reach-top { z-index: 2; }
+        .reach-settled .reach-page { overflow: visible; }
+        .reach-settled .reach-page > .admin-portal-wrapper { height: calc(100vh - var(--reach-offset, 0px)); }
         .reach-anim { transition: transform .42s cubic-bezier(.2,.9,.25,1), border-radius .42s; }
         @media (prefers-reduced-motion: reduce) { .reach-anim { transition: none; } }
       `}</style>
