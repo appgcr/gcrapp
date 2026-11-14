@@ -197,6 +197,21 @@ export default function Step6FinalReviewSignature({
           <h4 style={{ margin: '0 0 12px 0', fontSize: '15px', color: '#166534', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Coins size={16} /> Values in the {bankName} report
           </h4>
+          {Number.isFinite(bankValues.landValue) && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '10px', marginBottom: '10px' }}>
+              {[['Land', bankValues.landValue], ['Building', bankValues.netStructureValue], ...(bankValues.amenitiesValue ? [['Extras', bankValues.amenitiesValue]] : [])].map(([label, v]) => (
+                <div key={label} style={{ padding: '8px 12px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #dcfce7', minWidth: 0 }}>
+                  <span style={{ fontSize: '11px', color: '#4b5563' }}>{label}</span>
+                  <div style={{ fontSize: '15px', fontWeight: '700', color: '#15803d' }}>₹{Number(v || 0).toLocaleString('en-IN')}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {bankValues.reportTotal > 0 && bankValues.reportTotal !== bankValues.fairMarketValue && (
+            <p style={{ margin: '0 0 10px', fontSize: '12px', color: '#4b5563' }}>
+              Total ₹{Number(bankValues.reportTotal).toLocaleString('en-IN')} · rounded as the bank’s report does (“Say”) to ₹{Number(bankValues.fairMarketValue).toLocaleString('en-IN')}
+            </p>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
             {[['Fair Market Value', bankValues.fairMarketValue, '#166534'], ['Realizable Value', bankValues.realizableValue, '#1e40af'], ['Distress Value', bankValues.distressSaleValue, '#92400e']].map(([label, v, color]) => (
               <div key={label} style={{ padding: '10px 12px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #dcfce7', minWidth: 0 }}>
@@ -254,7 +269,7 @@ export default function Step6FinalReviewSignature({
             </div>
           </div>
           <div style={{ flex: 1, minWidth: '130px', padding: '8px 12px', backgroundColor: '#e0f2fe', borderRadius: '8px' }}>
-            <span style={{ fontSize: '11px', fontWeight: '600', color: '#0369a1' }}>Realizable Value (90%)</span>
+            <span style={{ fontSize: '11px', fontWeight: '600', color: '#0369a1' }}>Realizable Value</span>
             <div style={{ fontSize: '16px', fontWeight: '800', color: '#075985' }}>
               ₹{valSummary.realizableValue.toLocaleString('en-IN')}
             </div>

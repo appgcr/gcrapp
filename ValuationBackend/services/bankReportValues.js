@@ -24,7 +24,11 @@ async function applyBankReportValues(caseObj, valuation) {
     }
     const v = JSON.parse(py.stdout.toString().trim().split('\n').pop());
     if (!v.fmv) return valuation;
-    return { ...valuation, fairMarketValue: v.fmv, realizableValue: v.realizable, distressSaleValue: v.distress, source: `bank-report:${v.format}` };
+    const parts = Number.isFinite(v.land) && Number.isFinite(v.building)
+      // Land / building / extras exactly as the bank's report prints them, so the case adds up to its total
+      ? { landValue: v.land, netStructureValue: v.building, amenitiesValue: v.extras || 0, reportTotal: v.total }
+      : {};
+    return { ...valuation, ...parts, fairMarketValue: v.fmv, realizableValue: v.realizable, distressSaleValue: v.distress, source: `bank-report:${v.format}` };
   } catch (err) {
     console.warn('Bank report values:', err.message);
     return valuation;

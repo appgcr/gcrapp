@@ -117,7 +117,8 @@ const valuationCaseSchema = new mongoose.Schema({
     fairMarketValue: { type: Number, default: 0 },
     realizableValue: { type: Number, default: 0 },
     distressSaleValue: { type: Number, default: 0 },
-    insurableValue: { type: Number, default: 0 }
+    insurableValue: { type: Number, default: 0 },
+    reportTotal: { type: Number, default: 0 } // the bank report's total before its 'Say' rounding
   },
 
   // Audit and Sync Fields

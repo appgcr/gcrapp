@@ -1122,7 +1122,7 @@ router.post('/:id/report-preview', authenticateToken, async (req, res) => {
     // ?values=1 → only the report's figures (fast), for the engineer's final-step summary
     if (req.query.values) {
       const v = await applyBankReportValues(draft, { valuationStatus: 'SUCCESS' });
-      return res.json(v.source ? { fairMarketValue: v.fairMarketValue, realizableValue: v.realizableValue, distressSaleValue: v.distressSaleValue } : {});
+      return res.json(v.source ? { fairMarketValue: v.fairMarketValue, realizableValue: v.realizableValue, distressSaleValue: v.distressSaleValue, landValue: v.landValue, netStructureValue: v.netStructureValue, amenitiesValue: v.amenitiesValue, reportTotal: v.reportTotal } : {});
     }
     const stamp = `${caseItem.id}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const jsonPath = path.join(os.tmpdir(), `preview_${stamp}.json`);
