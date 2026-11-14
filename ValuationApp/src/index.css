@@ -890,3 +890,6 @@ body.dark-theme .eng-nav-title { color: #fff; }
 .gv-switch input:disabled + i { opacity: .5; }
 .fs-row-switch > span:first-child { width: auto; flex: 1; }
 .fs-row-switch small { display: block; font-size: 12.5px; color: rgba(60,60,67,.6); margin-top: 1px; line-height: 1.3; }
+
+/* Bottom tab bar steps aside while the phone keyboard is open */
+body.kb-open .ios-tabbar { display: none !important; }
