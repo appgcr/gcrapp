@@ -155,6 +155,7 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
   // Fingerprint / Face ID saved on this phone can be used instead of the selfie
   const [fingerprintReady, setFingerprintReady] = useState(false);
   const [methodFor, setMethodFor] = useState(null); // 'Clock-In' | 'Clock-Out' while the choice sheet is open
+  const [enrollFor, setEnrollFor] = useState(null); // check-in/out waiting on the face setup, if any
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -478,7 +479,8 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
     setMethodFor(null);
     // High Security Check: Has this staff member enrolled their face profile?
     if (!currentUser?.faceEnrolled || !currentUser?.faceDescriptor || currentUser.faceDescriptor.length === 0) {
-      toast('Please complete 1-time Face Biometric Setup first.', { icon: '🛡️' });
+      toast('Set up your face once, or use your fingerprint.', { icon: '🛡️' });
+      setEnrollFor(type);
       setIsEnrollModalOpen(true);
       return;
     }
@@ -506,6 +508,18 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
     }
     setScannerType(type);
     await handleCaptureSuccess({ photo: null, verifiedBy: 'Fingerprint' }, type);
+  };
+
+  // "Use fingerprint instead" on the face setup screen
+  const useFingerprintFromSetup = async () => {
+    let ok = false;
+    try { ok = !!(await NativeBiometric.isAvailable({ useFallback: false }))?.isAvailable; } catch { ok = false; }
+    if (!ok) return 'No fingerprint or Face ID is saved on this phone. Add one in the phone’s Settings, or set up your face above.';
+    setFingerprintReady(true);
+    setIsEnrollModalOpen(false);
+    const type = enrollFor || (canClockOut ? 'Clock-Out' : 'Clock-In');
+    setEnrollFor(null);
+    checkWithFingerprint(type);
   };
 
   // Called when face is enrolled successfully in FaceEnrollmentModal
@@ -1024,7 +1038,8 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
         <FaceEnrollmentModal
           currentUser={currentUser}
           onEnrolled={handleFaceEnrolled}
-          onClose={() => setIsEnrollModalOpen(false)}
+          onClose={() => { setIsEnrollModalOpen(false); setEnrollFor(null); }}
+          onUseFingerprint={Capacitor.isNativePlatform() ? useFingerprintFromSetup : undefined}
         />
       )}
       </Suspense>

@@ -1,11 +1,12 @@
 import { API_BASE_URL } from '../../config/api';
 import React, { useState, useEffect, useRef } from 'react';
-import { ShieldCheck, Camera, CheckCircle2, AlertTriangle, Loader2, X, RefreshCw, Sparkles } from 'lucide-react';
+import { ShieldCheck, Fingerprint, Camera, CheckCircle2, AlertTriangle, Loader2, X, RefreshCw, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { loadFaceApiModels, analyzeFaceFrame, generateFallbackFaceDescriptor } from '../../services/faceApiService';
 
-export default function FaceEnrollmentModal({ currentUser, onEnrolled, onClose }) {
+export default function FaceEnrollmentModal({ currentUser, onEnrolled, onClose, onUseFingerprint }) {
   const videoRef = useRef(null);
+  const [fpNote, setFpNote] = useState('');
   const canvasRef = useRef(null);
   const [stream, setStream] = useState(null);
   const [isModelLoading, setIsModelLoading] = useState(true);
@@ -479,6 +480,27 @@ export default function FaceEnrollmentModal({ currentUser, onEnrolled, onClose }
                 {isProcessing ? 'Enrolling...' : 'Register Face Profile'}
               </button>
             </div>
+            {onUseFingerprint && (
+              <button
+                type="button"
+                onClick={async () => { setFpNote(''); const msg = await onUseFingerprint(); if (msg) setFpNote(msg); }}
+                disabled={isProcessing}
+                style={{
+                  WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none',
+                  width: '100%', marginTop: '12px', padding: '14px', borderRadius: '10px',
+                  border: '1.5px solid #0052cc', backgroundColor: '#ffffff', color: '#0052cc',
+                  fontSize: '15px', fontWeight: '700', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+                }}
+              >
+                <Fingerprint size={20} /> Use fingerprint instead
+              </button>
+            )}
+            {fpNote && (
+              <div role="alert" style={{ marginTop: '10px', padding: '10px 12px', borderRadius: '10px', background: '#fef2f2', color: '#b91c1c', fontSize: '13.5px', lineHeight: 1.45 }}>
+                {fpNote}
+              </div>
+            )}
           </div>
         </div>
       </div>
