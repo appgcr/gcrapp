@@ -1302,8 +1302,11 @@ export default function CaseCreationModal({
       }
       
       if (!response.ok) {
+        // The server answered and refused: show why and keep the form open (this is not a network problem)
         const errData = await response.json().catch(() => ({}));
-        throw new Error(`Failed to save case to backend: ${errData.error || response.statusText}`);
+        const why = errData.details || errData.error || response.statusText || 'The server could not save this case.';
+        toast.error(why, { duration: 7000 });
+        return;
       }
       
       const newCase = await response.json();

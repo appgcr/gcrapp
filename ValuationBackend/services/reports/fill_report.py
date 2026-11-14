@@ -280,7 +280,11 @@ def fill_images(doc, images, temps):
             run.text = ''
             src = images.get(name)
             if src and os.path.exists(src):
-                fitted = fit_image(src, w, h, contain=name.startswith('sig'))
+                try:
+                    fitted = fit_image(src, w, h, contain=name.startswith('sig'))
+                except Exception as err:  # one damaged photo must not stop the bank's report
+                    print(f'Skipping unreadable image {name}: {err}', file=sys.stderr)
+                    continue
                 temps.append(fitted)
                 run.add_picture(fitted, width=Emu(w), height=Emu(h))
                 placed = True

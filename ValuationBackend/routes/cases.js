@@ -239,8 +239,15 @@ router.put('/:id', authenticateToken, async (req, res) => {
       // Engineers can't reassign cases or make decisions
       delete updateData.assignedEngineerId;
       delete updateData.assignedEngineerName;
-      if (['Approved', 'Rejected', 'Returned'].includes(updateData.status)) {
+      if (['Approved', 'Rejected', 'Returned', 'Completed'].includes(updateData.status)) {
         return res.status(403).json({ error: 'Only an admin can approve, reject or return a case.' });
+      }
+      // Once submitted, the figures belong to the admin's review: the engineer edits again only if it is returned
+      if (!['Pending', 'Returned'].includes(existingCase.status)) {
+        const msg = existingCase.status === 'Approved' ? 'This case is approved and locked. Ask your admin if something must change.'
+          : existingCase.status === 'Rejected' ? 'This case is closed.'
+          : 'This case is with your admin for review. You can edit it again only if it is returned to you.';
+        return res.status(409).json({ error: msg });
       }
     }
     if (updateData.assignedEngineerId !== undefined && !(await engineerInBranch(updateData.assignedEngineerId, existingCase.branchId))) {
@@ -305,9 +312,10 @@ router.put('/:id', authenticateToken, async (req, res) => {
       updateData.valuation = existingCase.valuation;
     }
 
-    // POLICY GUARD: When submitting for review or approving, reject unconfigured policies
+    // POLICY GUARD: When submitting for review or approving, reject unconfigured policies.
+    // Always recalculate from the property details (the saved figures may be blank from an earlier failed calculation).
     if (updateData.status === 'Reviewing' || updateData.status === 'Approved') {
-      const activeValuation = updateData.valuation || (targetPropertyDetails ? calculateValuation(targetPropertyDetails, { ...config, bankName: targetBankName, bankPolicy }) : null);
+      const activeValuation = targetPropertyDetails ? calculateValuation(targetPropertyDetails, { ...config, bankName: targetBankName, bankPolicy }) : updateData.valuation;
       if (activeValuation) {
         if (activeValuation.valuationStatus === 'POLICY_NOT_CONFIGURED') {
           return res.status(422).json({
@@ -328,7 +336,12 @@ router.put('/:id', authenticateToken, async (req, res) => {
           });
         }
       }
+      const fmvNow = Number((updateData.valuation || existingCase.valuation || {}).fairMarketValue) || 0;
+      if (fmvNow <= 0) {
+        return res.status(422).json({ error: 'The valuation is ₹0. Fill the extent, rates and building details, then save before submitting.' });
+      }
     }
+    if (updateData.status === 'Approved' && existingCase.status !== 'Approved') updateData.approvedAt = new Date();
 
     const updated = await ValuationCase.findOneAndUpdate(
       { id: req.params.id },

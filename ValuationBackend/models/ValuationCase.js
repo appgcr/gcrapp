@@ -90,6 +90,7 @@ const valuationCaseSchema = new mongoose.Schema({
   rejectionReason: { type: String, default: '' },
   returnedBy: { type: String, default: '' },
   returnedAt: { type: Date, default: null },
+  approvedAt: { type: Date, default: null },
   createdAt: { type: Date, default: Date.now },
   
   documents: { type: mongoose.Schema.Types.Mixed, default: {} },
