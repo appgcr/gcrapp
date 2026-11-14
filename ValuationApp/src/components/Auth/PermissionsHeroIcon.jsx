@@ -1,7 +1,7 @@
 import React, { useId } from 'react';
 
-// Premium hero for the "Allow access" screen: a glossy shield tile (privacy) with the
-// three things we ask for — location, camera, notifications — orbiting it.
+// Hero for the "Allow access" screen: a glossy tile with a phone on it, and the three things
+// we ask for — location, camera, notifications — orbiting it.
 export default function PermissionsHeroIcon({ size = 132 }) {
   const uid = useId().replace(/:/g, '');
   const id = (n) => `${n}-${uid}`;
@@ -17,9 +17,9 @@ export default function PermissionsHeroIcon({ size = 132 }) {
           <stop offset="0" stopColor="#fff" stopOpacity="0.45" />
           <stop offset="1" stopColor="#fff" stopOpacity="0" />
         </linearGradient>
-        <linearGradient id={id('shield')} x1="66" y1="44" x2="66" y2="92" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#FFFFFF" />
-          <stop offset="1" stopColor="#E6F0FF" />
+        <linearGradient id={id('screen')} x1="66" y1="50" x2="66" y2="84" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#E8F2FF" />
+          <stop offset="1" stopColor="#C9E0FF" />
         </linearGradient>
         <linearGradient id={id('green')} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#4CD964" /><stop offset="1" stopColor="#28C840" /></linearGradient>
         <linearGradient id={id('gray')} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#A1A1A6" /><stop offset="1" stopColor="#7C7C82" /></linearGradient>
@@ -42,9 +42,15 @@ export default function PermissionsHeroIcon({ size = 132 }) {
       <rect x="30" y="31" width="72" height="36" rx="20" fill={`url(#${id('gloss')})`} />
       <rect x="30.75" y="31.75" width="70.5" height="70.5" rx="19.25" stroke="#fff" strokeOpacity="0.35" strokeWidth="1.5" />
 
-      {/* shield + check */}
-      <path d="M66 45.5 L84 52.2 V66.4 C84 77.6 76.5 85.4 66 89 C55.5 85.4 48 77.6 48 66.4 V52.2 Z" fill={`url(#${id('shield')})`} />
-      <path d="M57.5 67.5 L63.5 73.5 L75 61.5" stroke="#0A6CFF" strokeWidth="4.2" strokeLinecap="round" strokeLinejoin="round" />
+      {/* phone */}
+      <rect x="51" y="42" width="30" height="51" rx="7" fill="#fff" />
+      <rect x="54.5" y="48.5" width="23" height="37" rx="3" fill={`url(#${id('screen')})`} />
+      <rect x="61.5" y="45" width="9" height="1.8" rx="0.9" fill="#C7D7EE" />
+      <rect x="61" y="88.4" width="10" height="1.8" rx="0.9" fill="#C7D7EE" />
+      {/* map pin on the screen */}
+      <path d="M66 56.5c-4.3 0-7.4 3.2-7.4 7.1 0 5.2 7.4 11.6 7.4 11.6s7.4-6.4 7.4-11.6c0-3.9-3.1-7.1-7.4-7.1z" fill="#0A6CFF" />
+      <circle cx="66" cy="63.4" r="2.7" fill="#fff" />
+      <ellipse cx="66" cy="78.6" rx="5" ry="1.3" fill="#0A6CFF" fillOpacity="0.22" />
 
       {/* location chip (top-left) */}
       <g filter={`url(#${id('chip')})`}>
