@@ -46,7 +46,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
     date: '',
     time: ''
   });
-  const [branchTyping, setBranchTyping] = useState(false); // "Other branch" chosen → type it
+  const [showBranchDropdown, setShowBranchDropdown] = useState(false);
 
   // Return for Corrections Modal State (Defect 02)
   const [returnModalOpen, setReturnModalOpen] = useState(false);
@@ -652,7 +652,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
                       placeholder="Search or type bank name (or leave empty to assign later)..."
                       value={newTask.bankName}
                       onChange={e => {
-                        setNewTask({...newTask, bankName: e.target.value, bankBranch: ''}); setBranchTyping(false);
+                        setNewTask({...newTask, bankName: e.target.value, bankBranch: ''});
                         setShowBankDropdown(true);
                       }}
                       onFocus={() => setShowBankDropdown(true)}
@@ -673,7 +673,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
                         <div 
                           key={bank}
                           onClick={() => {
-                            setNewTask({...newTask, bankName: bank, bankBranch: newTask.bankName === bank ? newTask.bankBranch : ''}); setBranchTyping(false);
+                            setNewTask({...newTask, bankName: bank, bankBranch: newTask.bankName === bank ? newTask.bankBranch : ''});
                             setShowBankDropdown(false);
                           }}
                           onMouseDown={(e) => e.preventDefault()} 
@@ -706,35 +706,51 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
                 </div>
 
                 {pickedBank && (() => {
+                  // Branch of the chosen bank: type to search the bank's list, or type a new one
                   const list = pickedBank.branches || [];
-                  const inList = list.some(b => b.toLowerCase() === (newTask.bankBranch || '').toLowerCase());
-                  const typing = list.length === 0 || branchTyping || (newTask.bankBranch && !inList);
-                  const fieldStyle = { padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', width: '100%', backgroundColor: '#fff' };
+                  const q = (newTask.bankBranch || '').trim().toLowerCase();
+                  const matches = list.filter(b => !q || b.toLowerCase().includes(q));
+                  const exact = list.some(b => b.toLowerCase() === q);
                   return (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', position: 'relative' }}>
                       <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>{pickedBank.shortName || pickedBank.name} Branch</label>
-                      {list.length > 0 && (
-                        <select
-                          style={fieldStyle}
-                          value={typing ? '__other' : (list.find(b => b.toLowerCase() === (newTask.bankBranch || '').toLowerCase()) || '')}
-                          onChange={e => {
-                            if (e.target.value === '__other') { setBranchTyping(true); setNewTask({ ...newTask, bankBranch: '' }); }
-                            else { setBranchTyping(false); setNewTask({ ...newTask, bankBranch: e.target.value }); }
-                          }}
-                        >
-                          <option value="">-- Select branch --</option>
-                          {list.map(b => <option key={b} value={b}>{b}</option>)}
-                          <option value="__other">Other branch (type it)</option>
-                        </select>
-                      )}
-                      {typing && (
+                      <div style={{ position: 'relative' }}>
                         <input
                           type="text"
-                          style={fieldStyle}
-                          placeholder="Type the branch name"
+                          placeholder={list.length ? 'Search or type the branch…' : 'Type the branch name'}
                           value={newTask.bankBranch || ''}
-                          onChange={e => setNewTask({ ...newTask, bankBranch: e.target.value })}
+                          onChange={e => { setNewTask({ ...newTask, bankBranch: e.target.value }); setShowBranchDropdown(true); }}
+                          onFocus={() => setShowBranchDropdown(true)}
+                          onBlur={() => setTimeout(() => setShowBranchDropdown(false), 200)}
+                          style={{ width: '100%', padding: '10px', paddingRight: '34px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none' }}
                         />
+                        {list.length > 0 && <ChevronDown size={18} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />}
+                      </div>
+                      {showBranchDropdown && list.length > 0 && (matches.length > 0 || q) && !exact && (
+                        <div style={{
+                          position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px',
+                          backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px',
+                          boxShadow: '0 10px 25px rgba(0,0,0,0.1)', zIndex: 50,
+                          maxHeight: '220px', overflowY: 'auto'
+                        }}>
+                          {matches.map(b => (
+                            <div
+                              key={b}
+                              onClick={() => { setNewTask({ ...newTask, bankBranch: b }); setShowBranchDropdown(false); }}
+                              onMouseDown={(e) => e.preventDefault()}
+                              style={{ padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', fontSize: '13px', fontWeight: '500', color: '#0f172a' }}
+                              onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#eff6ff'}
+                              onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                            >
+                              {b}
+                            </div>
+                          ))}
+                          {q && matches.length === 0 && (
+                            <div style={{ margin: '8px', padding: '10px', fontSize: '12.5px', color: '#64748b', textAlign: 'center', lineHeight: 1.4 }}>
+                              Not in the list — “{newTask.bankBranch.trim()}” will be used as typed.
+                            </div>
+                          )}
+                        </div>
                       )}
                       {list.length === 0 && (
                         <span style={{ fontSize: '12px', color: '#64748b' }}>{superAdmin ? 'Add this bank’s branches in Settings → Banks to pick from a list.' : 'The Super Admin can add this bank’s branches in Settings → Banks.'}</span>
