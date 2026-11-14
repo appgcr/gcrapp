@@ -1171,7 +1171,8 @@ const validateDocOCR = async (imageUrlOrFile, docId, isPdf = false, rawFile = nu
           reason: result.reason || '',
           warning: result.warning || '',
           pendingVerification: Boolean(result.pendingVerification),
-          nameMismatch: Boolean(result.nameMismatch)
+          nameMismatch: Boolean(result.nameMismatch),
+          namesOnDocument: Array.isArray(result.namesOnDocument) ? result.namesOnDocument : []
         };
       }
       return { passed: false, reason: `The document could not be verified (server error ${res.status}). Please try again.` };

@@ -657,7 +657,9 @@ export default function CaseCreationModal({
 
     const newPages = [];
     let errorMsg = null;
+    let errorDetail = null; // shown on the document's own card
     const newHashes = [];
+    setDocErrors(prev => ({ ...prev, [docId]: null })); // a new try clears the old message
 
     try {
       for (let fileIdx = 0; fileIdx < files.length; fileIdx++) {
@@ -819,6 +821,13 @@ export default function CaseCreationModal({
         const validation = await validateDocOCR(dataUrl, docId, isPdf, readInline ? file : null, clientText, clientName, storedUrl);
 
         if (!validation.passed) {
+          errorDetail = {
+            title: validation.nameMismatch ? 'Name doesn’t match the customer' : 'Document not accepted',
+            text: validation.reason || 'This document could not be accepted.',
+            nameMismatch: Boolean(validation.nameMismatch),
+            names: validation.namesOnDocument || [],
+            fileName: file.name
+          };
           errorMsg = validation.nameMismatch
             ? `⚠️ NAME MISMATCH — DOCUMENT REJECTED\n${validation.reason}`
             : `⚠️ DOCUMENT REJECTED\n${validation.reason}\n\nPlease upload the correct document.`;
@@ -951,8 +960,18 @@ export default function CaseCreationModal({
       }
 
       if (errorMsg) {
-        showValidationError(errorMsg);
-        newPages.forEach(p => p.url && URL.revokeObjectURL(p.url));
+        // The full message sits on the document's card (with a fix button); the toast is one short line
+        const lines = errorMsg.split('\n').map(l => l.trim()).filter(Boolean);
+        const detail = errorDetail || {
+          title: (lines[0] || 'Document not accepted').replace(/^[^A-Za-z]+/, '').replace(/:.*$/, '').toLowerCase().replace(/^./, c => c.toUpperCase()),
+          text: lines.slice(1).join(' ') || lines[0] || '',
+          nameMismatch: false,
+          names: []
+        };
+        setDocErrors(prev => ({ ...prev, [docId]: detail }));
+        const slotName = { saleDeed: 'Sale Deed', buildingPlan: 'Building plan', propertyTax: 'Property tax', marketValue: 'Market value certificate', layoutPlan: 'Layout plan' }[docId] || 'Document';
+        toast.error(`${slotName}: ${detail.title.toLowerCase()} — see the message on the card.`, { duration: 4500 });
+        newPages.forEach(p => p.url && p.url.startsWith('blob:') && URL.revokeObjectURL(p.url));
         return;
       }
 
@@ -1680,6 +1699,9 @@ export default function CaseCreationModal({
                 docErrors={docErrors}
                 scanProgress={scanProgress}
                 setDocErrors={setDocErrors}
+                clientName={clientName}
+                nameLocked={Boolean(lockedFields.clientName)}
+                onUseOwnerName={(name) => { setClientName(name); toast.success(`Customer name changed to “${name}”. Choose the deed again.`, { duration: 4000 }); }}
                 setScanningDocs={setScanningDocs}
                 activeDocUpload={activeDocUpload}
                 setActiveDocUpload={setActiveDocUpload}

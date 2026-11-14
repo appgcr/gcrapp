@@ -40,8 +40,12 @@ export default function Step2LegalDocs({
   handleDeletePage,
   setPreviewImage,
   extractedDocsMeta = {},
-  handleNextToPropertyDetails
+  handleNextToPropertyDetails,
+  clientName = '',
+  nameLocked = false,
+  onUseOwnerName
 }) {
+  const docBtn = { height: '34px', padding: '0 10px', borderRadius: '9px', backgroundColor: '#fff', border: '1px solid #cbd5e1', display: 'inline-flex', alignItems: 'center', gap: '5px', cursor: 'pointer', color: '#334155', fontSize: '12.5px', fontWeight: 700, boxShadow: '0 1px 2px rgba(0,0,0,0.05)', whiteSpace: 'nowrap' };
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
       <input 
@@ -71,7 +75,7 @@ export default function Step2LegalDocs({
               
               return (
                 <div key={doc.id} style={{ 
-                  border: fileCount > 0 ? '1.5px solid #10b981' : (isScanning ? '1.5px solid var(--primary)' : '1px solid var(--border-color)'), 
+                  border: isScanning ? '1.5px solid var(--primary)' : docErrors[doc.id] ? '1.5px solid #f87171' : fileCount > 0 ? '1.5px solid #10b981' : '1px solid var(--border-color)', 
                   borderRadius: '12px', 
                   padding: '12px 14px', 
                   backgroundColor: fileCount > 0 ? '#f0fdf4' : 'var(--bg-card)', 
@@ -92,12 +96,19 @@ export default function Step2LegalDocs({
                             <ScanLine size={12} className="spin" /> Scanning...
                           </span>
                         ) : fileCount > 0 ? (
-                          <span style={{ backgroundColor: '#d1fae5', color: '#065f46', border: '1px solid #a7f3d0', padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <CheckCircle2 size={12} /> {totalPages} Page{totalPages > 1 ? 's' : ''} Uploaded{fileCount > 1 ? ` (${fileCount} files)` : ''}
+                          <span style={{ backgroundColor: '#d1fae5', color: '#065f46', border: '1px solid #a7f3d0', padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '4px', maxWidth: '100%', minWidth: 0 }}>
+                            <CheckCircle2 size={12} style={{ flexShrink: 0 }} />
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              Uploaded · {totalPages} page{totalPages > 1 ? 's' : ''}{fileCount > 1 ? ` · ${fileCount} files` : ''}
+                            </span>
+                          </span>
+                        ) : docErrors[doc.id] ? (
+                          <span style={{ backgroundColor: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca', padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <AlertCircle size={12} /> Not accepted
                           </span>
                         ) : (
-                          <span style={{ backgroundColor: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <AlertCircle size={12} /> Required
+                          <span style={{ backgroundColor: 'var(--bg-app, #f1f5f9)', color: '#64748b', border: '1px solid var(--border-color, #e2e8f0)', padding: '3px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            Not uploaded
                           </span>
                         )}
                       </div>
@@ -108,9 +119,9 @@ export default function Step2LegalDocs({
                         type="button"
                         onClick={() => startCamera(doc.id)}
                         title="Take photo with camera"
-                        style={{ width: '34px', height: '34px', borderRadius: '8px', backgroundColor: '#fff', border: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#334155', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
+                        style={docBtn}
                       >
-                        <Camera size={16} />
+                        <Camera size={15} /> Scan
                       </button>
                       <button 
                         type="button"
@@ -119,10 +130,10 @@ export default function Step2LegalDocs({
                           setActiveDocUpload(doc.id); 
                           fileInputRef.current.click(); 
                         }}
-                        title="Upload file from device"
-                        style={{ width: '34px', height: '34px', borderRadius: '8px', backgroundColor: '#fff', border: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#334155', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
+                        title="Upload a PDF, Word file or photo"
+                        style={{ ...docBtn, ...(fileCount === 0 ? { background: 'var(--primary, #2563eb)', color: '#fff', border: '1px solid transparent' } : {}) }}
                       >
-                        <UploadCloud size={16} />
+                        <UploadCloud size={15} /> {fileCount > 0 ? 'Add' : 'Upload'}
                       </button>
                     </div>
                   </div>
@@ -290,46 +301,51 @@ export default function Step2LegalDocs({
                     </div>
                   )}
 
-                  {docErrors[doc.id] && (
-                    <div style={{
-                      marginTop: '10px',
-                      padding: '10px 12px',
-                      borderRadius: '8px',
-                      backgroundColor: '#fef2f2',
-                      border: '1px solid #fecaca',
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      justifyContent: 'space-between',
-                      gap: '8px'
-                    }}>
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                        <AlertCircle size={15} color="#dc2626" style={{ flexShrink: 0, marginTop: '2px' }} />
-                        <div>
-                          <div style={{ fontSize: '12px', fontWeight: '700', color: '#991b1b', marginBottom: '2px' }}>
-                            Verification Alert
+                  {docErrors[doc.id] && (() => {
+                    const err = typeof docErrors[doc.id] === 'string' ? { title: 'Document not accepted', text: docErrors[doc.id], names: [] } : docErrors[doc.id];
+                    const docName = err.nameMismatch && err.names && err.names[0];
+                    const pickFile = () => { if (activeDocUploadRef) activeDocUploadRef.current = doc.id; setActiveDocUpload(doc.id); fileInputRef.current.click(); };
+                    const btn = { height: '34px', padding: '0 12px', borderRadius: '9px', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' };
+                    return (
+                      <div role="alert" style={{ marginTop: '12px', padding: '12px', borderRadius: '10px', backgroundColor: '#fef2f2', border: '1px solid #fecaca' }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                          <AlertCircle size={16} color="#dc2626" style={{ flexShrink: 0, marginTop: '1px' }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#991b1b' }}>{err.title}</div>
+                            {err.fileName && <div style={{ fontSize: '11.5px', color: '#b91c1c', opacity: 0.8, marginTop: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{err.fileName}</div>}
                           </div>
-                          <div style={{ fontSize: '11.5px', color: '#b91c1c', lineHeight: '1.4' }}>
-                            {docErrors[doc.id]}
-                          </div>
+                          <button type="button" aria-label="Dismiss" onClick={() => setDocErrors(prev => ({ ...prev, [doc.id]: null }))}
+                            style={{ background: 'none', border: 'none', color: '#991b1b', cursor: 'pointer', padding: '2px', display: 'flex' }}>
+                            <X size={15} />
+                          </button>
                         </div>
+
+                        {docName ? (
+                          <div style={{ margin: '10px 0 0 24px', display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 10px', fontSize: '12.5px', lineHeight: 1.35 }}>
+                            <span style={{ color: '#7f1d1d' }}>On the deed</span><b style={{ color: '#0f172a', wordBreak: 'break-word' }}>{err.names.join(', ')}</b>
+                            <span style={{ color: '#7f1d1d' }}>Customer</span><b style={{ color: '#0f172a', wordBreak: 'break-word' }}>{clientName || '—'}</b>
+                          </div>
+                        ) : (
+                          <div style={{ margin: '6px 0 0 24px', fontSize: '12.5px', color: '#7f1d1d', lineHeight: 1.45, whiteSpace: 'pre-line' }}>{err.text}</div>
+                        )}
+
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', margin: '12px 0 0 24px' }}>
+                          {docName && !nameLocked && onUseOwnerName && (
+                            <button type="button" onClick={() => { onUseOwnerName(docName); setDocErrors(prev => ({ ...prev, [doc.id]: null })); pickFile(); }}
+                              style={{ ...btn, border: 'none', background: '#dc2626', color: '#fff' }}>
+                              Use deed name &amp; re-upload
+                            </button>
+                          )}
+                          <button type="button" onClick={pickFile} style={{ ...btn, border: '1px solid #fca5a5', background: '#fff', color: '#991b1b' }}>
+                            <UploadCloud size={14} /> Upload another file
+                          </button>
+                        </div>
+                        {docName && nameLocked && (
+                          <div style={{ margin: '8px 0 0 24px', fontSize: '11.5px', color: '#7f1d1d' }}>The customer name was set by your admin — ask them to correct it if the deed is right.</div>
+                        )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setDocErrors(prev => ({ ...prev, [doc.id]: null }))}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: '#991b1b',
-                          cursor: 'pointer',
-                          padding: '2px',
-                          display: 'flex',
-                          alignItems: 'center'
-                        }}
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Uploaded Files Detailed List */}
                   {pages.length > 0 && (
@@ -594,18 +610,20 @@ export default function Step2LegalDocs({
                 onClick={handleNextToPropertyDetails}
                 disabled={!canProceed}
                 style={{
-                  opacity: !canProceed ? 0.5 : 1,
+                  opacity: !canProceed ? 0.6 : 1,
                   marginTop: 'auto',
+                  marginBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
                   backgroundColor: !canProceed ? '#94a3b8' : '',
-                  cursor: !canProceed ? 'not-allowed' : 'pointer'
+                  cursor: !canProceed ? 'not-allowed' : 'pointer',
+                  whiteSpace: 'nowrap'
                 }}
               >
                 {anyScanningNow ? (
-                  <><Loader2 size={16} className="spin" /> Mahe AI Scanning...</>
+                  <><Loader2 size={16} className="spin" /> Mahe AI is checking…</>
                 ) : allUploaded ? (
-                  <>Next: Property Details <ChevronRight size={18} /></>
+                  <>Continue <ChevronRight size={18} /></>
                 ) : (
-                  <>Upload All 5 Documents to Continue ({REQUIRED_DOCS.filter(d => uploadedDocs[d.id]?.length > 0).length}/5 Done)</>
+                  <>{REQUIRED_DOCS.filter(d => uploadedDocs[d.id]?.length > 0).length} of {REQUIRED_DOCS.length} uploaded</>
                 )}
               </button>
             );
