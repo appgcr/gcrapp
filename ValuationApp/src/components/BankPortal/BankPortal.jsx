@@ -78,7 +78,7 @@ export default function BankPortal({ currentUser, handleLogout }) {
   return (
     <PullDownReach>
     <div className="bp">
-      <Toaster position="top-center" />
+      <Toaster position="top-center" containerStyle={{ top: 'calc(env(safe-area-inset-top, 0px) + 10px)' }} />
       <header className="bp-top">
         <div className="bp-brand">
           <img src="/gcr_logo.png" alt="" width="34" height="34" />

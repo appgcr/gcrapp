@@ -70,7 +70,7 @@ export default function CaseListView({ onOpenCase, currentUser }) {
       const lastAction = lastLog ? lastLog.attendanceType : null;
       
       if (lastAction !== 'Clock-In') {
-        toast.error('You must Clock-In from the Attendance tab before entering case details.', { duration: 4000 });
+        toast.error('Please Check In on the Today tab first.', { duration: 4000 });
         return false;
       }
       return true;
