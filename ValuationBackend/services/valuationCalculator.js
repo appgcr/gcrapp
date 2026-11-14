@@ -283,21 +283,25 @@ function calculateValuation(propertyDetails = {}, config = {}) {
     }
 
     // 4. Amenities Valuation
+    // "Additions Work Estimation" is PROPOSED work (an estimate page in the bank report), not part of
+    // today's market value. Its total is kept separately; existing extras (compound wall, sump…) are
+    // entered on the bank details screen and counted by the bank's own report.
     let amenitiesPaise = 0n;
     if (p.amenitiesValue !== undefined) {
       amenitiesPaise = parseDecimalToScaled(p.amenitiesValue, 2, 'Amenities Value');
-    } else {
-      const additions = p.additionsWork || [];
-      additions.forEach((item, idx) => {
-        if (item.amount !== undefined && String(item.amount).trim() !== '' && Number(item.amount) > 0) {
-          amenitiesPaise += parseDecimalToScaled(item.amount, 2, `Addition ${idx + 1} Amount`);
-        } else if (item.quantity && item.rate) {
-          const qtyScaled = parseDecimalToScaled(item.quantity, 2, `Addition ${idx + 1} Quantity`);
-          const rScaled = parseDecimalToScaled(item.rate, 2, `Addition ${idx + 1} Rate`);
-          amenitiesPaise += (qtyScaled * rScaled + 50n) / 100n;
-        }
-      });
     }
+    let proposedPaise = 0n;
+    const additions = p.additionsWork || [];
+    additions.forEach((item, idx) => {
+      if (item.amount !== undefined && String(item.amount).trim() !== '' && Number(item.amount) > 0) {
+        proposedPaise += parseDecimalToScaled(item.amount, 2, `Addition ${idx + 1} Amount`);
+      } else if (item.quantity && item.rate) {
+        const qtyScaled = parseDecimalToScaled(item.quantity, 2, `Addition ${idx + 1} Quantity`);
+        const rScaled = parseDecimalToScaled(item.rate, 2, `Addition ${idx + 1} Rate`);
+        proposedPaise += (qtyScaled * rScaled + 50n) / 100n;
+      }
+    });
+    const proposedAdditionsValue = Number((proposedPaise + 50n) / 100n);
     const amenitiesValue = Number((amenitiesPaise + 50n) / 100n);
 
     // 5. Fair Market Value (FMV) = Exact Sum of Rounded Components
@@ -355,6 +359,7 @@ function calculateValuation(propertyDetails = {}, config = {}) {
       depreciationAmount,
       netStructureValue,
       amenitiesValue,
+      proposedAdditionsValue,
       fairMarketValue,
       realizableValue,
       distressSaleValue,

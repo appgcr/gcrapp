@@ -795,7 +795,7 @@ export default function Step3PropertyDetails({
           
           {(!propertyDetails.additionsWork || propertyDetails.additionsWork.length === 0) && (
             <div style={{ fontSize: '12px', color: '#fdba74', textAlign: 'center', padding: '12px 0' }}>
-              No items added yet. Click 'Add Item' to estimate costs for wardrobes, painting, etc.
+              Proposed / future work only (estimate page). Not added to today’s market value. Existing compound wall, sump etc. go in the bank details above.
             </div>
           )}
 

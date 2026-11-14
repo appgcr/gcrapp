@@ -238,11 +238,11 @@ export default function Step6FinalReviewSignature({
           </div>
 
           <div style={{ padding: '10px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #dcfce7' }}>
-            <span style={{ fontSize: '11px', color: '#4b5563' }}>Amenities / Extra:</span>
-            <div style={{ fontSize: '15px', fontWeight: '700', color: '#15803d' }}>
-              ₹{valSummary.amenitiesValue.toLocaleString('en-IN')}
+            <span style={{ fontSize: '11px', color: '#4b5563' }}>Proposed additions:</span>
+            <div style={{ fontSize: '15px', fontWeight: '700', color: '#c2410c' }}>
+              ₹{(valSummary.proposedAdditionsValue || 0).toLocaleString('en-IN')}
             </div>
-            <span style={{ fontSize: '10px', color: '#6b7280' }}>Compound/Sump/etc.</span>
+            <span style={{ fontSize: '10px', color: '#6b7280' }}>Estimate only · not in market value</span>
           </div>
         </div>
 
