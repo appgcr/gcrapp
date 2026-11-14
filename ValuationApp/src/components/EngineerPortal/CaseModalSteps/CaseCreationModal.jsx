@@ -613,8 +613,8 @@ export default function CaseCreationModal({
           {msg.split('\n').map((line, i) => (
             <div key={i} style={{
               marginBottom: line === '' ? '8px' : '4px',
-              fontWeight: (line.includes('REJECTION') || line.includes('DUPLICATE')) ? '700' : '400',
-              color: (line.includes('REJECTION') || line.includes('DUPLICATE')) ? '#ef4444' : 'inherit'
+              fontWeight: i === 0 ? '700' : '400',
+              color: i === 0 ? '#dc2626' : 'inherit'
             }}>{line}</div>
           ))}
         </div>
@@ -625,7 +625,7 @@ export default function CaseCreationModal({
           onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
         ><X size={16} /></button>
       </div>
-    ), { duration: 9000, style: { minWidth: '320px', borderLeft: '4px solid #ef4444', padding: '16px' } });
+    ), { duration: 9000, style: { background: '#ffffff', color: '#0f172a', width: '92vw', maxWidth: '420px', borderLeft: '4px solid #ef4444', padding: '16px', boxShadow: '0 10px 30px rgba(0,0,0,.25)' } });
   };
 
   const handleSimulateUpload = async (e) => {

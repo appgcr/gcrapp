@@ -1063,6 +1063,49 @@ export const mapSaleDeedToPropertyDetails = (
   }
 };
 
+
+// ── Shrink a big scanned PDF before it is sent for checking ──────────────────
+// Phone scans of a deed are often 10–30 MB: too slow to upload on mobile data and over the AI's
+// size limit. Each page is redrawn as a compressed picture in a new, small PDF (≈ 0.3–0.5 MB a page);
+// the AI reads it just as well. Small PDFs, and anything that can't be redrawn, go as they are.
+const SHRINK_ABOVE_BYTES = 3 * 1024 * 1024;
+const shrinkPdfDataUrl = async (dataUrl) => {
+  try {
+    const b64 = String(dataUrl).split(',')[1] || '';
+    if (b64.length * 0.75 < SHRINK_ABOVE_BYTES || !pdfjs || typeof pdfjs.getDocument !== 'function') return dataUrl;
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const doc = await pdfjs.getDocument({ data: bytes }).promise;
+    const { jsPDF } = await import('jspdf');
+    let out = null;
+    for (let n = 1; n <= Math.min(doc.numPages, 40); n++) {
+      const page = await doc.getPage(n);
+      const base = page.getViewport({ scale: 1 });
+      const scale = Math.min(2, 1600 / Math.max(base.width, base.height)); // long side ≈ 1600 px: legible for text and seals
+      const vp = page.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      const jpg = canvas.toDataURL('image/jpeg', 0.72);
+      const orient = base.width > base.height ? 'l' : 'p';
+      if (!out) out = new jsPDF({ orientation: orient, unit: 'pt', format: [base.width, base.height] });
+      else out.addPage([base.width, base.height], orient);
+      out.addImage(jpg, 'JPEG', 0, 0, base.width, base.height);
+      canvas.width = canvas.height = 0; // free the memory on older phones
+    }
+    if (!out) return dataUrl;
+    const small = out.output('datauristring');
+    const cleaned = small.replace(/^data:application\/pdf;[^,]*,/, 'data:application/pdf;base64,');
+    return cleaned.length < String(dataUrl).length ? cleaned : dataUrl;
+  } catch (err) {
+    console.warn('PDF shrink skipped:', err?.message || err);
+    return dataUrl;
+  }
+};
+
 // ── Core validation function (shared by file upload + camera capture) ─────────
 const validateDocOCR = async (imageUrlOrFile, docId, isPdf = false, rawFile = null, clientText = '', clientName = '') => {
   const rules = DOC_VALIDATION_RULES[docId];
@@ -1080,8 +1123,10 @@ const validateDocOCR = async (imageUrlOrFile, docId, isPdf = false, rawFile = nu
     }
 
     if (dataUrlToSend && typeof dataUrlToSend === 'string' && dataUrlToSend.startsWith('data:')) {
+      if (isPdf || dataUrlToSend.startsWith('data:application/pdf')) dataUrlToSend = await shrinkPdfDataUrl(dataUrlToSend);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000);
+      // The server spends up to ~2.5 minutes on a long deed; allow for the upload on mobile data too
+      const timeoutId = setTimeout(() => controller.abort(), 240000);
 
       // Route to dedicated local document intelligence endpoint for Sale Deed
       const endpointUrl = docId === 'saleDeed'
@@ -1130,7 +1175,10 @@ const validateDocOCR = async (imageUrlOrFile, docId, isPdf = false, rawFile = nu
     return { passed: false, reason: 'The document could not be read. Please upload it again as a PDF or a clear photo.' };
   } catch (err) {
     console.warn(`Doc OCR validation note for ${docId}:`, err.message);
-    return { passed: false, reason: 'The document could not be verified — please check the internet connection and try again.' };
+    if (err?.name === 'AbortError') {
+      return { passed: false, reason: 'Checking this document took too long (over 4 minutes). The signal may be weak — try again, ideally on Wi-Fi.' };
+    }
+    return { passed: false, reason: 'The document could not be sent for checking — the phone could not reach the server. Check the internet connection and try again.' };
   }
 };
 
@@ -1637,6 +1685,7 @@ export {
   convertLocalMetaToCanonical,
   applyLocalMetaDirectly,
   validateDocOCR,
+  shrinkPdfDataUrl,
   handleExtractedDocMeta,
   applyExtractedMeta,
   sanitizePropertyDetails,

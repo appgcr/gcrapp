@@ -724,6 +724,13 @@ function extractCanonicalFromOCR(pyResult, docId, clientText = '') {
 }
 // ── POST /api/extract/validate-doc ───────────────────────────────────────────
 // 100% Free, Unlimited & Local Multilingual Document AI Validation & Extraction
+// After the AI has had its turn, the local text scan only pre-fills fields: keep it short so the
+// whole check stays inside the app's waiting time (the app waits up to 4 minutes)
+const ocrWithin = (input, isPdf, ms = 45000) => Promise.race([
+  runPythonOCR(input, isPdf).catch(() => ({ text: '' })),
+  new Promise((resolve) => setTimeout(() => resolve({ text: '' }), ms)),
+]);
+
 router.post('/validate-doc', async (req, res) => {
   try {
     const { dataUrl, docId = 'saleDeed', isPdf = false, clientText = '' } = req.body;
@@ -740,7 +747,7 @@ router.post('/validate-doc', async (req, res) => {
     const rules = STRICT_DOC_KEYWORDS[docId] || STRICT_DOC_KEYWORDS.saleDeed;
 
     // 1. Run 100% Free Local OCR & Clarity Engine
-    const pyResult = await runPythonOCR(dataUrl, isPdf).catch(() => ({ text: '' }));
+    const pyResult = await ocrWithin(dataUrl, isPdf);
 
     // 2. Strict Clarity & Blur Gate (only for photos/images, never block PDFs)
     if (pyResult.is_blurred && !isPdf) {
@@ -824,7 +831,7 @@ router.post('/sale-deed', async (req, res) => {
       return res.json({ ...ai, success: ai.passed, canonical: ai.extractedMeta, ocrText: '', snippets: [], numPages: 1 });
     }
 
-    const pyResult = await runPythonOCR(input, isPdf).catch(() => ({ text: '' }));
+    const pyResult = await ocrWithin(input, isPdf);
     const canonicalMeta = extractCanonicalFromOCR(pyResult, 'saleDeed', clientText);
 
     return res.json({
