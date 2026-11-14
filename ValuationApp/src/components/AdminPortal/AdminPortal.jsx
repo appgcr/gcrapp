@@ -204,6 +204,8 @@ export default function AdminPortal({ currentUser, handleLogout }) {
 
   // Assistive Touch quick actions
   const [unreadChats, setUnreadChats] = useState(0);
+  const [chatWith, setChatWith] = useState(null); // { id, name } — opened from the live map
+  useEffect(() => { if (activeTab !== 'chat') setChatWith(null); }, [activeTab]);
   const [refreshKey, setRefreshKey] = useState(0);
   useEffect(() => {
     const onAction = (e) => {
@@ -212,6 +214,7 @@ export default function AdminPortal({ currentUser, handleLogout }) {
       else if (action === 'find_case') handleNavigate('cases', `FIND:${Date.now()}`);
       else if (action === 'review_queue') handleNavigate('cases', 'Pending');
       else if (action === 'live_map') handleNavigate('staff');
+      else if (action === 'open_chat' && e.detail?.engineer?.id) { setChatWith(e.detail.engineer); handleNavigate('chat'); }
       else if (action === 'attendance') handleNavigate('forms');
       else if (action === 'broadcast') setShowBroadcastModal(true);
       else if (action === 'home') { handleNavigate('dashboard'); setRefreshKey((k) => k + 1); } // also leaves any sub-page
@@ -234,7 +237,7 @@ export default function AdminPortal({ currentUser, handleLogout }) {
       case 'cases': return <AdminCases defaultFilter={caseFilter} currentUser={currentUser} />;
       case 'forms': return <AttendanceLogs />; // Repurposing attendance logs as Forms for now
       case 'staff': return <AdminStaff currentUser={currentUser} />;
-      case 'chat': return <div className="admin-chat-host"><ChatSystem currentUser={currentUser} onBack={() => setActiveTab('dashboard')} /></div>;
+      case 'chat': return <div className="admin-chat-host"><ChatSystem key={chatWith?.id || 'all'} currentUser={currentUser} otherUserId={chatWith?.id} otherUserName={chatWith?.name} onBack={() => setActiveTab('dashboard')} /></div>;
       case 'settings': return <AdminSettings currentUser={currentUser} handleLogout={handleLogout} />;
       default: return <AdminDashboard />;
     }

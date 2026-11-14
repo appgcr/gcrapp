@@ -1,6 +1,6 @@
 import { API_BASE_URL } from '../../config/api';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Loader2, X, Eye, EyeOff, Maximize2, Copy, Lock, KeyRound, MessageCircle } from 'lucide-react';
+import { Plus, Loader2, X, Eye, EyeOff, Maximize2, Copy, Lock, KeyRound, MessageCircle, Navigation, Phone } from 'lucide-react';
 import { authHeaders } from '../Shared/authHeaders';
 import toast from 'react-hot-toast';
 import { MapContainer, TileLayer, Marker, Popup, Circle, AttributionControl, useMap } from 'react-leaflet';
@@ -44,6 +44,16 @@ const kmBetween = (a, b) => {
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
 };
+// "5:43 pm", "Yesterday 5:43 pm" or "12 Nov, 5:43 pm"
+const clockTime = (d) => {
+  const t = new Date(d);
+  if (Number.isNaN(t.getTime())) return '';
+  const time = t.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase();
+  const today = new Date(); const y = new Date(); y.setDate(today.getDate() - 1);
+  if (t.toDateString() === today.toDateString()) return time;
+  if (t.toDateString() === y.toDateString()) return `Yesterday ${time}`;
+  return `${t.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}, ${time}`;
+};
 const fmtKm = (km) => (km < 1 ? `${Math.round(km * 1000)} m` : `${km < 10 ? km.toFixed(1) : Math.round(km)} km`);
 const fmtMin = (m) => (m == null ? '' : m < 60 ? `${m} min` : `${Math.floor(m / 60)} hr ${m % 60} min`);
 
@@ -69,7 +79,11 @@ function MapController({ points, focus, fittedOnce }) {
   const map = useMap();
   useEffect(() => {
     if (focus?.lastLog) {
-      map.flyTo([parseFloat(focus.lastLog.lat), parseFloat(focus.lastLog.lng)], 16, { duration: 0.6 });
+      // Put the person in the lower part of the map, so their pop-up opens fully above them
+      const zoom = 16;
+      const pin = map.project([parseFloat(focus.lastLog.lat), parseFloat(focus.lastLog.lng)], zoom);
+      const lift = Math.min(150, map.getSize().y * 0.32);
+      map.flyTo(map.unproject(pin.subtract([0, lift]), zoom), zoom, { duration: 0.6 });
       return;
     }
     if (!fittedOnce.current && points.length > 0) {
@@ -79,6 +93,43 @@ function MapController({ points, focus, fittedOnce }) {
     }
   }, [focus, points, map, fittedOnce]);
   return null;
+}
+
+
+// Map pop-up: who, status with the exact time, distance from you, and Directions / Call / Message
+function PersonPopup({ eng, dist, hasMyPos }) {
+  const fixAt = eng.lastLog?.timestamp;
+  const seen = eng.seenAt || fixAt;
+  const st = eng.status;
+  const statusLine =
+    st === 'No signal' ? `No signal since ${clockTime(seen)}`
+    : st === 'Location off' ? `Location off${eng.offSince ? ` since ${clockTime(eng.offSince)}` : ''}`
+    : st === 'Signal lost' ? `No update since ${clockTime(fixAt)}`
+    : st === 'On Duty' ? 'On duty · sharing live'
+    : st === 'Off duty · live' ? 'Off duty · sharing live'
+    : st;
+  const lat = parseFloat(eng.lastLog.lat), lng = parseFloat(eng.lastLog.lng);
+  const directions = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
+  const phone = String(eng.phone || '').replace(/[^\d+]/g, '');
+  const openChat = () => window.dispatchEvent(new CustomEvent('gcr_quick_action', { detail: { action: 'open_chat', engineer: { id: eng.id, name: eng.displayName } } }));
+  return (
+    <div className="pp">
+      <div className="pp-name">{eng.displayName}{eng.isAdmin && <span className="pp-role">Branch Admin</span>}</div>
+      <div className="pp-status"><span className="pp-dot" style={{ background: eng.statusColor }} />{statusLine}</div>
+      <div className="pp-time">Last location: <b>{clockTime(fixAt)}</b> · {timeAgoShort(new Date(fixAt))}</div>
+      <div className="pp-dist">
+        {dist ? (dist.road
+          ? <><b>{fmtKm(dist.road.km)}</b> by road · {fmtMin(dist.road.min)} drive<span>{fmtKm(dist.km)} straight line</span></>
+          : <><b>{fmtKm(dist.km)}</b> from you<span>straight line · road distance loading…</span></>)
+          : <span>{hasMyPos ? 'Distance unavailable' : 'Allow your location to see the distance'}</span>}
+      </div>
+      <div className="pp-actions">
+        <a className="pp-btn primary" href={directions} target="_blank" rel="noopener noreferrer"><Navigation size={15} /> Directions</a>
+        {phone ? <a className="pp-btn" href={`tel:${phone}`}><Phone size={15} /> Call</a> : <span className="pp-btn off" title="No phone number saved"><Phone size={15} /> Call</span>}
+        <button type="button" className="pp-btn" onClick={openChat}><MessageCircle size={15} /> Message</button>
+      </div>
+    </div>
+  );
 }
 
 export default function AdminStaff({ currentUser }) {
@@ -224,6 +275,7 @@ export default function AdminStaff({ currentUser }) {
             initials: (u.name || u.username).split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
             lastLog: liveFix(l),
             seenAt: l?.lastSeenAt || null,
+            offSince: l?.offSince || null,
             liveState: l?.state || null,
             mapStatus: st[0],
             statusColor: st[1],
@@ -268,6 +320,7 @@ export default function AdminStaff({ currentUser }) {
             checkedInAt: onDuty ? lastDutyEvent.timestamp : null,
             lastLog: lastFix,
             seenAt: live?.lastSeenAt || null,
+            offSince: live?.offSince || null,
             pings: userLogs.filter(l => l.attendanceType === 'Location Update').length,
           };
         });
@@ -595,11 +648,8 @@ export default function AdminStaff({ currentUser }) {
                   icon={createLiveIcon(eng.initials, eng.statusColor, eng.status === 'On Duty' || eng.status === 'Live' || eng.status === 'Off duty · live')}
                   eventHandlers={{ click: () => setFocusId(eng.id) }}
                 >
-                  <Popup>
-                    <strong>{eng.displayName}</strong><br />
-                    {eng.isAdmin ? 'Branch Admin · ' : ''}{eng.status === 'Signal lost' ? 'No update for over 5 min' : eng.status}<br />
-                    Last update: {timeAgoShort(new Date(eng.lastLog.timestamp))}
-                    {distOf(eng) && <><br /><b>{fmtKm(distOf(eng).km)}</b> from you (straight line){distOf(eng).road && <><br /><b>{fmtKm(distOf(eng).road.km)}</b> by road · {fmtMin(distOf(eng).road.min)} drive</>}</>}
+                  <Popup minWidth={250} maxWidth={290}>
+                    <PersonPopup eng={eng} dist={distOf(eng)} hasMyPos={!!myPos} />
                   </Popup>
                 </Marker>
               </React.Fragment>
@@ -785,6 +835,20 @@ function StaffStyles() {
         .st-dist { font-size: 13px; font-weight: 600; color: #0062cc; margin-top: 2px; white-space: normal; line-height: 1.35; }
         .st-me-line { display: flex; align-items: center; gap: 6px; padding: 0 16px 10px; font-size: 12.5px; color: var(--gcr-label-3); }
         .st-me-dot { width: 9px; height: 9px; border-radius: 50%; background: #007aff; box-shadow: 0 0 0 3px rgba(0,122,255,.2); }
+        .pp { font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; color: #0f172a; }
+        .pp-name { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding-right: 14px; }
+        .pp-role { font-size: 11px; font-weight: 600; color: #1e40af; background: #dbeafe; border-radius: 6px; padding: 1px 6px; }
+        .pp-status { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 13.5px; font-weight: 600; }
+        .pp-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+        .pp-time { margin-top: 3px; font-size: 13px; color: #475569; }
+        .pp-time b { color: #0f172a; }
+        .pp-dist { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: #f1f5f9; font-size: 13px; color: #0f172a; }
+        .pp-dist span { display: block; font-size: 12px; color: #64748b; margin-top: 1px; }
+        .pp-dist > span:only-child { margin: 0; }
+        .pp-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
+        .pp-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; height: 52px; border-radius: 12px; border: 0; background: #eef2ff; color: #1d4ed8 !important; font: inherit; font-size: 12px; font-weight: 700; text-decoration: none; cursor: pointer; }
+        .pp-btn.primary { background: #2563eb; color: #fff !important; }
+        .pp-btn.off { opacity: .4; cursor: not-allowed; }
         .gcr-me-marker { position: relative; }
         .gcr-me-marker .me-dot { position: absolute; left: 4px; top: 4px; width: 14px; height: 14px; border-radius: 50%; background: #007aff; border: 2.5px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
         .gcr-me-marker .me-halo { position: absolute; inset: -6px; border-radius: 50%; background: rgba(0,122,255,.22); animation: mePulse 2s ease-out infinite; }

@@ -105,10 +105,10 @@ async function api(path, opts = {}) {
   return data;
 }
 
-export default function ChatSystem({ currentUser, otherUserId, caseId, onBack, isMini }) {
+export default function ChatSystem({ currentUser, otherUserId, otherUserName, caseId, onBack, isMini }) {
   const admin = isAdminRole(currentUser);
   const [wide, setWide] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 900);
-  const [active, setActive] = useState(admin ? null : currentUser?.id); // engineerId of the open conversation
+  const [active, setActive] = useState(admin ? (otherUserId || null) : currentUser?.id); // engineerId of the open conversation
   const [conversations, setConversations] = useState([]);
   const [listLoaded, setListLoaded] = useState(false);
 
@@ -138,7 +138,7 @@ export default function ChatSystem({ currentUser, otherUserId, caseId, onBack, i
       <div className="ch-split">
         <ConversationList {...{ conversations, listLoaded, currentUser, onOpen: setActive, activeId: active, embedded: true }} />
         {active
-          ? <Thread key={active} {...{ currentUser, engineerId: active, conv: activeConv, caseId, onRead: loadList }} />
+          ? <Thread key={active} {...{ currentUser, engineerId: active, conv: activeConv, fallbackName: active === otherUserId ? otherUserName : undefined, caseId, onRead: loadList }} />
           : <div className="ch-pick"><div className="ch-pick-icon">💬</div><b>Choose a conversation</b><span>Messages with your field engineers appear here.</span></div>}
       </div>
     );
@@ -146,7 +146,7 @@ export default function ChatSystem({ currentUser, otherUserId, caseId, onBack, i
   return (
     <Thread
       key={active}
-      {...{ currentUser, engineerId: active, conv: activeConv, caseId, isMini, onRead: loadList }}
+      {...{ currentUser, engineerId: active, conv: activeConv, fallbackName: active === otherUserId ? otherUserName : undefined, caseId, isMini, onRead: loadList }}
       onBack={admin ? () => setActive(null) : onBack}
     />
   );
@@ -265,7 +265,7 @@ function ConversationList({ conversations, listLoaded, currentUser, onOpen, acti
 }
 
 /* ------------------------------------ Conversation ------------------------------------ */
-function Thread({ currentUser, engineerId, conv, caseId, onBack, isMini, onRead }) {
+function Thread({ currentUser, engineerId, conv, fallbackName, caseId, onBack, isMini, onRead }) {
   const admin = isAdminRole(currentUser);
   const [messages, setMessages] = useState([]);
   const [pending, setPending] = useState([]); // optimistic: { tempId, ...payload, status: 'sending' | 'failed' }
@@ -282,7 +282,7 @@ function Thread({ currentUser, engineerId, conv, caseId, onBack, isMini, onRead 
   const docRef = useRef(null);
   const myInbox = admin ? 'ADMIN' : currentUser.id;
 
-  const title = admin ? (conv?.name || 'Engineer') : (conv?.officeName || `${currentUser.branchInfo?.name || 'Head'} Office`);
+  const title = admin ? (conv?.name || fallbackName || 'Engineer') : (conv?.officeName || `${currentUser.branchInfo?.name || 'Head'} Office`);
   const subtitle = admin
     ? (conv?.onDuty ? `On duty since ${hhmm(conv.dutyAt)}` : conv?.dutyAt ? offDutyText(conv.dutyAt) : 'Field engineer')
     : 'Your branch admin & head office';
