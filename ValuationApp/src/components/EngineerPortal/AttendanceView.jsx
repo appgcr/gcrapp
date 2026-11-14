@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   Loader2,
   Clock,
-  ShieldCheck,
   LogIn,
   LogOut,
   Calendar,

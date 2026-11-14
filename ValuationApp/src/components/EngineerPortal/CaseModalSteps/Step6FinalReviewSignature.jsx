@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { CheckSquare, Eye, UploadCloud, PenTool, Coins, TrendingDown, Building, ShieldCheck } from 'lucide-react';
+import { CheckSquare, Eye, UploadCloud, PenTool, Coins, TrendingDown, Building } from 'lucide-react';
 import SignatureCanvas from 'react-signature-canvas';
 import toast from 'react-hot-toast';
 import { getPageDisplayInfo } from './caseModalHelpers';

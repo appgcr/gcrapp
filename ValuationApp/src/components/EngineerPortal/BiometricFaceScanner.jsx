@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, CheckCircle2, AlertTriangle, Loader2, X, RefreshCw, ShieldCheck, Eye, MapPin, Clock } from 'lucide-react';
+import { Camera, CheckCircle2, AlertTriangle, Loader2, X, RefreshCw, Eye, MapPin, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { loadFaceApiModels, analyzeFaceFrame, compareWithRegisteredFace } from '../../services/faceApiService';
 

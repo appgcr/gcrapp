@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import {
-  ShieldCheck, MapPin, Camera, FileCheck2, PenTool, Landmark, Building2, Home, Trees, Factory, Store,
+  LayoutDashboard, MapPin, Camera, FileCheck2, PenTool, Landmark, Building2, Home, Trees, Factory, Store,
   Phone, Mail, ArrowRight, ArrowUp, LogIn, Send, UserCheck, ClipboardCheck, Download, Lock, Smartphone, Menu, X,
 } from 'lucide-react';
 import { SITE, BANKS, BANKS_SERVED } from '../../config/site';
@@ -388,7 +388,7 @@ function HomePage({ go }) {
             { icon: Landmark, t: 'Bank employees', d: 'Send valuation requests, follow every step live and download approved reports.', c: 'c1' },
             { icon: Building2, t: 'Branch admins', d: 'Receive requests, assign engineers, review and approve, manage the team.', c: 'c2' },
             { icon: Smartphone, t: 'Field engineers', d: 'Mobile app at the site: documents, measurements, GPS photos, signature.', c: 'c3' },
-            { icon: ShieldCheck, t: 'Head office', d: 'Every branch, bank formats, letterheads and valuation percentages.', c: 'c4' },
+            { icon: LayoutDashboard, t: 'Head office', d: 'Every branch, bank formats, letterheads and valuation percentages.', c: 'c4' },
           ].map((r, i) => (
             <div key={r.t} className={`ps-tile ps-role ${r.c}`} data-reveal={i % 2 ? 'right' : 'left'} data-glow style={{ '--d': `${(i % 2) * 90}ms` }}>
               <span className="ps-chip"><r.icon size={22} /></span><div><h3>{r.t}</h3><p>{r.d}</p></div>

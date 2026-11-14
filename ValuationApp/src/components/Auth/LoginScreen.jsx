@@ -1,6 +1,6 @@
 import { API_BASE_URL } from '../../config/api';
 import React, { useEffect, useRef, useState } from 'react';
-import { Eye, EyeOff, Fingerprint, Loader2, AlertCircle, ShieldCheck, MapPin, FileCheck2, Users, X, Mail } from 'lucide-react';
+import { Eye, EyeOff, Fingerprint, Loader2, AlertCircle, KeyRound, MapPin, FileCheck2, Users, X, Mail } from 'lucide-react';
 import { startAuthentication } from '@simplewebauthn/browser';
 import GcrLogo from '../Shared/GcrLogo';
 import pkg from '../../../package.json';
@@ -186,7 +186,7 @@ export default function LoginScreen({ onLogin }) {
           )}
 
           <footer className="lg-foot">
-            <ShieldCheck size={14} /> Secure sign-in · Version {pkg.version}
+            Secure sign-in · Version {pkg.version}
           </footer>
         </div>
       </main>
@@ -195,7 +195,7 @@ export default function LoginScreen({ onLogin }) {
         <div className="lg-sheet-bg" onClick={() => setShowHelp(false)}>
           <div className="lg-sheet" role="dialog" aria-modal="true" aria-labelledby="lg-help-title" onClick={(e) => e.stopPropagation()}>
             <button className="lg-sheet-x" onClick={() => setShowHelp(false)} aria-label="Close"><X size={18} /></button>
-            <div className="lg-sheet-icon"><ShieldCheck size={26} /></div>
+            <div className="lg-sheet-icon"><KeyRound size={26} /></div>
             <h3 id="lg-help-title">Forgot your password?</h3>
             <p>Your Gouru administrator issues every login. Ask them to open <b>Staff → your name</b> — they can see your password or give you a new one in seconds.</p>
             <a className="lg-primary" href="mailto:hello.happydooo@gmail.com?subject=Gouru%20Valuations%20login%20help"><Mail size={17} /> Email Support</a>

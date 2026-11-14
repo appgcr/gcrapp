@@ -6,7 +6,6 @@ import {
   ChevronRight,
   Clock,
   MapPin,
-  ShieldCheck,
   LogIn,
   LogOut,
   X,
@@ -582,7 +581,7 @@ export default function AttendanceCalendarView({ currentUser }) {
                           {log.attendanceType}
                         </span>
                         <span style={{ fontSize: '11px', color: '#059669', fontWeight: '600', backgroundColor: '#d1fae5', padding: '2px 6px', borderRadius: '6px' }}>
-                          <ShieldCheck size={11} style={{ display: 'inline', marginRight: '2px' }} /> Face Verified
+                          Face Verified
                         </span>
                       </div>
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, ChevronRight, CheckCircle2, AlertCircle, ShieldCheck } from 'lucide-react';
+import { Loader2, ChevronRight, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export default function Step5ExtractedDataReview({
   modalStep,
@@ -104,7 +104,7 @@ export default function Step5ExtractedDataReview({
 
         <div style={{ padding: '10px 14px', backgroundColor: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span className="text-muted" style={{ fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <ShieldCheck size={14} color="var(--primary)"/> System Confidence
+            System Confidence
           </span>
           <span style={{ fontSize: '13.5px', fontWeight: '700', color: 'var(--primary)' }}>{extractedData?.confidence || '95%'}</span>
         </div>

@@ -1,6 +1,6 @@
 import { API_BASE_URL } from '../../config/api';
 import React, { useState, useEffect, useRef } from 'react';
-import { Moon, Sun, Fingerprint, HelpCircle, ChevronRight, CheckCircle2, Bell, ShieldCheck, PenTool } from 'lucide-react';
+import { Moon, Sun, Fingerprint, HelpCircle, ChevronRight, CheckCircle2, Bell, SlidersHorizontal, PenTool } from 'lucide-react';
 import pkg from '../../../package.json';
 import IconTile, { AssistiveGlyph } from '../Shared/IconTile';
 import NotificationPrefsCard from '../Shared/NotificationPrefsCard';
@@ -193,7 +193,7 @@ export default function SettingsView({ currentUser, handleLogout }) {
           <div className="ios-section">Security</div>
           <div className="ios-group">
             <Row icon={Fingerprint} color="green" label="Face ID & Fingerprint" value="Set up" onClick={handleRegisterBiometrics} />
-            <Row icon={ShieldCheck} color="blue" label="App Permissions" onClick={() => window.dispatchEvent(new Event('gcr_open_permissions'))} />
+            <Row icon={SlidersHorizontal} color="blue" label="App Permissions" onClick={() => window.dispatchEvent(new Event('gcr_open_permissions'))} />
           </div>
           <p className="ios-footnote">Unlock with your face or fingerprint, and check location, camera and notification access.</p>
 

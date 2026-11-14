@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Camera, MapPin, Clock, AlertTriangle, Check, Trash2, ShieldCheck } from 'lucide-react';
+import { Camera, MapPin, Clock, AlertTriangle, Check, Trash2 } from 'lucide-react';
 
 const MAX_IMAGES = 25;
 
@@ -103,7 +103,6 @@ export default function SitePhotoCapture({ photos, onAddPhotos, onDeletePhoto, l
       <div className="camera-action-box glass-card" style={{ borderColor: '#10b981' }}>
         <div className="action-info">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <ShieldCheck style={{ color: '#10b981' }} size={22} />
             <h4 style={{ color: '#10b981' }}>Live GPS Detection Active (Always On)</h4>
           </div>
           <p style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>

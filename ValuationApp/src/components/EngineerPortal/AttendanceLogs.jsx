@@ -1,6 +1,6 @@
 import { API_BASE_URL } from '../../config/api';
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, LogIn, LogOut, MapPin, ShieldCheck, Share, FileText, Sheet, ChevronRight, X, ImageOff } from 'lucide-react';
+import { Search, LogIn, LogOut, MapPin, Share, FileText, Sheet, ChevronRight, X, ImageOff } from 'lucide-react';
 import DateRangePicker, { toYMD, fromYMD } from '../Shared/DateRangePicker';
 import { BackBar, IosSettingsStyles } from '../Shared/IosSettings';
 import { buildRegister, exportRegisterPdf, exportRegisterXlsx } from '../../utils/attendanceReport';
@@ -217,8 +217,8 @@ export default function AttendanceLogs() {
                       <span className={`at-dot ${isIn ? 'in' : 'out'}`}>{isIn ? <LogIn size={14} /> : <LogOut size={14} />}</span>
                       <div className="at-event-main">
                         <div className="at-event-title">{isIn ? 'Checked in' : 'Checked out'} · {fmtTime(r.timestamp)}
-                          {r.faceVerified && <span className="at-face"><ShieldCheck size={13} /> Face verified</span>}
-                          {r.verifiedBy === 'Fingerprint' && <span className="at-face"><ShieldCheck size={13} /> Fingerprint verified</span>}
+                          {r.faceVerified && <span className="at-face">Face verified</span>}
+                          {r.verifiedBy === 'Fingerprint' && <span className="at-face">Fingerprint verified</span>}
                         </div>
                         {(r.address || (r.lat && r.lng)) && (
                           <a className="at-place" href={`https://www.google.com/maps?q=${encodeURIComponent(r.lat && r.lng ? `${r.lat},${r.lng}` : r.address)}`} target="_blank" rel="noopener noreferrer">

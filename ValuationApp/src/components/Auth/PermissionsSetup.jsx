@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { MapPin, Camera, Bell, Check, Loader2, ShieldCheck, BatteryCharging } from 'lucide-react';
+import { MapPin, Camera, Bell, Check, Loader2, BatteryCharging } from 'lucide-react';
 import { BackgroundGeolocation } from '../../utils/backgroundGeolocation';
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
