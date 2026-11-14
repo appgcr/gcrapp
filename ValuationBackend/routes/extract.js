@@ -731,15 +731,38 @@ const ocrWithin = (input, isPdf, ms = 45000) => Promise.race([
   new Promise((resolve) => setTimeout(() => resolve({ text: '' }), ms)),
 ]);
 
+// The document to check: a data URL sent by the app, or a link to a file already in storage
+// (Word files and very large documents). → { aiInput, firstUrl, isPdf, text } or sends an error.
+const { aiInputFromStoredFile } = require('../services/documentInput');
+async function documentFromRequest(req, res) {
+  const body = req.body || {};
+  const sent = body.dataUrl || body.pdfBase64 || body.image;
+  if (sent) return { aiInput: sent, firstUrl: sent, isPdf: Boolean(body.isPdf), text: '' };
+  if (body.fileUrl) {
+    try {
+      const d = await aiInputFromStoredFile(body.fileUrl);
+      const first = d.dataUrls.find((u) => !u.startsWith('data:text/')) || null;
+      return { aiInput: d.dataUrls, firstUrl: first, isPdf: d.isPdf, text: d.text || '', kind: d.kind };
+    } catch (err) {
+      res.status(err.status && err.status < 500 ? 200 : 500).json({ passed: false, reason: err.message || 'The document could not be opened.' });
+      return null;
+    }
+  }
+  res.status(400).json({ passed: false, reason: 'No document data provided.' });
+  return null;
+}
+// OCR fallback input: a picture/PDF, or the Word text already read
+const ocrFor = async (doc) => (doc.firstUrl ? ocrWithin(doc.firstUrl, doc.isPdf) : { text: doc.text || '' });
+
 router.post('/validate-doc', async (req, res) => {
   try {
-    const { dataUrl, docId = 'saleDeed', isPdf = false, clientText = '' } = req.body;
-    if (!dataUrl) {
-      return res.status(400).json({ passed: false, reason: 'No document data provided.' });
-    }
+    const { docId = 'saleDeed', clientText = '' } = req.body;
+    const doc = await documentFromRequest(req, res);
+    if (!doc) return;
+    const isPdf = doc.isPdf;
 
     // Strict AI check (document type + customer name). Without the AI service it is marked pending.
-    const ai = await verifyDocument({ dataUrl, docId, clientName: req.body.clientName || '' });
+    const ai = await verifyDocument({ dataUrl: doc.aiInput, docId, clientName: req.body.clientName || '' });
     if (!ai.pendingVerification) {
       return res.json({ ...ai, ocrText: '', snippets: [], numPages: 1 });
     }
@@ -747,7 +770,7 @@ router.post('/validate-doc', async (req, res) => {
     const rules = STRICT_DOC_KEYWORDS[docId] || STRICT_DOC_KEYWORDS.saleDeed;
 
     // 1. Run 100% Free Local OCR & Clarity Engine
-    const pyResult = await ocrWithin(dataUrl, isPdf);
+    const pyResult = await ocrFor(doc);
 
     // 2. Strict Clarity & Blur Gate (only for photos/images, never block PDFs)
     if (pyResult.is_blurred && !isPdf) {
@@ -820,18 +843,16 @@ router.post('/validate-doc', async (req, res) => {
 // ── POST /api/extract/sale-deed (Dedicated endpoint) ─────────────────────────
 router.post('/sale-deed', async (req, res) => {
   try {
-    const { dataUrl, image, pdfBase64, isPdf = false, clientText = '' } = req.body;
-    const input = dataUrl || pdfBase64 || image;
-    if (!input) {
-      return res.status(400).json({ passed: false, reason: 'No document data provided.' });
-    }
+    const { clientText = '' } = req.body;
+    const doc = await documentFromRequest(req, res);
+    if (!doc) return;
 
-    const ai = await verifyDocument({ dataUrl: input, docId: 'saleDeed', clientName: req.body.clientName || '' });
+    const ai = await verifyDocument({ dataUrl: doc.aiInput, docId: 'saleDeed', clientName: req.body.clientName || '' });
     if (!ai.pendingVerification) {
       return res.json({ ...ai, success: ai.passed, canonical: ai.extractedMeta, ocrText: '', snippets: [], numPages: 1 });
     }
 
-    const pyResult = await ocrWithin(input, isPdf);
+    const pyResult = await ocrFor(doc);
     const canonicalMeta = extractCanonicalFromOCR(pyResult, 'saleDeed', clientText);
 
     return res.json({

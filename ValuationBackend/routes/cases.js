@@ -1,3 +1,4 @@
+const fileStore = require('../services/fileStore');
 const express = require('express');
 const router = express.Router();
 const ValuationCase = require('../models/ValuationCase');
@@ -150,6 +151,7 @@ router.post('/', authenticateToken, canCreateCase, async (req, res) => {
 
     const config = (await AppConfig.findOne({ key: 'global' })) || {};
     const caseData = { ...req.body, id: newId, branchId: branch.id, fileNumber: await nextFileNumber(branch.code, today) };
+    if (caseData.documents) caseData.documents = await fileStore.offloadLargeDocuments(caseData.documents, req.user && req.user.id);
     if (Array.isArray(req.body.sitePhotos) && req.body.sitePhotos.length > MAX_SITE_PHOTOS) {
       return res.status(400).json({ error: `A case can have at most ${MAX_SITE_PHOTOS} site photos.` });
     }
@@ -220,6 +222,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     if (!existingCase) return;
 
     const updateData = { ...req.body };
+    if (updateData.documents) updateData.documents = await fileStore.offloadLargeDocuments(updateData.documents, req.user && req.user.id);
     if (Array.isArray(req.body.sitePhotos) && req.body.sitePhotos.length > MAX_SITE_PHOTOS) {
       return res.status(400).json({ error: `A case can have at most ${MAX_SITE_PHOTOS} site photos.` });
     }

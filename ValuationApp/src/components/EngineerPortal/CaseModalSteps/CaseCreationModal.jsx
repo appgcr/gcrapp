@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ChevronLeft, X, Loader2, ShieldAlert } from 'lucide-react';
+import { ChevronLeft, X, Loader2, ShieldAlert, FileText } from 'lucide-react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
@@ -11,6 +11,7 @@ import { useBanks, matchBank } from '../../../utils/banks';
 import ReportViewer, { fetchReport } from '../../Shared/ReportViewer';
 import localforage from 'localforage';
 import toast from 'react-hot-toast';
+import { isWordFile, fileMime, uploadDocumentFile, formatMB, resolveDocUrl } from '../../../utils/docFiles';
 import { API_BASE_URL } from '../../../config/api';
 import { queueOfflineCase } from '../../../services/offlineSyncService';
 import { reconcileDocuments } from '../../../utils/reconciliation';
@@ -674,13 +675,14 @@ export default function CaseCreationModal({
           }
         }));
 
-        // ── 0. FILE FORMAT VALIDATION (PDF & Images Only) ───────────────────
+        // ── 0. FILE FORMAT: PDF, Word or photo — any size ───────────────────
         const fileExt = (file.name.split('.').pop() || '').toLowerCase();
         const isPdf = file.type === 'application/pdf' || fileExt === 'pdf';
-        const isImage = file.type.startsWith('image/') || ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'tiff'].includes(fileExt);
+        const isWord = isWordFile(file);
+        const isImage = !isWord && (file.type.startsWith('image/') || ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'tif', 'tiff', 'heic'].includes(fileExt));
 
-        if (!isPdf && !isImage) {
-          errorMsg = `⚠️ UNSUPPORTED FILE FORMAT: "${file.name}"\n\nLegal documents and building plans must be uploaded as PDF or Images (JPG, PNG).\n\nWord documents (.docx, .doc) cannot be verified or previewed as certified legal paperwork. Please upload your document as a PDF or high-resolution image.`;
+        if (!isPdf && !isImage && !isWord) {
+          errorMsg = `⚠️ UNSUPPORTED FILE FORMAT: "${file.name}"\n\nPlease upload the document as a PDF, a Word file (.docx / .doc) or a photo (JPG, PNG).`;
           break;
         }
 
@@ -718,7 +720,23 @@ export default function CaseCreationModal({
           }
         } catch { /* offline: the server checks again when the case is saved */ }
 
-        // ── 2. READ FILE AS DATA URL FIRST (reliable for OCR and UI preview) ────────
+        // ── 2. KEEP THE ORIGINAL ON THE SERVER (PDF / Word / anything over 1 MB) ────
+        // The case then saves only a link, so a document of any size fits.
+        let storedUrl = null;
+        if (isPdf || isWord || file.size > 1024 * 1024) {
+          setScanProgress(prev => ({
+            ...prev,
+            [docId]: { ...prev[docId], status: `Uploading ${formatMB(file.size)}${fileLabel}...`, detail: 'Saving the original document safely' }
+          }));
+          try {
+            storedUrl = await uploadDocumentFile(file);
+          } catch (upErr) {
+            errorMsg = `⚠️ UPLOAD FAILED\n${upErr.message}`;
+            break;
+          }
+        }
+
+        // ── 3. READ THE FILE FOR CHECKING AND PREVIEW (Word files are read on the server) ────
         setScanProgress(prev => ({
           ...prev,
           [docId]: {
@@ -727,22 +745,23 @@ export default function CaseCreationModal({
             detail: 'Loading document into memory'
           }
         }));
-        const dataUrl = await new Promise((resolve, reject) => {
+        const readInline = !isWord && file.size <= 60 * 1024 * 1024; // very large files are checked from storage
+        const dataUrl = readInline ? await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result);
           reader.onerror = reject;
           reader.readAsDataURL(file);
-        });
+        }) : null;
 
         // ── 3. OCR / PDF TEXT VALIDATION WITH LIVE STREAMING ─────────────
-        const scanMsg = isPdf ? 'Mahe AI is scanning PDF (may take a few seconds)...' : 'Mahe AI is scanning document...';
+        const scanMsg = isWord ? 'Mahe AI is reading the Word file...' : isPdf ? 'Mahe AI is scanning PDF (may take a few seconds)...' : 'Mahe AI is scanning document...';
         toast(scanMsg, { icon: '🔍', duration: 3000 });
 
         let clientText = '';
         let detectedPageCount = 1;
         let pdfExtracted = null;
 
-        if (isPdf) {
+        if (isPdf && readInline) {
           setScanProgress(prev => ({
             ...prev,
             [docId]: {
@@ -797,7 +816,7 @@ export default function CaseCreationModal({
           }
         }));
 
-        const validation = await validateDocOCR(dataUrl, docId, isPdf, file, clientText, clientName);
+        const validation = await validateDocOCR(dataUrl, docId, isPdf, readInline ? file : null, clientText, clientName, storedUrl);
 
         if (!validation.passed) {
           errorMsg = validation.nameMismatch
@@ -844,7 +863,7 @@ export default function CaseCreationModal({
 
         const finalPageCount = (validation.numPages && validation.numPages > 1)
           ? validation.numPages
-          : (detectedPageCount > 1 ? detectedPageCount : (isPdf ? await getPdfPageCount(file) : 1));
+          : (detectedPageCount > 1 ? detectedPageCount : (isPdf && readInline ? await getPdfPageCount(file) : 1));
 
         const liveSnippets = (validation.snippets && validation.snippets.length > 0)
           ? validation.snippets
@@ -906,9 +925,11 @@ export default function CaseCreationModal({
         const ext = (file.name.split('.').pop() || (isPdf ? 'pdf' : 'jpg')).toUpperCase();
         newPages.push({ 
           id: fileHash, 
-          url: dataUrl, 
+          url: storedUrl || dataUrl, 
           name: file.name, 
           isPdf, 
+          isWord,
+          mime: fileMime(file),
           pageCount: finalPageCount,
           rawFile: null,
           size: file.size,
@@ -1545,10 +1566,16 @@ export default function CaseCreationModal({
               </button>
             </div>
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', overflow: 'hidden' }}>
-            {previewImage.isPdf ? (
+            {isWordFile(previewImage) ? (
+              <div style={{ color: 'white', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
+                <FileText size={56} color="#60a5fa" />
+                <div style={{ fontSize: '15px', maxWidth: '320px', lineHeight: 1.5 }}>Word document — checked by Mahe AI on the server. Open it in Word or another app to view.</div>
+                <a href={resolveDocUrl(previewImage.url)} target="_blank" rel="noreferrer" style={{ background: '#2563eb', color: 'white', padding: '10px 18px', borderRadius: '10px', fontWeight: 600, textDecoration: 'none' }}>Open / download</a>
+              </div>
+            ) : previewImage.isPdf ? (
               <div style={{ width: '100%', height: '100%', overflow: 'auto', backgroundColor: '#222', borderRadius: '8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', padding: '16px 0' }}>
                 <Document 
-                  file={previewImage.url} 
+                  file={resolveDocUrl(previewImage.url)} 
                   onLoadSuccess={({ numPages }) => setNumPdfPages(numPages)}
                   loading={<div style={{ color: 'white', display: 'flex', alignItems: 'center', gap: '8px', marginTop: '40px' }}><Loader2 className="spin" /> Loading PDF...</div>}
                 >
@@ -1561,7 +1588,7 @@ export default function CaseCreationModal({
                 </Document>
               </div>
             ) : (
-              <img src={previewImage.url} alt="Preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '8px' }} />
+              <img src={resolveDocUrl(previewImage.url)} alt="Preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '8px' }} />
             )}
           </div>
         </div>

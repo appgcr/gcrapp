@@ -1107,7 +1107,7 @@ const shrinkPdfDataUrl = async (dataUrl) => {
 };
 
 // ── Core validation function (shared by file upload + camera capture) ─────────
-const validateDocOCR = async (imageUrlOrFile, docId, isPdf = false, rawFile = null, clientText = '', clientName = '') => {
+const validateDocOCR = async (imageUrlOrFile, docId, isPdf = false, rawFile = null, clientText = '', clientName = '', fileUrl = null) => {
   const rules = DOC_VALIDATION_RULES[docId];
   if (!rules) return { passed: true }; // unknown doc type — skip validation
 
@@ -1122,8 +1122,11 @@ const validateDocOCR = async (imageUrlOrFile, docId, isPdf = false, rawFile = nu
       });
     }
 
-    if (dataUrlToSend && typeof dataUrlToSend === 'string' && dataUrlToSend.startsWith('data:')) {
-      if (isPdf || dataUrlToSend.startsWith('data:application/pdf')) dataUrlToSend = await shrinkPdfDataUrl(dataUrlToSend);
+    const hasInline = Boolean(dataUrlToSend && typeof dataUrlToSend === 'string' && dataUrlToSend.startsWith('data:'));
+    if (hasInline || fileUrl) {
+      if (hasInline && (isPdf || dataUrlToSend.startsWith('data:application/pdf'))) dataUrlToSend = await shrinkPdfDataUrl(dataUrlToSend);
+      // Still very big after shrinking (or a Word file / huge PDF): the server reads the stored original
+      const useStored = Boolean(fileUrl) && (!hasInline || dataUrlToSend.length > 12 * 1024 * 1024);
       const controller = new AbortController();
       // The server spends up to ~2.5 minutes on a long deed; allow for the upload on mobile data too
       const timeoutId = setTimeout(() => controller.abort(), 240000);
@@ -1136,15 +1139,17 @@ const validateDocOCR = async (imageUrlOrFile, docId, isPdf = false, rawFile = nu
       const res = await fetch(endpointUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dataUrl: dataUrlToSend,
-          image: dataUrlToSend,
-          pdfBase64: isPdf ? dataUrlToSend : null,
-          docId,
-          isPdf,
-          clientText,
-          clientName
-        }),
+        body: JSON.stringify(useStored
+          ? { fileUrl, docId, isPdf, clientText, clientName }
+          : {
+            dataUrl: dataUrlToSend,
+            image: dataUrlToSend,
+            pdfBase64: isPdf ? dataUrlToSend : null,
+            docId,
+            isPdf,
+            clientText,
+            clientName
+          }),
         signal: controller.signal
       });
       clearTimeout(timeoutId);

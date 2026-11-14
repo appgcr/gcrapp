@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Camera, CheckCircle2, CloudUpload, Loader2, FileText, MapPin, Building, Phone, Calendar, Clock, StickyNote, MessageCircle, Navigation, Map, MessageSquare, Eye, X, HardDrive } from 'lucide-react';
 import toast from 'react-hot-toast';
 import ChatSystem from '../Shared/ChatSystem';
+import { isWordFile, resolveDocUrl } from '../../utils/docFiles';
 import { API_BASE_URL } from '../../config/api';
 import IconTile from '../Shared/IconTile';
 import ReportViewer, { fetchReport } from '../Shared/ReportViewer';
@@ -548,10 +549,19 @@ export default function CaseDetailsView({ caseId }) {
             </button>
           </div>
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-            {previewDoc.isPdf ? (
-              <iframe src={previewDoc.url} title={previewDoc.name} style={{ width: '100%', height: '100%', border: 'none', borderRadius: '8px' }} />
+            {isWordFile(previewDoc) ? (
+              <div style={{ color: '#fff', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
+                <FileText size={56} color="#60a5fa" />
+                <div style={{ fontSize: '15px' }}>Word document</div>
+                <a href={resolveDocUrl(previewDoc.url)} target="_blank" rel="noreferrer" style={{ background: '#2563eb', color: '#fff', padding: '10px 18px', borderRadius: '10px', fontWeight: 600, textDecoration: 'none' }}>Open / download</a>
+              </div>
+            ) : previewDoc.isPdf ? (
+              <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <iframe src={resolveDocUrl(previewDoc.url)} title={previewDoc.name} style={{ flex: 1, width: '100%', border: 'none', borderRadius: '8px', background: '#fff' }} />
+                <a href={resolveDocUrl(previewDoc.url)} target="_blank" rel="noreferrer" style={{ alignSelf: 'center', background: '#2563eb', color: '#fff', padding: '8px 16px', borderRadius: '10px', fontWeight: 600, textDecoration: 'none', fontSize: '14px' }}>Open / download PDF</a>
+              </div>
             ) : (
-              <img src={previewDoc.url} alt={previewDoc.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '8px' }} />
+              <img src={resolveDocUrl(previewDoc.url)} alt={previewDoc.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '8px' }} />
             )}
           </div>
         </div>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { DOC_ACCEPT, isWordFile, resolveDocUrl } from '../../../utils/docFiles';
 import {
   ShieldAlert,
   ScanLine,
@@ -48,7 +49,7 @@ export default function Step2LegalDocs({
         ref={fileInputRef} 
         onChange={handleSimulateUpload} 
         multiple 
-        accept=".pdf,image/png,image/jpeg,image/jpg,image/webp" 
+        accept={DOC_ACCEPT} 
         style={{ display: 'none' }} 
       />
 
@@ -57,7 +58,7 @@ export default function Step2LegalDocs({
           <div style={{ padding: '10px 12px', backgroundColor: 'rgba(234, 179, 8, 0.08)', border: '1px solid #eab308', borderRadius: '10px', display: 'flex', gap: '8px', marginBottom: '14px', alignItems: 'flex-start' }}>
             <ShieldAlert size={18} color="#ca8a04" style={{ flexShrink: 0, marginTop: '2px' }} />
             <span style={{ fontSize: '12px', color: '#854d0e', lineHeight: '1.45' }}>
-              <strong>Strict Validation Active:</strong> Every upload is scanned by Mahe AI using OCR text analysis. Images and PDFs are both verified. Duplicate files are detected via content-hash — renaming a file will not bypass this. Irrelevant documents are rejected immediately. You can add multiple pages per document.
+              <strong>Strict Validation Active:</strong> Every upload is scanned by Mahe AI using OCR text analysis. PDFs, Word files and photos of any size are verified. Duplicate files are detected via content-hash — renaming a file will not bypass this. Irrelevant documents are rejected immediately. You can add multiple pages per document.
             </span>
           </div>
 
@@ -371,13 +372,18 @@ export default function Step2LegalDocs({
                                   justifyContent: 'center'
                                 }}
                               >
-                                {info.isPdf ? (
+                                {isWordFile(page) ? (
+                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                                    <FileText size={16} color="#2563eb" />
+                                    <span style={{ fontSize: '8px', fontWeight: '800', color: '#2563eb', letterSpacing: '0.3px' }}>WORD</span>
+                                  </div>
+                                ) : info.isPdf ? (
                                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                                     <FileText size={16} color="#dc2626" />
                                     <span style={{ fontSize: '8px', fontWeight: '800', color: '#dc2626', letterSpacing: '0.3px' }}>PDF</span>
                                   </div>
                                 ) : page.url ? (
-                                  <img src={page.url} alt={info.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  <img src={resolveDocUrl(page.url)} alt={info.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                 ) : (
                                   <FileText size={16} color="#059669" />
                                 )}

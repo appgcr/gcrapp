@@ -122,16 +122,59 @@ Reply with ONLY this JSON:
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-async function readWithAI(dataUrl, expectedName) {
+// Google takes up to ~20 MB of file data inside one request; anything bigger goes through its
+// file upload first and is then referred to by link
+const INLINE_LIMIT = 15 * 1024 * 1024;
+async function uploadToGemini(apiKey, mimeType, buffer) {
+  const start = await fetch(`https://generativelanguage.googleapis.com/upload/v1beta/files?key=${apiKey}`, {
+    method: 'POST',
+    headers: {
+      'X-Goog-Upload-Protocol': 'resumable', 'X-Goog-Upload-Command': 'start',
+      'X-Goog-Upload-Header-Content-Length': String(buffer.length), 'X-Goog-Upload-Header-Content-Type': mimeType,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ file: { display_name: `case-document-${Date.now()}` } }),
+    signal: AbortSignal.timeout(30000),
+  });
+  const uploadUrl = start.headers.get('x-goog-upload-url');
+  if (!start.ok || !uploadUrl) throw new Error(`file upload start HTTP ${start.status}`);
+  const done = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: { 'Content-Length': String(buffer.length), 'X-Goog-Upload-Offset': '0', 'X-Goog-Upload-Command': 'upload, finalize' },
+    body: buffer, signal: AbortSignal.timeout(180000),
+  });
+  if (!done.ok) throw new Error(`file upload HTTP ${done.status}`);
+  let file = (await done.json()).file;
+  // PDFs are processed for a moment before they can be read
+  for (let i = 0; file && file.state === 'PROCESSING' && i < 40; i++) {
+    await sleep(3000);
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/${file.name}?key=${apiKey}`, { signal: AbortSignal.timeout(15000) });
+    if (r.ok) file = await r.json();
+  }
+  if (!file || file.state === 'FAILED' || !file.uri) throw new Error('file processing failed');
+  return { fileData: { mimeType, fileUri: file.uri } };
+}
+
+async function readWithAI(dataUrlOrList, expectedName) {
   const apiKey = config.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
-  const m = /^data:([^;]+);base64,(.*)$/s.exec(String(dataUrl || ''));
-  if (!m) return null;
+  const items = (Array.isArray(dataUrlOrList) ? dataUrlOrList : [dataUrlOrList])
+    .map((u) => /^data:([^;]+);base64,(.*)$/s.exec(String(u || ''))).filter(Boolean);
+  if (!items.length) return null;
   // Main model first, then newer / lighter ones when Google reports it is busy
   const models = [...new Set([config.GEMINI_MODEL, 'gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-flash-latest'].filter(Boolean))];
-  const bytes = Math.round(m[2].length * 0.75);
+  const bytes = items.reduce((n, m) => n + Math.round(m[2].length * 0.75), 0);
   const timeout = Math.max(config.GEMINI_TIMEOUT_MS || 60000, bytes > 1e6 ? 150000 : 90000); // big scanned deeds need longer
+  let fileParts;
+  try {
+    fileParts = bytes > INLINE_LIMIT
+      ? await Promise.all(items.map((m) => uploadToGemini(apiKey, m[1], Buffer.from(m[2], 'base64'))))
+      : items.map((m) => ({ inlineData: { mimeType: m[1], data: m[2] } }));
+  } catch (err) {
+    console.warn('Document AI file upload failed:', err.message);
+    return null; // treated as "AI busy": the page is kept and marked for checking
+  }
   const body = JSON.stringify({
-    contents: [{ parts: [{ text: PROMPT(expectedName) }, { inlineData: { mimeType: m[1], data: m[2] } }] }],
+    contents: [{ parts: [{ text: PROMPT(expectedName) }, ...fileParts] }],
     generationConfig: { responseMimeType: 'application/json', temperature: 0 },
   });
   const deadline = Date.now() + 150000; // never keep the engineer waiting more than ~2.5 minutes
