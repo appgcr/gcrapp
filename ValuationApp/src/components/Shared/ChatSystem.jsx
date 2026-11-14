@@ -408,7 +408,6 @@ function Thread({ currentUser, engineerId, conv, fallbackName, caseId, onBack, i
       <div className="ch-scroll" ref={scrollRef} onScroll={onScroll}>
         {loaded && all.length === 0 && (
           <div className="ch-hello">
-            <div className="ch-hello-icon">💬</div>
             <b>No messages yet</b>
             <span>{admin ? `Send ${title.split(' ')[0]} a message.` : 'Messages here go to your branch admin and head office.'}</span>
           </div>
