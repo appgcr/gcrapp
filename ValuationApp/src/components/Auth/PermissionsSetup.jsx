@@ -127,46 +127,46 @@ export default function PermissionsSetup({ currentUser, onDone, fromSettings = f
   const allGranted = kinds.every((k) => state[k] === 'granted' || state[k] === 'unavailable');
 
   return (
-    <div className="lg-root ps-root">
+    <div className="lg-root pm-root">
       <main className="lg-main">
-        <div className="lg-form-wrap ps-wrap">
+        <div className="lg-form-wrap pm-wrap">
           <header className="lg-head">
-            <div className="ps-hero"><PermissionsHeroIcon size={132} /></div>
+            <div className="pm-hero"><PermissionsHeroIcon size={132} /></div>
             <h2>{fromSettings ? 'App Permissions' : 'Allow access'}</h2>
-            <p className="ps-sub">
+            <p className="pm-sub">
               {isAdminRole(currentUser)
                 ? 'Turn on alerts so you know the moment a report is ready for review.'
                 : 'Gouru Valuations needs these to work in the field. You can change them anytime in Settings.'}
             </p>
           </header>
 
-          <div className="lg-group ps-list">
+          <div className="lg-group pm-list">
             {kinds.map((k) => {
               const it = ITEMS[k];
               const st = state[k];
               return (
-                <div className="ps-item" key={k}>
+                <div className="pm-item" key={k}>
                   <IconTile icon={it.icon} color={it.color} size={36} />
-                  <div className="ps-text">
-                    <div className="ps-title">{it.title}</div>
-                    <div className="ps-why">{it.why}</div>
+                  <div className="pm-text">
+                    <div className="pm-title">{it.title}</div>
+                    <div className="pm-why">{it.why}</div>
                     {st === 'denied' && (
-                      <div className="ps-blocked">
+                      <div className="pm-blocked">
                         {isNative()
                           ? 'Blocked — turn it on in your phone’s Settings → Gouru Valuations.'
                           : 'Blocked — tap the lock icon in the address bar and allow it for this site.'}
                       </div>
                     )}
                   </div>
-                  <div className="ps-act">
+                  <div className="pm-act">
                     {st === 'granted' ? (
-                      <span className="ps-ok" aria-label="Allowed"><Check size={16} strokeWidth={3} /></span>
+                      <span className="pm-ok" aria-label="Allowed"><Check size={16} strokeWidth={3} /></span>
                     ) : st === 'unavailable' ? (
-                      <span className="ps-na">Not available</span>
+                      <span className="pm-na">Not available</span>
                     ) : st === 'denied' ? (
-                      <span className="ps-na">Off</span>
+                      <span className="pm-na">Off</span>
                     ) : (
-                      <button className="ps-allow" onClick={() => allow(k)} disabled={!!busy || st === undefined}>
+                      <button className="pm-allow" onClick={() => allow(k)} disabled={!!busy || st === undefined}>
                         {busy === k ? <Loader2 size={14} className="spin" /> : (k === 'battery' ? 'Open' : 'Allow')}
                       </button>
                     )}
@@ -176,34 +176,39 @@ export default function PermissionsSetup({ currentUser, onDone, fromSettings = f
             })}
           </div>
 
-          <p className="ps-privacy">Your location is shared with the office 24/7, as you agreed. Photos are used only in your valuation reports.</p>
+          <p className="pm-privacy">Your location is shared with the office 24/7, as you agreed. Photos are used only in your valuation reports.</p>
 
           <button className="lg-primary" onClick={finish}>{allGranted || fromSettings ? 'Done' : 'Continue'}</button>
-          {!allGranted && !fromSettings && <button className="lg-link ps-later" onClick={finish}>Set up later</button>}
+          {!allGranted && !fromSettings && <button className="lg-link pm-later" onClick={finish}>Set up later</button>}
         </div>
       </main>
       <style>{`
-        .ps-root { position: fixed; inset: 0; z-index: 10050; overflow-y: auto; }
-        .ps-wrap { max-width: 420px; }
-        .ps-hero { display: flex; justify-content: center; margin: 0 auto 10px; animation: psHeroIn .6s cubic-bezier(.2,.9,.25,1) both; }
-        @keyframes psHeroIn { from { opacity: 0; transform: scale(.88); } to { opacity: 1; transform: none; } }
-        @media (prefers-reduced-motion: reduce) { .ps-hero { animation: none; } }
-        .ps-sub { white-space: normal !important; line-height: 1.4; }
-        .ps-list { margin-bottom: 12px; }
-        .ps-item { display: flex; align-items: flex-start; gap: 14px; padding: 14px 14px 14px 16px; position: relative; }
-        .ps-item + .ps-item::before { content: ''; position: absolute; top: 0; left: 66px; right: 0; height: .5px; background: var(--lg-sep); }
-        .ps-text { flex: 1; min-width: 0; }
-        .ps-title { font-size: 16px; font-weight: 600; color: var(--lg-text); margin-bottom: 2px; }
-        .ps-why { font-size: 13px; line-height: 1.38; color: var(--lg-sub); }
-        .ps-blocked { margin-top: 6px; font-size: 12px; color: var(--lg-red); line-height: 1.35; }
-        .ps-act { flex: none; align-self: center; }
-        .ps-allow { min-width: 68px; height: 30px; padding: 0 14px; border: none; border-radius: 15px; background: var(--lg-fill); color: var(--lg-accent); font: inherit; font-size: 15px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
-        .ps-allow:disabled { opacity: .6; }
-        .ps-ok { width: 26px; height: 26px; border-radius: 50%; background: #34c759; color: #fff; display: inline-flex; align-items: center; justify-content: center; animation: psPop .3s cubic-bezier(.3,1.6,.5,1); }
-        .ps-na { font-size: 14px; color: var(--lg-hint); }
-        .ps-privacy { font-size: 12px; line-height: 1.4; color: var(--lg-hint); text-align: center; margin: 0 8px 22px; }
-        .ps-later { display: block; margin: 10px auto 0; font-weight: 500; }
-        @keyframes psPop { from { transform: scale(.4); } to { transform: none; } }
+        .pm-root { position: fixed; inset: 0; z-index: 10050; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        /* Taller than the screen: start at the top (centring would push the top and the button out of reach) */
+        .pm-root .lg-main { align-items: flex-start; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 32px); }
+        .pm-wrap { max-width: 420px; margin: auto 0; }
+        /* Solid strip behind the status bar, so the page never scrolls under the clock and icons */
+        .pm-root::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top, 0px); background: var(--lg-bg); z-index: 3; }
+        .pm-hero { display: flex; justify-content: center; margin: 0 auto 10px; animation: pmHeroIn .6s cubic-bezier(.2,.9,.25,1) both; }
+        @keyframes pmHeroIn { from { opacity: 0; transform: scale(.88); } to { opacity: 1; transform: none; } }
+        @media (prefers-reduced-motion: reduce) { .pm-hero { animation: none; } }
+        .pm-sub { white-space: normal !important; line-height: 1.4; }
+        .pm-list { margin-bottom: 12px; }
+        .pm-item { display: flex; align-items: flex-start; gap: 14px; padding: 14px 14px 14px 16px; position: relative; }
+        .pm-item + .pm-item::before { content: ''; position: absolute; top: 0; left: 66px; right: 0; height: .5px; background: var(--lg-sep); }
+        .pm-text { flex: 1; min-width: 0; }
+        .pm-title { font-size: 16px; font-weight: 600; color: var(--lg-text); margin-bottom: 2px; }
+        .pm-why { font-size: 13px; line-height: 1.38; color: var(--lg-sub); }
+        .pm-blocked { margin-top: 6px; font-size: 12px; color: var(--lg-red); line-height: 1.35; }
+        .pm-act { flex: none; align-self: center; }
+        .pm-allow { min-width: 68px; height: 30px; padding: 0 14px; border: none; border-radius: 15px; background: var(--lg-fill); color: var(--lg-accent); font: inherit; font-size: 15px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+        .pm-allow:disabled { opacity: .6; }
+        .pm-ok { width: 26px; height: 26px; border-radius: 50%; background: #34c759; color: #fff; display: inline-flex; align-items: center; justify-content: center; animation: pmPop .3s cubic-bezier(.3,1.6,.5,1); }
+        .pm-na { font-size: 14px; color: var(--lg-hint); }
+        .pm-privacy { font-size: 12px; line-height: 1.4; color: var(--lg-hint); text-align: center; margin: 0 8px 22px; }
+        .pm-later { display: block; margin: 10px auto 0; font-weight: 500; }
+        .pm-wrap::after { content: ''; display: block; height: calc(env(safe-area-inset-bottom, 0px) + 28px); } /* room above the phone's gesture bar */
+        @keyframes pmPop { from { transform: scale(.4); } to { transform: none; } }
       `}</style>
     </div>
   );
