@@ -8,7 +8,15 @@ import toast from 'react-hot-toast';
 import { getPendingOfflineQueue, syncPendingCases, subscribeSyncStatus } from '../../services/offlineSyncService';
 
 export default function EngineerDashboard({ currentUser, onOpenCase }) {
-  const firstName = currentUser?.name ? currentUser.name.split(' ')[0] : 'Engineer';
+  // Greeting name: the person's first real name — skips initials ("K.") and placeholder words
+  // from a default account name like "GCR Field Engineer"; falls back to the login name
+  const firstName = (() => {
+    const GENERIC = /^(gcr|gouru|field|engineer|admin|staff|user|test|valuer|mr|mrs|ms|dr|sri|smt)\.?$/i;
+    const word = String(currentUser?.name || '').split(/\s+/).find((w) => w.replace(/\./g, '').length > 2 && !GENERIC.test(w));
+    if (word) return word.charAt(0).toUpperCase() + word.slice(1);
+    const login = String(currentUser?.username || '').split(/[@._]/)[0];
+    return login ? login.charAt(0).toUpperCase() + login.slice(1) : 'there';
+  })();
 
   const [cases, setCases] = useState([]);
   const [offlineCount, setOfflineCount] = useState(0);

@@ -170,6 +170,10 @@ export default function PullDownReach({ scrollSelector, disabled = false, childr
         .reach-settled .reach-top { z-index: 2; }
         .reach-settled .reach-page { overflow: visible; }
         .reach-settled .reach-page > .admin-portal-wrapper { height: calc(100vh - var(--reach-offset, 0px)); }
+        /* Headers pinned to the top of the screen (engineer app) come down with the page */
+        .reach-settled .reach-page .top-header { top: var(--reach-offset, 0px); }
+        .reach-settled .reach-page .top-header.eng-navbar { padding-top: 8px; } /* no status bar above it while lowered */
+        .reach-settled .reach-page .main-content { padding-top: 76px; } /* room for the header only, not the status bar */
         .reach-anim { transition: transform .42s cubic-bezier(.2,.9,.25,1), border-radius .42s; }
         @media (prefers-reduced-motion: reduce) { .reach-anim { transition: none; } }
       `}</style>
