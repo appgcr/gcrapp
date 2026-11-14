@@ -35,9 +35,27 @@ export default function PullDownReach({ scrollSelector, disabled = false, childr
   const drag = useRef(null);
   const rootRef = useRef(null);
   const pageRef = useRef(null);
-  const set = (o, p) => { offsetRef.current = o; setOffset(o); if (p) { phaseRef.current = p; setPhase(p); } };
+  // Once the screen has settled down, it is moved with real layout (top) rather than a transform:
+  // iOS web views hit-test scrolling areas at their un-transformed place, so taps would miss.
+  const [settled, setSettled] = useState(false);
+  const settleTimer = useRef(null);
+  const set = (o, p) => {
+    offsetRef.current = o; setOffset(o);
+    if (p) { phaseRef.current = p; setPhase(p); }
+    clearTimeout(settleTimer.current);
+    if (p === 'lowered') settleTimer.current = setTimeout(() => { if (phaseRef.current === 'lowered') setSettled(true); }, 450);
+    else setSettled(false);
+  };
   const lowerTo = () => Math.round(window.innerHeight * LOWER_RATIO);
-  const raise = () => { set(0, 'moving'); setTimeout(() => { if (phaseRef.current === 'moving' && offsetRef.current === 0) set(0, 'idle'); }, 380); };
+  const raise = () => {
+    // Back to the transform at the same spot first (no jump), then slide up on the next frames
+    setSettled(false); clearTimeout(settleTimer.current);
+    phaseRef.current = 'moving'; setPhase('moving');
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      set(0, 'moving');
+      setTimeout(() => { if (phaseRef.current === 'moving' && offsetRef.current === 0) set(0, 'idle'); }, 450);
+    }));
+  };
 
   useEffect(() => {
     if (disabled) { if (phaseRef.current !== 'idle') set(0, 'idle'); return undefined; }
@@ -128,7 +146,7 @@ export default function PullDownReach({ scrollSelector, disabled = false, childr
   }, [disabled, scrollSelector]);
 
   const active = phase !== 'idle';
-  const animate = phase === 'lowered' || phase === 'moving';
+  const animate = (phase === 'lowered' || phase === 'moving') && !settled;
   return (
     <div className={`reach ${active ? 'reach-on' : ''}`} ref={rootRef}>
       {active && (
@@ -141,7 +159,10 @@ export default function PullDownReach({ scrollSelector, disabled = false, childr
       <div
         ref={pageRef}
         className={`reach-page ${animate ? 'reach-anim' : ''}`}
-        style={active ? { transform: `translate3d(0, ${offset}px, 0)`, borderRadius: offset > 4 ? '30px 30px 0 0' : 0 } : undefined}
+        style={active ? {
+          ...(settled ? { top: offset, transform: 'none' } : { transform: `translate3d(0, ${offset}px, 0)` }),
+          borderRadius: offset > 4 ? '30px 30px 0 0' : 0
+        } : undefined}
       >
         {children}
       </div>
@@ -152,7 +173,7 @@ export default function PullDownReach({ scrollSelector, disabled = false, childr
           background: radial-gradient(120% 90% at 50% 0%, #1e3a8a 0%, #0b1533 72%); color: #f6c85c; }
         .reach-handle { transition: opacity .15s; filter: drop-shadow(0 2px 6px rgba(0,0,0,.35)); }
         .reach-on .reach-page { position: relative; z-index: 1; overflow: hidden; background: var(--bg-app, #f2f2f7);
-          box-shadow: 0 -12px 34px rgba(0,0,0,.4); will-change: transform; }
+          box-shadow: 0 -12px 34px rgba(0,0,0,.4); }
         .reach-anim { transition: transform .42s cubic-bezier(.2,.9,.25,1), border-radius .42s; }
         @media (prefers-reduced-motion: reduce) { .reach-anim { transition: none; } }
       `}</style>
