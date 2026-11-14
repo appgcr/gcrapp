@@ -87,16 +87,10 @@ function formatDurationText(hours) {
 function resolveImageUrl(url) {
   if (!url) return '';
   if (url.startsWith('data:')) return url;
-  if (url.startsWith('/uploads/')) {
-    const host = (typeof window !== 'undefined' && window.location && window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
-      ? `${window.location.protocol}//${window.location.hostname}:5001`
-      : 'http://localhost:5001';
-    return `${host}${url}`;
-  }
+  // Stored photos live on the API server (the live server in the app, localhost only in development)
+  if (url.startsWith('/uploads/')) return `${API_BASE_URL}${url}`;
   if (url.startsWith('/')) return url;
-  if (url.includes('localhost:5001') && typeof window !== 'undefined' && window.location && window.location.hostname && window.location.hostname !== 'localhost') {
-    return url.replace('localhost:5001', `${window.location.hostname}:5001`);
-  }
+  if (url.includes('localhost:5001')) return url.replace(/^https?:\/\/localhost:5001/, API_BASE_URL);
   return url;
 }
 
