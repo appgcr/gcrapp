@@ -38,6 +38,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
     branchId: scope !== 'all' ? scope : '',
     borrowerName: '',
     bankName: '',
+    bankBranch: '',
     mobileNumber: '',
     note: '',
     assignedStaffId: '',
@@ -45,6 +46,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
     date: '',
     time: ''
   });
+  const [branchTyping, setBranchTyping] = useState(false); // "Other branch" chosen → type it
 
   // Return for Corrections Modal State (Defect 02)
   const [returnModalOpen, setReturnModalOpen] = useState(false);
@@ -206,6 +208,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
       const payload = {
         clientName: newTask.borrowerName,
         bankName: chosenBank ? chosenBank.name : '',
+        bankBranch: chosenBank ? (newTask.bankBranch || '').trim() : '',
         clientPhone: newTask.mobileNumber,
         note: newTask.note,
         locationData: newTask.address,
@@ -252,7 +255,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
 
       toast.success(newTask.id ? (engineer ? "Task updated and assigned!" : "Task details updated!") : "Task created and assigned successfully!");
       saveRecentAddress(newTask.address);
-      setNewTask({ id: null, branchId: scope !== 'all' ? scope : '', borrowerName: '', bankName: '', mobileNumber: '', note: '', assignedStaffId: '', address: '', date: '', time: '' });
+      setNewTask({ id: null, branchId: scope !== 'all' ? scope : '', borrowerName: '', bankName: '', bankBranch: '', mobileNumber: '', note: '', assignedStaffId: '', address: '', date: '', time: '' });
       setIsCreateFormOpen(false); // Close form on success
       fetchData();
     } catch (err) {
@@ -355,6 +358,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
       branchId: c.branchId || '',
       borrowerName: c.clientName || c.borrowerName || '',
       bankName: c.bankName || '',
+      bankBranch: c.bankBranch || '',
       mobileNumber: c.clientPhone || c.mobile || '',
       note: c.note || '',
       address: c.locationData || c.address || '',
@@ -603,7 +607,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
                     <button 
                       onClick={() => {
                         setIsCreateFormOpen(false);
-                        setNewTask({ id: null, branchId: scope !== 'all' ? scope : '', borrowerName: '', bankName: '', mobileNumber: '', note: '', assignedStaffId: '', address: '', date: '', time: '' });
+                        setNewTask({ id: null, branchId: scope !== 'all' ? scope : '', borrowerName: '', bankName: '', bankBranch: '', mobileNumber: '', note: '', assignedStaffId: '', address: '', date: '', time: '' });
                       }}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
                     >
@@ -648,7 +652,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
                       placeholder="Search or type bank name (or leave empty to assign later)..."
                       value={newTask.bankName}
                       onChange={e => {
-                        setNewTask({...newTask, bankName: e.target.value});
+                        setNewTask({...newTask, bankName: e.target.value, bankBranch: ''}); setBranchTyping(false);
                         setShowBankDropdown(true);
                       }}
                       onFocus={() => setShowBankDropdown(true)}
@@ -669,7 +673,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
                         <div 
                           key={bank}
                           onClick={() => {
-                            setNewTask({...newTask, bankName: bank});
+                            setNewTask({...newTask, bankName: bank, bankBranch: newTask.bankName === bank ? newTask.bankBranch : ''}); setBranchTyping(false);
                             setShowBankDropdown(false);
                           }}
                           onMouseDown={(e) => e.preventDefault()} 
@@ -700,6 +704,44 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
                     <span style={{ fontSize: '12px', color: '#c2410c', fontWeight: 600 }}>Pick a bank from the list</span>
                   )}
                 </div>
+
+                {pickedBank && (() => {
+                  const list = pickedBank.branches || [];
+                  const inList = list.some(b => b.toLowerCase() === (newTask.bankBranch || '').toLowerCase());
+                  const typing = list.length === 0 || branchTyping || (newTask.bankBranch && !inList);
+                  const fieldStyle = { padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', width: '100%', backgroundColor: '#fff' };
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>{pickedBank.shortName || pickedBank.name} Branch</label>
+                      {list.length > 0 && (
+                        <select
+                          style={fieldStyle}
+                          value={typing ? '__other' : (list.find(b => b.toLowerCase() === (newTask.bankBranch || '').toLowerCase()) || '')}
+                          onChange={e => {
+                            if (e.target.value === '__other') { setBranchTyping(true); setNewTask({ ...newTask, bankBranch: '' }); }
+                            else { setBranchTyping(false); setNewTask({ ...newTask, bankBranch: e.target.value }); }
+                          }}
+                        >
+                          <option value="">-- Select branch --</option>
+                          {list.map(b => <option key={b} value={b}>{b}</option>)}
+                          <option value="__other">Other branch (type it)</option>
+                        </select>
+                      )}
+                      {typing && (
+                        <input
+                          type="text"
+                          style={fieldStyle}
+                          placeholder="Type the branch name"
+                          value={newTask.bankBranch || ''}
+                          onChange={e => setNewTask({ ...newTask, bankBranch: e.target.value })}
+                        />
+                      )}
+                      {list.length === 0 && (
+                        <span style={{ fontSize: '12px', color: '#64748b' }}>{superAdmin ? 'Add this bank’s branches in Settings → Banks to pick from a list.' : 'The Super Admin can add this bank’s branches in Settings → Banks.'}</span>
+                      )}
+                    </div>
+                  );
+                })()}
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Mobile Number *</label>

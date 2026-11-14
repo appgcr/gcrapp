@@ -148,6 +148,7 @@ function BankSheet({ bank, formats, onClose, onSaved }) {
     name: bank.name || '',
     shortName: bank.shortName || '',
     aliases: (bank.aliases || []).join(', '),
+    branches: (bank.branches || []).join('\n'),
     format: bank.format || 'standard',
     status: bank.status || 'Active',
     policies: Object.fromEntries(TYPES.map(([k]) => [k, {
@@ -205,6 +206,18 @@ function BankSheet({ bank, formats, onClose, onSaved }) {
           <label className="fs-row"><span>Other names</span><input value={form.aliases} onChange={set('aliases')} placeholder="Old names, comma separated" autoComplete="off" /></label>
         </div>
         <p className="fs-foot">Typing the short name or an old name anywhere in the app picks this bank.{!isNew && ' A new name replaces the old one on all this bank’s cases.'}</p>
+
+        <div className="fs-section">Branches</div>
+        <div className="fs-group">
+          <textarea
+            value={form.branches}
+            onChange={set('branches')}
+            rows={5}
+            placeholder={'One branch per line, e.g.\nITI Road\n7 Roads\nRACPC Kadapa'}
+            style={{ width: '100%', border: 0, outline: 'none', resize: 'vertical', padding: '12px 16px', font: 'inherit', fontSize: 16, lineHeight: 1.5, background: 'transparent', color: 'inherit', boxSizing: 'border-box' }}
+          />
+        </div>
+        <p className="fs-foot">These show as a list when a case for this bank is created.</p>
 
         <div className="fs-section">Report</div>
         <div className="fs-group">

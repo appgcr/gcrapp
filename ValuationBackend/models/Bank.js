@@ -10,6 +10,7 @@ const bankSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },              // Andhra Pradesh Grameena Bank
   shortName: { type: String, default: '', trim: true },            // APGB
   aliases: { type: [String], default: [] },                        // other spellings / old names
+  branches: { type: [String], default: [] },                       // this bank's branches (ITI Road, 7 Roads…)
   // Which report layout the bank uses: 'apgb' = the bank's own exact format (installed),
   // 'standard' = the general GCR report until that bank's format is supplied
   format: { type: String, default: 'standard' },

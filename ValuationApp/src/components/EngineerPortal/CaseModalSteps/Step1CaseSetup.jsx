@@ -31,6 +31,9 @@ export default function Step1CaseSetup({
       <Lock size={12} /> Set by your admin
     </div>
   );
+  // Branches of the chosen bank (Settings → Banks), offered as suggestions
+  const chosenBank = bankRecords.find(b => b.name === bankName);
+  const bankBranchOptions = chosenBank?.branches || [];
   const filteredBanks = (bankRecords.length ? searchBanks(bankRecords, bankName).map(b => b.name)
     : availableBanks.filter(b => b.toLowerCase().includes(bankName.toLowerCase())));
 
@@ -142,8 +145,16 @@ export default function Step1CaseSetup({
             placeholder="e.g. Police Lane Branch"
             value={bankBranch}
             onChange={e => setBankBranch(e.target.value)}
-            style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', border: '2px solid var(--border-color)', fontSize: '14px', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
+            readOnly={!!lockedFields.bankBranch}
+            list={!lockedFields.bankBranch && bankBranchOptions.length ? 'bank-branch-suggestions' : undefined}
+            style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', border: '2px solid var(--border-color)', fontSize: '14px', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', ...(lockedFields.bankBranch ? lockStyle : {}) }}
           />
+          {lockedFields.bankBranch && <LockNote />}
+          {bankBranchOptions.length > 0 && (
+            <datalist id="bank-branch-suggestions">
+              {bankBranchOptions.map(b => <option key={b} value={b} />)}
+            </datalist>
+          )}
         </div>
         <div>
           <label style={{ display: 'block', fontSize: '13.5px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '6px' }}>

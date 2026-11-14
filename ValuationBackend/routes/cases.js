@@ -244,6 +244,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
       if (!existingCase.selfFiled) {
         if (existingCase.clientName) { delete updateData.clientName; delete updateData.borrowerName; }
         if (existingCase.bankName) delete updateData.bankName;
+        if (existingCase.bankBranch) delete updateData.bankBranch;
         if (existingCase.clientPhone) delete updateData.clientPhone;
       }
       if (['Approved', 'Rejected', 'Returned', 'Completed'].includes(updateData.status)) {

@@ -59,7 +59,7 @@ export default function CaseCreationModal({
   const [clientName, setClientName] = useState('');
   const [clientFatherName, setClientFatherName] = useState('');
   // Client name and bank set by the admin on an assigned case: shown, not editable
-  const [lockedFields, setLockedFields] = useState({ clientName: false, bankName: false });
+  const [lockedFields, setLockedFields] = useState({ clientName: false, bankName: false, bankBranch: false });
   
   // Bank & District State (Dynamic)
   // One bank list for the whole app (Super Admin → Settings → Banks)
@@ -241,7 +241,7 @@ export default function CaseCreationModal({
     setShowDraftPrompt(null);
     
     // Reset state
-    setClientName(''); setLockedFields({ clientName: false, bankName: false });
+    setClientName(''); setLockedFields({ clientName: false, bankName: false, bankBranch: false });
     setClientFatherName('');
     setBankName('');
     setBankBranch('');
@@ -280,7 +280,7 @@ export default function CaseCreationModal({
       const fullCase = await res.json();
       
       setClientName(fullCase.clientName || fullCase.borrowerName || '');
-      setLockedFields({ clientName: !fullCase.selfFiled && !!(fullCase.clientName || fullCase.borrowerName), bankName: !fullCase.selfFiled && !!fullCase.bankName });
+      setLockedFields({ clientName: !fullCase.selfFiled && !!(fullCase.clientName || fullCase.borrowerName), bankName: !fullCase.selfFiled && !!fullCase.bankName, bankBranch: !fullCase.selfFiled && !!fullCase.bankBranch });
       setClientFatherName(fullCase.clientFatherName || '');
       setBankName(fullCase.bankName || '');
       setBankBranch(fullCase.bankBranch || '');
@@ -489,7 +489,7 @@ export default function CaseCreationModal({
       .then(res => res.json())
       .then(fullCase => {
         setClientName(fullCase.clientName || fullCase.borrowerName || '');
-        setLockedFields({ clientName: !fullCase.selfFiled && !!(fullCase.clientName || fullCase.borrowerName), bankName: !fullCase.selfFiled && !!fullCase.bankName });
+        setLockedFields({ clientName: !fullCase.selfFiled && !!(fullCase.clientName || fullCase.borrowerName), bankName: !fullCase.selfFiled && !!fullCase.bankName, bankBranch: !fullCase.selfFiled && !!fullCase.bankBranch });
         setClientFatherName(fullCase.clientFatherName || '');
         setBankName(fullCase.bankName || '');
         setBankBranch(fullCase.bankBranch || '');
@@ -1379,7 +1379,7 @@ export default function CaseCreationModal({
     });
     
     setModalStep(0);
-    setClientName(''); setLockedFields({ clientName: false, bankName: false });
+    setClientName(''); setLockedFields({ clientName: false, bankName: false, bankBranch: false });
     setClientFatherName('');
     setBankName('');
     setBankBranch('');

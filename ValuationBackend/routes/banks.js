@@ -16,6 +16,15 @@ function clean(body = {}) {
     const list = Array.isArray(body.aliases) ? body.aliases : String(body.aliases).split(',');
     out.aliases = [...new Set(list.map((a) => String(a).trim()).filter(Boolean))];
   }
+  if (body.branches !== undefined) {
+    const list = Array.isArray(body.branches) ? body.branches : String(body.branches).split(/[\n,]/);
+    const seen = new Set();
+    out.branches = list.map((b) => String(b).trim().replace(/\s+/g, ' ').slice(0, 80)).filter((b) => {
+      const k = b.toLowerCase();
+      if (!b || seen.has(k)) return false;
+      seen.add(k); return true;
+    }).slice(0, 300);
+  }
   if (body.format !== undefined) {
     if (!banks.FORMATS.some((f) => f.key === body.format)) throw new Error('Unknown report format.');
     out.format = body.format;
