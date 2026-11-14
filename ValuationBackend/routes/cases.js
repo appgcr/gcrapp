@@ -239,6 +239,13 @@ router.put('/:id', authenticateToken, async (req, res) => {
       // Engineers can't reassign cases or make decisions
       delete updateData.assignedEngineerId;
       delete updateData.assignedEngineerName;
+      delete updateData.selfFiled;
+      // On a case the admin assigned, the client and bank the admin entered stay as they are
+      if (!existingCase.selfFiled) {
+        if (existingCase.clientName) { delete updateData.clientName; delete updateData.borrowerName; }
+        if (existingCase.bankName) delete updateData.bankName;
+        if (existingCase.clientPhone) delete updateData.clientPhone;
+      }
       if (['Approved', 'Rejected', 'Returned', 'Completed'].includes(updateData.status)) {
         return res.status(403).json({ error: 'Only an admin can approve, reject or return a case.' });
       }

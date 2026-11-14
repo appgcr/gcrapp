@@ -58,6 +58,8 @@ export default function CaseCreationModal({
   const [modalStep, setModalStep] = useState(1); 
   const [clientName, setClientName] = useState('');
   const [clientFatherName, setClientFatherName] = useState('');
+  // Client name and bank set by the admin on an assigned case: shown, not editable
+  const [lockedFields, setLockedFields] = useState({ clientName: false, bankName: false });
   
   // Bank & District State (Dynamic)
   // One bank list for the whole app (Super Admin → Settings → Banks)
@@ -239,7 +241,7 @@ export default function CaseCreationModal({
     setShowDraftPrompt(null);
     
     // Reset state
-    setClientName('');
+    setClientName(''); setLockedFields({ clientName: false, bankName: false });
     setClientFatherName('');
     setBankName('');
     setBankBranch('');
@@ -278,6 +280,7 @@ export default function CaseCreationModal({
       const fullCase = await res.json();
       
       setClientName(fullCase.clientName || fullCase.borrowerName || '');
+      setLockedFields({ clientName: !fullCase.selfFiled && !!(fullCase.clientName || fullCase.borrowerName), bankName: !fullCase.selfFiled && !!fullCase.bankName });
       setClientFatherName(fullCase.clientFatherName || '');
       setBankName(fullCase.bankName || '');
       setBankBranch(fullCase.bankBranch || '');
@@ -486,6 +489,7 @@ export default function CaseCreationModal({
       .then(res => res.json())
       .then(fullCase => {
         setClientName(fullCase.clientName || fullCase.borrowerName || '');
+        setLockedFields({ clientName: !fullCase.selfFiled && !!(fullCase.clientName || fullCase.borrowerName), bankName: !fullCase.selfFiled && !!fullCase.bankName });
         setClientFatherName(fullCase.clientFatherName || '');
         setBankName(fullCase.bankName || '');
         setBankBranch(fullCase.bankBranch || '');
@@ -1174,7 +1178,7 @@ export default function CaseCreationModal({
         netExtent: extracted.area !== 'To be verified' ? extracted.area : prev.netExtent
       }));
 
-      if (extracted.ownerName !== "To be verified") {
+      if (extracted.ownerName !== "To be verified" && !lockedFields.clientName) {
         setClientName(extracted.ownerName);
       }
 
@@ -1375,7 +1379,7 @@ export default function CaseCreationModal({
     });
     
     setModalStep(0);
-    setClientName('');
+    setClientName(''); setLockedFields({ clientName: false, bankName: false });
     setClientFatherName('');
     setBankName('');
     setBankBranch('');
@@ -1622,6 +1626,7 @@ export default function CaseCreationModal({
                 setPropertyType={(v) => setPropertyDetails(prev => ({ ...prev, propertyType: v }))}
                 clientName={clientName}
                 setClientName={setClientName}
+                lockedFields={lockedFields}
                 clientFatherName={clientFatherName}
                 setClientFatherName={setClientFatherName}
                 bankName={bankName}

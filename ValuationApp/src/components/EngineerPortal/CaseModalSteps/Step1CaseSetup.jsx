@@ -1,6 +1,6 @@
 import { searchBanks } from '../../../utils/banks';
 import React from 'react';
-import { User, Building, ChevronDown, ChevronRight } from 'lucide-react';
+import { User, Building, ChevronDown, ChevronRight, Lock } from 'lucide-react';
 
 export default function Step1CaseSetup({
   clientName,
@@ -22,8 +22,15 @@ export default function Step1CaseSetup({
   handleNextToUpload,
   propertyTypes = [],
   propertyType = '',
-  setPropertyType = () => {}
+  setPropertyType = () => {},
+  lockedFields = {}
 }) {
+  const lockStyle = { backgroundColor: 'var(--bg-app)', color: 'var(--text-muted)', cursor: 'not-allowed' };
+  const LockNote = () => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
+      <Lock size={12} /> Set by your admin
+    </div>
+  );
   const filteredBanks = (bankRecords.length ? searchBanks(bankRecords, bankName).map(b => b.name)
     : availableBanks.filter(b => b.toLowerCase().includes(bankName.toLowerCase())));
 
@@ -40,10 +47,12 @@ export default function Step1CaseSetup({
             placeholder="Enter client's full name"
             value={clientName}
             onChange={e => setClientName(e.target.value)}
-            autoFocus
-            style={{ width: '100%', padding: '16px 16px 16px 42px', borderRadius: '12px', border: '2px solid var(--border-color)', fontSize: '16px', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
+            readOnly={!!lockedFields.clientName}
+            autoFocus={!lockedFields.clientName}
+            style={{ width: '100%', padding: '16px 16px 16px 42px', borderRadius: '12px', border: '2px solid var(--border-color)', fontSize: '16px', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', ...(lockedFields.clientName ? lockStyle : {}) }}
           />
         </div>
+        {lockedFields.clientName && <LockNote />}
       </div>
 
       <div style={{ marginBottom: '16px' }}>
@@ -73,17 +82,22 @@ export default function Step1CaseSetup({
             placeholder="Search or type bank name..."
             value={bankName}
             onChange={e => {
+              if (lockedFields.bankName) return;
               setBankName(e.target.value);
               setShowBankDropdown(true);
             }}
-            onFocus={() => setShowBankDropdown(true)}
+            readOnly={!!lockedFields.bankName}
+            onFocus={() => { if (!lockedFields.bankName) setShowBankDropdown(true); }}
             onBlur={() => setTimeout(() => setShowBankDropdown(false), 200)}
-            style={{ width: '100%', padding: '16px 42px', borderRadius: '12px', border: '2px solid var(--border-color)', fontSize: '16px', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
+            style={{ width: '100%', padding: '16px 42px', borderRadius: '12px', border: '2px solid var(--border-color)', fontSize: '16px', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', ...(lockedFields.bankName ? lockStyle : {}) }}
           />
-          <ChevronDown size={20} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+          {lockedFields.bankName
+            ? <Lock size={18} style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+            : <ChevronDown size={20} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />}
         </div>
+        {lockedFields.bankName && <LockNote />}
         
-        {showBankDropdown && (filteredBanks.length > 0 || bankName.trim() !== '') && (
+        {!lockedFields.bankName && showBankDropdown && (filteredBanks.length > 0 || bankName.trim() !== '') && (
           <div style={{
             position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '8px',
             backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px',
