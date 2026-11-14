@@ -1,7 +1,6 @@
 import React from 'react';
 import { DOC_ACCEPT, isWordFile, resolveDocUrl } from '../../../utils/docFiles';
 import {
-  ShieldAlert,
   ScanLine,
   CheckCircle2,
   AlertCircle,
@@ -60,7 +59,6 @@ export default function Step2LegalDocs({
       {!isCameraActive ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           <div style={{ padding: '10px 12px', backgroundColor: 'rgba(234, 179, 8, 0.08)', border: '1px solid #eab308', borderRadius: '10px', display: 'flex', gap: '8px', marginBottom: '14px', alignItems: 'flex-start' }}>
-            <ShieldAlert size={18} color="#ca8a04" style={{ flexShrink: 0, marginTop: '2px' }} />
             <span style={{ fontSize: '12px', color: '#854d0e', lineHeight: '1.45' }}>
               <strong>Strict Validation Active:</strong> Every upload is scanned by Mahe AI using OCR text analysis. PDFs, Word files and photos of any size are verified. Duplicate files are detected via content-hash — renaming a file will not bypass this. Irrelevant documents are rejected immediately. You can add multiple pages per document.
             </span>

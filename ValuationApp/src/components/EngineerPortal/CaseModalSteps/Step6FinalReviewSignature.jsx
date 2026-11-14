@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { CheckSquare, Eye, UploadCloud, PenTool, ShieldAlert, Coins, TrendingDown, Building, ShieldCheck } from 'lucide-react';
+import { CheckSquare, Eye, UploadCloud, PenTool, Coins, TrendingDown, Building, ShieldCheck } from 'lucide-react';
 import SignatureCanvas from 'react-signature-canvas';
 import toast from 'react-hot-toast';
 import { getPageDisplayInfo } from './caseModalHelpers';
@@ -336,7 +336,6 @@ export default function Step6FinalReviewSignature({
       {/* Submit Confirmation Modal */}
       {showSubmitModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(255,255,255,0.95)', zIndex: 300, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px', animation: 'fadeIn 0.2s ease-out' }}>
-          <ShieldAlert size={48} color="var(--primary)" style={{ marginBottom: '16px' }} />
           <h3 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '12px', textAlign: 'center' }}>Are you sure you want to submit?</h3>
           <p style={{ fontSize: '14px', color: 'var(--text-muted)', textAlign: 'center', marginBottom: '32px', lineHeight: '1.5' }}>
             By clicking "Yes", this application will be digitally signed and securely submitted to the Admin Portal. This action cannot be undone.

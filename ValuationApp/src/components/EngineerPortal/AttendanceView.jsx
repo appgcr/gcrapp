@@ -20,7 +20,6 @@ import {
   FileText,
   Building,
   UserCheck,
-  ShieldAlert,
   Compass,
   ArrowRight,
   ExternalLink,

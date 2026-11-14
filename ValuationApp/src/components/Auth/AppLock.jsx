@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Fingerprint, LogOut, ShieldAlert } from 'lucide-react';
+import { Fingerprint, LogOut } from 'lucide-react';
 import { NativeBiometric } from '@capgo/capacitor-native-biometric';
 import GcrLogo from '../Shared/GcrLogo';
 import './LoginScreen.css';
@@ -56,7 +56,7 @@ export default function AppLock({ onUnlock, onFallback }) {
               <Fingerprint size={20} /> Unlock with Face ID or Fingerprint
             </button>
           ) : (
-            <div className="lk-note"><ShieldAlert size={16} style={{ verticalAlign: '-3px', marginRight: 6 }} />Face ID / fingerprint isn’t set up on this device.</div>
+            <div className="lk-note">Face ID / fingerprint isn’t set up on this device.</div>
           )}
           <button className="lg-secondary" style={{ marginTop: 12 }} onClick={onFallback}>
             <LogOut size={18} /> Sign in with Password
