@@ -149,6 +149,13 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
     else if (defaultFilter === '') setActiveTab('NEW');
   }, [defaultFilter]);
 
+  // The inspection date/time is the moment the case is given to staff — nobody types it.
+  const assignStamp = () => {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return { inspectionDate: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, inspectionTime: `${pad(d.getHours())}:${pad(d.getMinutes())}` };
+  };
+
   const handleAssign = async (caseId) => {
     const engineerId = assignments[caseId];
     if (!engineerId) return toast.error('Choose an engineer first.');
@@ -159,7 +166,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
       const res = await fetch(`${API_BASE_URL}/api/cases/${caseId}`, {
         method: 'PUT',
         headers: authHeaders(),
-        body: JSON.stringify({ assignedEngineerId: engineer.id, assignedEngineerName: engineer.name, status: 'Pending' })
+        body: JSON.stringify({ assignedEngineerId: engineer.id, assignedEngineerName: engineer.name, status: 'Pending', ...assignStamp() })
       });
       if (!res.ok) throw new Error(await errorFrom(res, 'Could not assign the case'));
       toast.success(`Assigned to ${engineer.name}`);
@@ -203,9 +210,11 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
         note: newTask.note,
         locationData: newTask.address,
         address: newTask.address,
-        inspectionDate: newTask.date,
-        inspectionTime: newTask.time
       };
+      // New case, newly given to someone, or never stamped → use the time of this assignment
+      const original = newTask.id ? cases.find(c => c.id === newTask.id) : null;
+      const staffChanged = !!engineer && (!original || original.assignedEngineerId !== engineer.id);
+      if (!newTask.id || staffChanged || !newTask.date) Object.assign(payload, assignStamp());
       if (superAdmin && !newTask.id) payload.branchId = newTask.branchId;
 
       if (engineer) {
@@ -800,28 +809,10 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
                   )}
                 </div>
 
-                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: '1 1 130px' }}>
-                    <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Inspection Date *</label>
-                    <input 
-                      type="date" 
-                      required
-                      min={new Date().toISOString().split('T')[0]}
-                      style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', width: '100%' }}
-                      value={newTask.date}
-                      onChange={e => setNewTask({...newTask, date: e.target.value})}
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: '1 1 130px' }}>
-                    <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Inspection Time *</label>
-                    <input 
-                      type="time" 
-                      required
-                      style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', width: '100%' }}
-                      value={newTask.time}
-                      onChange={e => setNewTask({...newTask, time: e.target.value})}
-                    />
-                  </div>
+                <div style={{ fontSize: '13px', color: '#475569', background: '#f1f5f9', borderRadius: '8px', padding: '10px 12px' }}>
+                  🕒 Inspection date &amp; time: {newTask.id && newTask.date
+                    ? <b>{fmtInspection({ inspectionDate: newTask.date, inspectionTime: newTask.time })}</b>
+                    : <b>set automatically when you assign</b>}
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
