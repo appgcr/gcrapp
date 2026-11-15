@@ -21,6 +21,7 @@ import Step1CaseSetup from './Step1CaseSetup';
 import Step2LegalDocs from './Step2LegalDocs';
 import Step3PropertyDetails from './Step3PropertyDetails';
 import Step3CheckDetails, { missingDocDetails } from './Step3CheckDetails';
+import CaseStepper, { stepIndex } from './CaseStepper';
 import Step4SiteImages from './Step4SiteImages';
 import Step5ExtractedDataReview from './Step5ExtractedDataReview';
 import Step6FinalReviewSignature from './Step6FinalReviewSignature';
@@ -1666,6 +1667,20 @@ export default function CaseCreationModal({
               <X size={22} color="var(--text-muted)" />
             </button>
           </div>
+
+            {/* Step-by-step progress */}
+            {modalStep >= 1 && (
+              <CaseStepper
+                current={stepIndex(modalStep, step3Phase)}
+                onGo={(i) => {
+                  // Only finished steps can be tapped: go back to them
+                  if (i <= 1) { setModalStep(i + 1); return; }
+                  if (i === 2) { setModalStep(3); setStep3Phase('check'); return; }
+                  if (i === 3) { setModalStep(3); setTimeout(() => setStep3Phase('site'), 0); return; }
+                  if (i === 4) setModalStep(4);
+                }}
+              />
+            )}
 
             {/* STEP 1: Case Setup */}
             {modalStep === 1 && (
