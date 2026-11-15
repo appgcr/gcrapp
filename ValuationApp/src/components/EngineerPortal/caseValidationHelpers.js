@@ -1447,6 +1447,15 @@ const applyExtractedMeta = (
     next.deedYear = deedYear;
   }
 
+  // Guideline (SRO) rate from the Market Value certificate → the report's "Guideline rate per Sqyd"
+  const guideline = getVal(meta.guidelineRate);
+  const guideNum = guideline ? guideline.replace(/[^\d.]/g, '') : '';
+  if (guideNum && Number(guideNum) > 0 && !getVal(next.report?.guidelineRatePerSqyd)) {
+    next.guidelineRate = guideNum;
+    next.report = { ...(next.report || {}), guidelineRatePerSqyd: guideNum };
+    notifications.push(`Guideline rate ₹${Number(guideNum).toLocaleString('en-IN')} per Sq.yd detected & auto-filled!`);
+  }
+
   const khathaNo = getVal(meta.khathaNo || meta.khataNo);
   if (khathaNo && isGarbage(next.khathaNo)) {
     next.khathaNo = khathaNo;

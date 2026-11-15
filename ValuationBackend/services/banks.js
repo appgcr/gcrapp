@@ -174,6 +174,19 @@ async function bankInfoForReport(caseObj) {
   if (!bank) return caseObj;
   const fmt = await reportFormatFor(bank.name);
   const out = { ...caseObj, reportFormat: fmt, bankPolicy: bank.policies || {} };
+  // Site sizes are entered once (Step 3 → Boundary Dimensions); the bank formats read them as report.dimDeed* / dimActual*
+  const pd = out.propertyDetails || {};
+  if (pd.dimensionsDoc || pd.dimensionsActual || pd.guidelineRate) {
+    const unit = pd.dimensionUnit || 'Feet';
+    const withUnit = (v) => { const t = String(v == null ? '' : v).trim(); return !t ? '' : /[a-z’'"”]/i.test(t) ? t : `${t} ${unit}`; };
+    const rep = { ...(pd.report || {}) };
+    for (const side of ['North', 'South', 'East', 'West']) {
+      const k = side.toLowerCase();
+      if (!rep[`dimDeed${side}`] && withUnit(pd.dimensionsDoc?.[k])) rep[`dimDeed${side}`] = withUnit(pd.dimensionsDoc[k]);
+      if (!rep[`dimActual${side}`] && withUnit(pd.dimensionsActual?.[k])) rep[`dimActual${side}`] = withUnit(pd.dimensionsActual[k]);
+    }
+    out.propertyDetails = { ...pd, report: rep };
+  }
   // The branch's own letterhead / valuer (Settings → Letterhead); empty = the formats' Kadapa letterhead
   if (caseObj.branchId && out.branchLetterhead === undefined) {
     const Branch = require('../models/Branch');

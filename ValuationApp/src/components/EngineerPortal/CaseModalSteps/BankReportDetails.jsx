@@ -19,8 +19,7 @@ export function reportFormatFor(propertyType = '') {
   return 'house';
 }
 
-const SIDES = ['East', 'West', 'North', 'South'];
-const dims = (prefix, label, hint) => SIDES.map(s => ({ key: `${prefix}${s}`, label: `${label} – ${s}`, hint }));
+// Site sizes are entered once, in Step 3 → Boundary Dimensions; the report takes them from there
 
 const LOCATION = {
   title: 'Location wording',
@@ -44,8 +43,6 @@ const GROUPS = {
         { key: 'netExtentPlanRaw', label: 'Net extent as per plan', hint: '2.83 Cents' },
         { key: 'marketRatePerCent', label: 'Market rate per cent (Rs)', hint: '14,25,000', num: true },
         { key: 'guidelineRatePerSqyd', label: 'Guideline rate per Sqyd (Rs)', hint: '8,500', num: true },
-        ...dims('dimDeed', 'Size as per deed', '33.33 Links (or) 6.70 m'),
-        ...dims('dimActual', 'Size actual', 'same as deed if empty'),
       ],
     },
     {
@@ -99,7 +96,6 @@ const GROUPS = {
         { key: 'udsDeedRaw', label: 'Flat’s share – as per deed', hint: '0.91 Cents' },
         { key: 'udsPlanRaw', label: 'Flat’s share – as per plan', hint: '0.82 Cents' },
         { key: 'landRatePerSqyd', label: 'Land rate per Sqyd (Rs)', hint: '47,520', num: true },
-        ...dims('dimDeed', 'Site size', '50’0” (or) 15.25 m'),
       ],
     },
     {
@@ -129,8 +125,6 @@ const GROUPS = {
         { key: 'netExtentPlanRaw', label: 'Net extent as per plan', hint: '2.01 Cents' },
         { key: 'marketRatePerCent', label: 'Market rate per cent (Rs)', hint: '7,00,000', num: true },
         { key: 'guidelineRatePerSqyd', label: 'Guideline rate per Sqyd (Rs)', hint: '6,500', num: true },
-        ...dims('dimDeed', 'Size as per deed', '41.68 Links (or) 8.39 M'),
-        ...dims('dimActual', 'Size actual', 'same as deed if empty'),
       ],
     },
   ],
@@ -161,7 +155,6 @@ const GROUPS = {
         { key: 'landRatePerSqyd', label: 'Market rate per Sqyd (Rs)', hint: '11,500', num: true },
         { key: 'guidelineRatePerSqyd', label: 'Guideline rate per Sqyd (Rs)', hint: '10,800', num: true },
         { key: 'planAuthority', label: 'Plan issued by', hint: 'Issued By Inspectors Of Industries, Kadapa' },
-        ...dims('dimDeed', 'Size as per deed', '54.30 M'),
       ],
     },
     {
