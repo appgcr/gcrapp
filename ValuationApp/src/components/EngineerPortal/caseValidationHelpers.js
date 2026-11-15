@@ -1441,9 +1441,16 @@ const applyExtractedMeta = (
     notifications.push(`Deed No. ${deedNo} detected & auto-filled!`);
   }
 
-  const deedYear = getVal(meta.deedYear);
+  // Deed Date/Year box: the full registration date when the AI read it (e.g. 10-01-2024), else the year
+  const deedYear = getVal(meta.deedDate) || getVal(meta.deedYear);
   if (deedYear && isGarbage(next.deedYear)) {
     next.deedYear = deedYear;
+  }
+
+  const khathaNo = getVal(meta.khathaNo || meta.khataNo);
+  if (khathaNo && isGarbage(next.khathaNo)) {
+    next.khathaNo = khathaNo;
+    notifications.push(`Khatha No. ${khathaNo} detected & auto-filled!`);
   }
 
   // Survey numbers often carry sub-division letters, e.g. 482/1A, 347/2B1, 12A
