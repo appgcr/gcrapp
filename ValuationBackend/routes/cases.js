@@ -39,36 +39,34 @@ const {
 
 // GET /api/cases
 // GET /api/cases/value-map — finished valuations as map landmarks (Super Admin: every branch, admin: own)
-// Location: the site GPS saved with the case (engineer at the property), else the live trip position
+// Spot: site GPS saved with the case, else the sale-deed address found on the map (remembered on the case)
 router.get('/value-map', authenticateToken, async (req, res) => {
   try {
     if (!isAdmin(req.user)) return res.status(403).json({ error: 'Admins only.' });
+    const { locateCase } = require('../services/caseLocation');
     const rows = await ValuationCase.find({ $and: [caseFilter(req), { status: { $in: ['Approved', 'Completed'] } }] })
-      .select('id fileNumber clientName borrowerName bankName branchId status approvedAt updatedAt createdAt locationData address currentLocation assignedEngineerName propertyDetails.propertyType propertyDetails.netExtent valuation.fairMarketValue valuation.realizableValue valuation.distressSaleValue')
+      .select('id fileNumber clientName borrowerName bankName bankDistrict branchId status approvedAt updatedAt createdAt locationData address geo currentLocation assignedEngineerName propertyDetails valuation.fairMarketValue valuation.realizableValue valuation.distressSaleValue')
+      .sort({ approvedAt: -1, updatedAt: -1 })
       .lean();
-    const parseLoc = (r) => {
-      try {
-        const j = typeof r.locationData === 'string' && r.locationData.trim().startsWith('{') ? JSON.parse(r.locationData) : null;
-        if (j && Number.isFinite(+j.lat) && Number.isFinite(+j.lng) && !(+j.lat === 0 && +j.lng === 0)) return { lat: +j.lat, lng: +j.lng };
-      } catch { /* not GPS */ }
-      const c = r.currentLocation;
-      if (c && Number.isFinite(c.lat) && Number.isFinite(c.lng)) return { lat: c.lat, lng: c.lng };
-      return null;
-    };
-    const out = []; let noLocation = 0;
+    const out = []; const unplaced = [];
+    let lookups = 0;
     for (const r of rows) {
-      const loc = parseLoc(r);
-      if (!loc) { noLocation++; continue; }
-      out.push({
+      // New address lookups take ~1 s each (map service rule): a few per visit, the rest next time
+      const loc = await locateCase(r, { allowLookup: lookups < 6 });
+      if (loc.looked) lookups++;
+      const pd = r.propertyDetails || {};
+      const item = {
         id: r.id, fileNumber: r.fileNumber || '', clientName: r.clientName || r.borrowerName || '', bankName: r.bankName || '',
         branchId: r.branchId || '', status: r.status, date: r.approvedAt || r.updatedAt || r.createdAt,
-        address: (typeof r.locationData === 'string' && !r.locationData.trim().startsWith('{') ? r.locationData : '') || r.address || '',
-        engineer: r.assignedEngineerName || '', propertyType: r.propertyDetails?.propertyType || '', extent: r.propertyDetails?.netExtent || '',
+        address: loc.address || '', precision: loc.precision || null,
+        engineer: r.assignedEngineerName || '', propertyType: pd.propertyType || '', extent: pd.netExtent || '',
+        deedNo: pd.deedNo || '', surveyNo: pd.surveyNo || '',
         fmv: r.valuation?.fairMarketValue || 0, realizable: r.valuation?.realizableValue || 0, distress: r.valuation?.distressSaleValue || 0,
-        lat: loc.lat, lng: loc.lng,
-      });
+      };
+      if (Number.isFinite(loc.lat)) out.push({ ...item, lat: loc.lat, lng: loc.lng });
+      else unplaced.push(item);
     }
-    res.json({ cases: out, total: rows.length, noLocation });
+    res.json({ cases: out, unplaced, total: rows.length, noLocation: unplaced.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

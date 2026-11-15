@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { MapContainer, Marker, TileLayer, AttributionControl, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { X, FileText, Navigation, MapPin, Loader2, Building2, CalendarDays, User } from 'lucide-react';
+import { X, FileText, Navigation, MapPin, Loader2, Building2, CalendarDays, User, ChevronDown, Landmark, Crosshair } from 'lucide-react';
+import { getBranchScope } from '../../utils/session';
 import { API_BASE_URL } from '../../config/api';
 import SmoothBaseMap from '../Shared/SmoothBaseMap';
 import ReportViewer, { fetchReport } from '../Shared/ReportViewer';
@@ -60,6 +61,9 @@ export default function AdminValueMap() {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [bank, setBank] = useState('all');
+  const [branch, setBranch] = useState(() => getBranchScope());
+  const [branches, setBranches] = useState([]);
+  const [showUnplaced, setShowUnplaced] = useState(false);
   const [period, setPeriod] = useState('all');
   const [sel, setSel] = useState(null);
   const [report, setReport] = useState(null);
@@ -67,14 +71,15 @@ export default function AdminValueMap() {
   const onMapError = useCallback(() => setFallbackTiles(true), []);
 
   const load = useCallback(() => {
-    fetch(`${API_BASE_URL}/api/cases/value-map`)
+    fetch(`${API_BASE_URL}/api/cases/value-map`, { headers: { 'x-branch-scope': 'all' } })
       .then((r) => r.json().then((d) => (r.ok ? d : Promise.reject(new Error(d.error || 'Could not load')))))
       .then((d) => { setData(d); setError(''); })
       .catch((e) => setError(e.message));
   }, []);
   useEffect(() => {
     load();
-    const onScope = () => { setData(null); setSel(null); load(); };
+    fetch(`${API_BASE_URL}/api/branches`).then((r) => (r.ok ? r.json() : [])).then((d) => setBranches(Array.isArray(d) ? d : [])).catch(() => {});
+    const onScope = () => { setBranch(getBranchScope()); setSel(null); setSelGroup(null); };
     window.addEventListener('gcr_branch_scope', onScope);
     return () => window.removeEventListener('gcr_branch_scope', onScope);
   }, [load]);
@@ -82,8 +87,10 @@ export default function AdminValueMap() {
   const banks = useMemo(() => [...new Set((data?.cases || []).map((c) => c.bankName).filter(Boolean))].sort(), [data]);
   const shown = useMemo(() => {
     const since = period === 'all' ? 0 : Date.now() - Number(period) * 86400000;
-    return (data?.cases || []).filter((c) => (bank === 'all' || c.bankName === bank) && (!since || new Date(c.date).getTime() >= since));
-  }, [data, bank, period]);
+    return (data?.cases || []).filter((c) => (branch === 'all' || c.branchId === branch) && (bank === 'all' || c.bankName === bank) && (!since || new Date(c.date).getTime() >= since));
+  }, [data, bank, period, branch]);
+  const unplaced = useMemo(() => (data?.unplaced || []).filter((c) => (branch === 'all' || c.branchId === branch) && (bank === 'all' || c.bankName === bank)), [data, bank, branch]);
+  const branchName = (id) => { const b = branches.find((x) => x.id === id); return b ? (b.name || b.code || id) : id; };
   const total = shown.reduce((s, c) => s + (Number(c.fmv) || 0), 0);
   const points = useMemo(() => shown.map((c) => [c.lat, c.lng]), [shown]);
   // Valuations at the same spot (within ~10 m, e.g. flats in one building) share one pin
@@ -117,10 +124,22 @@ export default function AdminValueMap() {
       </div>
 
       <div className="vm-filters">
-        <select value={bank} onChange={(e) => { setBank(e.target.value); setSel(null); setSelGroup(null); }} aria-label="Bank">
-          <option value="all">All banks</option>
-          {banks.map((b) => <option key={b} value={b}>{b}</option>)}
-        </select>
+        <label className="vm-select">
+          <span className="vm-select-label"><Landmark size={13} /> Branch</span>
+          <select value={branch} onChange={(e) => { setBranch(e.target.value); setSel(null); setSelGroup(null); }}>
+            <option value="all">All branches</option>
+            {branches.map((b) => <option key={b.id} value={b.id}>{b.name || b.code || b.id}</option>)}
+          </select>
+          <ChevronDown size={16} className="vm-chev" />
+        </label>
+        <label className="vm-select">
+          <span className="vm-select-label"><Building2 size={13} /> Bank</span>
+          <select value={bank} onChange={(e) => { setBank(e.target.value); setSel(null); setSelGroup(null); }}>
+            <option value="all">All banks</option>
+            {banks.map((b) => <option key={b} value={b}>{b}</option>)}
+          </select>
+          <ChevronDown size={16} className="vm-chev" />
+        </label>
         <div className="vm-seg" role="tablist" aria-label="Period">
           {PERIODS.map(([k, label]) => (
             <button key={k} type="button" className={period === k ? 'on' : ''} onClick={() => { setPeriod(k); setSel(null); setSelGroup(null); }}>{label}</button>
@@ -142,7 +161,7 @@ export default function AdminValueMap() {
           ))}
           <FitTo points={points} focus={group} />
         </MapContainer>
-        {data && !shown.length && <div className="vm-overlay soft"><span>No finished valuations {bank !== 'all' || period !== 'all' ? 'for this filter' : 'here yet'}{data.noLocation ? ` with a site location` : ''}</span></div>}
+        {data && !shown.length && <div className="vm-overlay soft"><span>No finished valuations on the map {branch !== 'all' || bank !== 'all' || period !== 'all' ? 'for this filter' : 'yet'}</span></div>}
 
         {listing && (
           <div className="vm-card" role="dialog" aria-label="Valuations here">
@@ -169,7 +188,10 @@ export default function AdminValueMap() {
             <div className="vm-name">{selected.clientName || 'Client'}</div>
             <div className="vm-rows">
               <span><Building2 size={14} /> {selected.bankName || '—'}{selected.propertyType ? ` · ${selected.propertyType}` : ''}{selected.extent ? ` · ${selected.extent}` : ''}</span>
-              {selected.address && <span><MapPin size={14} /> {selected.address}</span>}
+              {selected.address && <span><MapPin size={14} /> <em className="vm-addr"><b>As per sale deed:</b> {selected.address}</em></span>}
+              <span className={`vm-prec ${selected.precision === 'site' ? 'exact' : ''}`}><Crosshair size={14} /> {selected.precision === 'site' ? 'Pin at the site GPS taken by the engineer' : `Approximate pin — ${({ street: 'street / colony', village: 'village', area: 'area', mandal: 'mandal', town: 'town' })[selected.precision] || 'area'} of the deed address`}</span>
+              {(selected.deedNo || selected.surveyNo) && <span><FileText size={14} /> {[selected.deedNo && `Deed ${selected.deedNo}`, selected.surveyNo && `Sy. No. ${selected.surveyNo}`].filter(Boolean).join(' · ')}</span>}
+              {branches.length > 0 && <span><Landmark size={14} /> {branchName(selected.branchId)}</span>}
               <span><CalendarDays size={14} /> {selected.status} {dateStr(selected.date)} · {selected.fileNumber}</span>
               {selected.engineer && <span><User size={14} /> {selected.engineer}</span>}
             </div>
@@ -181,8 +203,19 @@ export default function AdminValueMap() {
         )}
       </div>
 
-      {data?.noLocation > 0 && (
-        <p className="vm-note">{data.noLocation} finished valuation{data.noLocation > 1 ? 's have' : ' has'} no site location saved, so {data.noLocation > 1 ? 'they are' : 'it is'} not on the map.</p>
+      {unplaced.length > 0 && (
+        <div className="vm-unplaced">
+          <button type="button" onClick={() => setShowUnplaced((v) => !v)}>
+            {unplaced.length} finished valuation{unplaced.length > 1 ? 's' : ''} not on the map — no address or site location saved
+            <ChevronDown size={16} style={{ transform: showUnplaced ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
+          </button>
+          {showUnplaced && unplaced.map((c) => (
+            <div key={c.id} className="vm-un-row">
+              <span><b>{c.clientName || 'Client'}</b><small>{c.fileNumber} · {c.bankName} · {dateStr(c.date)}</small></span>
+              <strong>{shortInr(c.fmv)}</strong>
+            </div>
+          ))}
+        </div>
       )}
 
       <div className="vm-legend">
@@ -211,8 +244,22 @@ export default function AdminValueMap() {
         .vm-stats > div + div { border-left: 1px solid #eef2f7; }
         .vm-stats b { font-size: 19px; color: #0f172a; letter-spacing: -.3px; }
         .vm-stats span { font-size: 12px; color: #64748b; }
-        .vm-filters { display: flex; flex-direction: column; gap: 8px; }
-        .vm-filters select { height: 40px; border-radius: 11px; border: 1px solid #dbe2ea; background: #fff; padding: 0 12px; font: inherit; font-size: 14.5px; color: #0f172a; }
+        .vm-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .vm-filters .vm-seg { grid-column: 1 / -1; }
+        .vm-select { position: relative; display: flex; flex-direction: column; gap: 2px; padding: 8px 32px 8px 12px; border-radius: 13px; background: #fff; border: 1px solid #e2e8f0; box-shadow: 0 1px 2px rgba(15,23,42,.04); min-width: 0; cursor: pointer; }
+        .vm-select-label { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: #64748b; }
+        .vm-select select { -webkit-appearance: none; appearance: none; border: 0; background: transparent; padding: 0; margin: 0; font: inherit; font-size: 15px; font-weight: 650; color: #0f172a; width: 100%; outline: none; text-overflow: ellipsis; cursor: pointer; }
+        .vm-chev { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: #64748b; pointer-events: none; }
+        .vm-addr { font-style: normal; display: block; }
+        .vm-addr b { font-weight: 700; color: #334155; }
+        .vm-prec { color: #b45309; }
+        .vm-prec.exact { color: #15803d; }
+        .vm-unplaced { background: #fff; border: 1px solid #e7ebf1; border-radius: 14px; overflow: hidden; }
+        .vm-unplaced > button { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border: 0; background: none; font: inherit; font-size: 13px; color: #475569; text-align: left; cursor: pointer; }
+        .vm-un-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-top: 1px solid #eef2f7; }
+        .vm-un-row b { display: block; font-size: 14px; color: #0f172a; }
+        .vm-un-row small { display: block; font-size: 12px; color: #64748b; }
+        .vm-un-row strong { font-size: 14px; color: #1d4ed8; white-space: nowrap; }
         .vm-seg { display: grid; grid-template-columns: repeat(4, 1fr); background: #eceff4; border-radius: 11px; padding: 3px; gap: 2px; }
         .vm-seg button { border: 0; background: none; border-radius: 9px; padding: 7px 4px; font: inherit; font-size: 12.5px; font-weight: 600; color: #475569; cursor: pointer; white-space: nowrap; }
         .vm-seg button.on { background: #fff; color: #0f172a; box-shadow: 0 1px 3px rgba(0,0,0,.12); }

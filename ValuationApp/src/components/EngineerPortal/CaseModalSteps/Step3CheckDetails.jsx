@@ -19,6 +19,8 @@ function fieldsFor(propertyType) {
     { group: 'Registration', key: 'surveyNo', label: 'Survey number', required: true, hint: 'e.g. 343 or 347/2' },
     { group: 'Registration', key: 'plotNo', label: 'Plot number', hint: 'Optional' },
     { group: 'Registration', key: 'khathaNo', label: 'Khatha number', hint: 'Optional' },
+    { group: 'Registration', key: 'village', label: 'Village / area', hint: 'e.g. Nagarajupeta' },
+    { group: 'Registration', key: 'mandal', label: 'Mandal', hint: 'e.g. Kadapa' },
     { group: 'Tax & approval', key: 'assessmentNo', label: 'Property tax / assessment no', hint: 'e.g. 1013104872' },
     { group: 'Tax & approval', key: 'doorNo', label: 'Door / house number', hint: 'e.g. 58/384-2-1-2' },
   ];

@@ -28,12 +28,15 @@ const valuationCaseSchema = new mongoose.Schema({
   // New task assignment fields
   clientPhone: { type: String, default: '' },
   address: { type: String, default: '' },
+  geo: { type: mongoose.Schema.Types.Mixed, default: null }, // map spot of the deed address (services/caseLocation.js)
   note: { type: String, default: '' },
   inspectionDate: { type: String, default: '' },
   inspectionTime: { type: String, default: '' },
   
   propertyDetails: {
     // Official Registration & Legal
+    village: String, // village / area of the property, from the sale deed schedule
+    mandal: String,
     deedNo: String,
     deedYear: String,
     netExtent: String,

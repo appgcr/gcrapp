@@ -1456,6 +1456,12 @@ const applyExtractedMeta = (
     notifications.push(`Guideline rate ₹${Number(guideNum).toLocaleString('en-IN')} per Sq.yd detected & auto-filled!`);
   }
 
+  // Village / mandal of the property (sale deed schedule) — used for the deed address on the Value Map
+  const village = getVal(meta.village);
+  if (village && isGarbage(next.village)) next.village = village;
+  const mandal = getVal(meta.mandal);
+  if (mandal && isGarbage(next.mandal)) next.mandal = mandal;
+
   const khathaNo = getVal(meta.khathaNo || meta.khataNo);
   if (khathaNo && isGarbage(next.khathaNo)) {
     next.khathaNo = khathaNo;
