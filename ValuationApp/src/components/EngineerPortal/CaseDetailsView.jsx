@@ -6,6 +6,7 @@ import { isWordFile, resolveDocUrl } from '../../utils/docFiles';
 import { API_BASE_URL } from '../../config/api';
 import IconTile from '../Shared/IconTile';
 import ReportViewer, { fetchReport } from '../Shared/ReportViewer';
+import CaseCreationModal from './CaseModalSteps/CaseCreationModal';
 import './AttendanceView.css';
 
 const REQUIRED_DOCS = [
@@ -99,18 +100,40 @@ export default function CaseDetailsView({ caseId }) {
     );
   };
 
+  const [formOpen, setFormOpen] = useState(false); // the 6-step valuation form for this case
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/cases/${caseId}`)
       .then(res => res.json())
       .then(data => {
         setCaseData(data);
+        // Submitted / approved cases are locked: show what was filled in. Open cases go to the form.
+        if (data && !['Pending', 'Returned'].includes(data.status)) setIsStarted(true);
         setLoading(false);
       })
       .catch(err => {
         console.error("Error fetching case:", err);
         setLoading(false);
       });
-  }, [caseId]);
+  }, [caseId, reloadKey]);
+
+  // Start Valuation / Make Corrections → straight into the case form (after Check In, like the Cases list)
+  const startValuation = async () => {
+    try {
+      const me = JSON.parse(localStorage.getItem('sbi_valuation_current_user_v3') || 'null');
+      const res = await fetch(`${API_BASE_URL}/api/attendance?userId=${encodeURIComponent(me?.id || '')}`);
+      const data = await res.json();
+      const duty = (Array.isArray(data) ? data : []).filter(l => l.attendanceType === 'Clock-In' || l.attendanceType === 'Clock-Out')
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
+      if (duty?.attendanceType !== 'Clock-In') {
+        toast.error('Please Check In on the Today tab first.', { duration: 4000 });
+        return;
+      }
+      setFormOpen(true);
+    } catch {
+      toast.error('Could not check your attendance. Please try again.');
+    }
+  };
 
   if (loading) {
     return (
@@ -224,7 +247,7 @@ export default function CaseDetailsView({ caseId }) {
 
             {!isStarted && (
               <>
-                <button className="td-action in" onClick={() => setIsStarted(true)}>
+                <button className="td-action in" onClick={startValuation}>
                   <FileText size={20} /> {status === 'Returned' ? 'Make Corrections' : 'Start Valuation'}
                 </button>
                 <div className="cd-actions">
@@ -583,6 +606,15 @@ export default function CaseDetailsView({ caseId }) {
             <FileText size={16} /> View Bank Report
           </button>
         </div>
+      )}
+      {formOpen && (
+        <CaseCreationModal
+          isOpen
+          editingCaseId={caseId}
+          currentUser={JSON.parse(localStorage.getItem('sbi_valuation_current_user_v3') || 'null')}
+          onClose={() => { setFormOpen(false); setReloadKey(k => k + 1); }}
+          onCaseSaved={() => setReloadKey(k => k + 1)}
+        />
       )}
       {showReport && (
         <ReportViewer
