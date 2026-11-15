@@ -195,7 +195,7 @@ const S = {
   input: { width: '100%', minWidth: 0, boxSizing: 'border-box', padding: '8px 10px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, outline: 'none', background: '#fff' },
 };
 
-export default function BankReportDetails({ bankName, propertyDetails = {}, setPropertyDetails }) {
+export default function BankReportDetails({ bankName, propertyDetails = {}, setPropertyDetails, skip = [] }) {
   const fmt = reportFormatFor(propertyDetails.propertyType || '');
   const groups = [...(GROUPS[fmt] || []), WORDING];
   const [open, setOpen] = useState(() => new Set([groups[0]?.title]));
@@ -232,7 +232,7 @@ export default function BankReportDetails({ bankName, propertyDetails = {}, setP
             </button>
             {isOpen && (
               <div style={S.grid}>
-                {g.fields.map(f => (
+                {g.fields.filter(f => !skip.includes(f.key)).map(f => (
                   <div key={f.key} style={{ minWidth: 0 }}>
                     <label style={S.label} htmlFor={`rep-${f.key}`}>{f.label}</label>
                     {f.options ? (

@@ -20,6 +20,7 @@ import { isStrictlyEmpty } from '../../../utils/canonicalSchema';
 import Step1CaseSetup from './Step1CaseSetup';
 import Step2LegalDocs from './Step2LegalDocs';
 import Step3PropertyDetails from './Step3PropertyDetails';
+import Step3CheckDetails, { missingDocDetails } from './Step3CheckDetails';
 import Step4SiteImages from './Step4SiteImages';
 import Step5ExtractedDataReview from './Step5ExtractedDataReview';
 import Step6FinalReviewSignature from './Step6FinalReviewSignature';
@@ -57,6 +58,8 @@ export default function CaseCreationModal({
 
   // Modal State
   const [modalStep, setModalStep] = useState(1); 
+  const [step3Phase, setStep3Phase] = useState('check'); // 'check' document details → 'site' site-visit details
+  useEffect(() => { if (modalStep !== 3) setStep3Phase('check'); }, [modalStep]);
   const [clientName, setClientName] = useState('');
   const [clientFatherName, setClientFatherName] = useState('');
   // Client name and bank set by the admin on an assigned case: shown, not editable
@@ -1630,7 +1633,7 @@ export default function CaseCreationModal({
             {/* Back button — left side */}
             {modalStep > 1 ? (
               <button
-                onClick={() => setModalStep(prev => (prev === 7 ? 4 : prev - 1))}
+                onClick={() => { if (modalStep === 3 && step3Phase === 'site') { setStep3Phase('check'); return; } setModalStep(prev => (prev === 7 ? 4 : prev - 1)); }}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
                   display: 'flex', alignItems: 'center', gap: '2px',
@@ -1651,7 +1654,7 @@ export default function CaseCreationModal({
             <h2 style={{ fontSize: 'clamp(14px, 4vw, 18px)', fontWeight: '700', margin: 0, textAlign: 'center', flex: 1, minWidth: 0, lineHeight: 1.3, color: 'var(--text-primary)' }}>
               {modalStep === 1 && (editingCaseId ? "Case Setup" : "New Case Setup")}
               {modalStep === 2 && "Official Legal Documents"}
-              {modalStep === 3 && "Property Details"}
+              {modalStep === 3 && (step3Phase === 'check' ? "Check Document Details" : "Site Details")}
               {modalStep === 4 && "Site Images"}
               {modalStep === 5 && "Document Extraction"}
               {modalStep === 6 && "Extracted Data"}
@@ -1721,8 +1724,21 @@ export default function CaseCreationModal({
             )}
 
             {/* STEP 3: Property Details */}
-            {modalStep === 3 && (
+            {modalStep === 3 && step3Phase === 'check' && (
+              <Step3CheckDetails
+                propertyDetails={propertyDetails}
+                setPropertyDetails={setPropertyDetails}
+                setManuallyModifiedFields={setManuallyModifiedFields}
+                onNext={() => {
+                  const miss = missingDocDetails(propertyDetails);
+                  if (miss.length && !window.confirm(`These details are still missing:\n\n• ${miss.join('\n• ')}\n\nContinue to the site details anyway?`)) return;
+                  setStep3Phase('site');
+                }}
+              />
+            )}
+            {modalStep === 3 && step3Phase === 'site' && (
               <Step3PropertyDetails
+                siteMode
                 propertyDetails={propertyDetails}
                 setPropertyDetails={setPropertyDetails}
                 propertyTypes={propertyTypes}

@@ -16,7 +16,8 @@ export default function Step3PropertyDetails({
   renderConflictOptions,
   setManuallyModifiedFields,
   handleNextToSiteImages,
-  bankName = ''
+  bankName = '',
+  siteMode = false // true: the document details were checked on the previous screen, show only site-visit details
 }) {
   // Banks with their own exact report format get the extra report fields
   const banks = useBanks();
@@ -26,6 +27,7 @@ export default function Step3PropertyDetails({
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', gap: '16px', paddingBottom: '16px' }}>
       
+      {!siteMode && (<>
       {/* Property Category */}
       <div style={{ backgroundColor: '#f0f9ff', padding: '12px', borderRadius: '12px', border: '1px solid #bae6fd' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '700', color: '#0369a1', marginBottom: '12px' }}>
@@ -307,6 +309,8 @@ export default function Step3PropertyDetails({
         </div>
       )}
 
+      </>)}
+
       {/* APGB Format Details */}
       {isApgb(bankName) && (
       <div style={{ backgroundColor: '#fef3c7', padding: '12px', borderRadius: '12px', border: '1px solid #fde047' }}>
@@ -417,6 +421,7 @@ export default function Step3PropertyDetails({
       </div>
       )}
 
+      {!siteMode && (<>
       {/* Boundaries (As per documents) */}
       <div style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '700', color: 'var(--primary)', marginBottom: '12px' }}>
@@ -490,6 +495,8 @@ export default function Step3PropertyDetails({
         </div>
       </div>
       
+      </>)}
+
       {/* Boundaries (As per actual / visit) */}
       <div style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '700', color: 'var(--primary)', marginBottom: '12px' }}>
@@ -773,7 +780,7 @@ export default function Step3PropertyDetails({
 
       {/* Details the bank's own report format asks for */}
       {hasOwnFormat && propertyDetails.propertyType && (
-        <BankReportDetails bankName={bankName} propertyDetails={propertyDetails} setPropertyDetails={setPropertyDetails} />
+        <BankReportDetails bankName={bankName} propertyDetails={propertyDetails} setPropertyDetails={setPropertyDetails} skip={siteMode ? ['guidelineRatePerSqyd'] : []} />
       )}
 
       {/* Additions Work / Cost Estimates */}
