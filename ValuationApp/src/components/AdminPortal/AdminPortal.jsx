@@ -1,6 +1,6 @@
 import { API_BASE_URL } from '../../config/api';
 import React, { useState, useEffect, useRef } from 'react';
-import { LayoutDashboard, ClipboardList, PenSquare, Users, Settings, MessageCircle, Megaphone, LogOut } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, PenSquare, Users, Settings, MessageCircle, Megaphone, LogOut, MapPinned } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import './AdminPortal.css';
@@ -15,7 +15,9 @@ import { roleLabel } from '../../utils/session';
 import ChatSystem from '../Shared/ChatSystem';
 import GlobalChatWidget from '../Shared/GlobalChatWidget';
 import BroadcastSheet from './BroadcastSheet';
-import { GridIcon, DocIcon, CalendarIcon, PeopleIcon, GearIcon } from '../Shared/TabIcons';
+import { GridIcon, DocIcon, CalendarIcon, PeopleIcon, GearIcon, MapIcon } from '../Shared/TabIcons';
+import AdminValueMap from './AdminValueMap';
+import { isSuperAdmin } from '../../utils/session';
 import GcrLogo from '../Shared/GcrLogo';
 import PullDownReach from '../Shared/PullDownReach';
 import { toast } from 'react-hot-toast';
@@ -237,6 +239,7 @@ export default function AdminPortal({ currentUser, handleLogout }) {
       case 'cases': return <AdminCases defaultFilter={caseFilter} currentUser={currentUser} />;
       case 'forms': return <AttendanceLogs />; // Repurposing attendance logs as Forms for now
       case 'staff': return <AdminStaff currentUser={currentUser} />;
+      case 'valuemap': return <AdminValueMap />;
       case 'chat': return <div className="admin-chat-host"><ChatSystem key={chatWith?.id || 'all'} currentUser={currentUser} otherUserId={chatWith?.id} otherUserName={chatWith?.name} onBack={() => setActiveTab('dashboard')} /></div>;
       case 'settings': return <AdminSettings currentUser={currentUser} handleLogout={handleLogout} />;
       default: return <AdminDashboard />;
@@ -285,6 +288,15 @@ export default function AdminPortal({ currentUser, handleLogout }) {
             <Users size={18} />
             <span>Field Engineers</span>
           </button>
+          {isSuperAdmin(currentUser) && (
+            <button
+              className={`admin-sidebar-item ${activeTab === 'valuemap' ? 'active' : ''}`}
+              onClick={() => setActiveTab('valuemap')}
+            >
+              <MapPinned size={18} />
+              <span>Value Map</span>
+            </button>
+          )}
           <button 
             className={`admin-sidebar-item ${activeTab === 'chat' ? 'active' : ''}`}
             onClick={() => setActiveTab('chat')}
@@ -385,6 +397,7 @@ export default function AdminPortal({ currentUser, handleLogout }) {
           { key: 'dashboard', label: 'Dashboard', Icon: GridIcon, go: () => handleNavigate('dashboard') },
           { key: 'cases', label: 'Cases', Icon: DocIcon, go: () => handleNavigate('cases') },
           { key: 'forms', label: 'Attendance', Icon: CalendarIcon, go: () => setActiveTab('forms') },
+          ...(isSuperAdmin(currentUser) ? [{ key: 'valuemap', label: 'Map', Icon: MapIcon, go: () => setActiveTab('valuemap') }] : []),
           { key: 'staff', label: 'Staff', Icon: PeopleIcon, go: () => setActiveTab('staff') },
           { key: 'settings', label: 'Settings', Icon: GearIcon, go: () => setActiveTab('settings') },
         ].map(({ key, label, Icon, go }) => (

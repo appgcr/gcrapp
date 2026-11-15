@@ -113,3 +113,15 @@ export function ChatIcon({ active, size }) {
     </Svg>
   );
 }
+
+export function MapIcon({ active, size }) {
+  return (
+    <Svg size={size}>
+      {/* folded map with a pin */}
+      <path d="M3.5 6.4 8.6 4.6l6.8 2.3 5.1-1.8v12.5l-5.1 1.8-6.8-2.3-5.1 1.8Z"
+        {...(active ? { fill: 'currentColor', fillOpacity: 0.18, stroke: 'currentColor', strokeWidth: SW, strokeLinejoin: 'round' } : { stroke: 'currentColor', strokeWidth: SW, strokeLinejoin: 'round' })} />
+      <path d="M8.6 4.6v12.5M15.4 6.9v6" stroke="currentColor" strokeWidth={SW} strokeLinecap="round" />
+      <path d="M17.4 13.2c-1.6 0-2.8 1.2-2.8 2.7 0 2 2.8 4.5 2.8 4.5s2.8-2.5 2.8-4.5c0-1.5-1.2-2.7-2.8-2.7Z" fill="currentColor" />
+    </Svg>
+  );
+}

@@ -38,6 +38,42 @@ const {
 } = require('../services/reportArchiveService');
 
 // GET /api/cases
+// GET /api/cases/value-map — finished valuations as map landmarks (Super Admin: every branch, admin: own)
+// Location: the site GPS saved with the case (engineer at the property), else the live trip position
+router.get('/value-map', authenticateToken, async (req, res) => {
+  try {
+    if (!isAdmin(req.user)) return res.status(403).json({ error: 'Admins only.' });
+    const rows = await ValuationCase.find({ $and: [caseFilter(req), { status: { $in: ['Approved', 'Completed'] } }] })
+      .select('id fileNumber clientName borrowerName bankName branchId status approvedAt updatedAt createdAt locationData address currentLocation assignedEngineerName propertyDetails.propertyType propertyDetails.netExtent valuation.fairMarketValue valuation.realizableValue valuation.distressSaleValue')
+      .lean();
+    const parseLoc = (r) => {
+      try {
+        const j = typeof r.locationData === 'string' && r.locationData.trim().startsWith('{') ? JSON.parse(r.locationData) : null;
+        if (j && Number.isFinite(+j.lat) && Number.isFinite(+j.lng) && !(+j.lat === 0 && +j.lng === 0)) return { lat: +j.lat, lng: +j.lng };
+      } catch { /* not GPS */ }
+      const c = r.currentLocation;
+      if (c && Number.isFinite(c.lat) && Number.isFinite(c.lng)) return { lat: c.lat, lng: c.lng };
+      return null;
+    };
+    const out = []; let noLocation = 0;
+    for (const r of rows) {
+      const loc = parseLoc(r);
+      if (!loc) { noLocation++; continue; }
+      out.push({
+        id: r.id, fileNumber: r.fileNumber || '', clientName: r.clientName || r.borrowerName || '', bankName: r.bankName || '',
+        branchId: r.branchId || '', status: r.status, date: r.approvedAt || r.updatedAt || r.createdAt,
+        address: (typeof r.locationData === 'string' && !r.locationData.trim().startsWith('{') ? r.locationData : '') || r.address || '',
+        engineer: r.assignedEngineerName || '', propertyType: r.propertyDetails?.propertyType || '', extent: r.propertyDetails?.netExtent || '',
+        fmv: r.valuation?.fairMarketValue || 0, realizable: r.valuation?.realizableValue || 0, distress: r.valuation?.distressSaleValue || 0,
+        lat: loc.lat, lng: loc.lng,
+      });
+    }
+    res.json({ cases: out, total: rows.length, noLocation });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const parts = [caseFilter(req)];
