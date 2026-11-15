@@ -142,7 +142,7 @@ export default function AdminValueMap() {
           ))}
           <FitTo points={points} focus={group} />
         </MapContainer>
-        {data && !shown.length && <div className="vm-overlay soft">No finished valuations {bank !== 'all' || period !== 'all' ? 'for this filter' : 'yet'}.</div>}
+        {data && !shown.length && <div className="vm-overlay soft"><span>No finished valuations {bank !== 'all' || period !== 'all' ? 'for this filter' : 'here yet'}{data.noLocation ? ` with a site location` : ''}</span></div>}
 
         {listing && (
           <div className="vm-card" role="dialog" aria-label="Valuations here">
@@ -216,9 +216,10 @@ export default function AdminValueMap() {
         .vm-seg { display: grid; grid-template-columns: repeat(4, 1fr); background: #eceff4; border-radius: 11px; padding: 3px; gap: 2px; }
         .vm-seg button { border: 0; background: none; border-radius: 9px; padding: 7px 4px; font: inherit; font-size: 12.5px; font-weight: 600; color: #475569; cursor: pointer; white-space: nowrap; }
         .vm-seg button.on { background: #fff; color: #0f172a; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
-        .vm-map { position: relative; height: 58vh; min-height: 360px; border-radius: 18px; overflow: hidden; border: 1px solid #e2e8f0; background: #eef2f6; }
+        .vm-map { position: relative; isolation: isolate; z-index: 0; height: 58vh; min-height: 360px; border-radius: 18px; overflow: hidden; border: 1px solid #e2e8f0; background: #eef2f6; }
         .vm-overlay { position: absolute; inset: 0; z-index: 500; display: flex; align-items: center; justify-content: center; gap: 8px; background: rgba(248,250,252,.75); color: #475569; font-size: 14px; pointer-events: none; }
-        .vm-overlay.soft { background: transparent; align-items: flex-start; padding-top: 18px; }
+        .vm-overlay.soft { background: transparent; align-items: flex-start; padding-top: 14px; }
+        .vm-overlay.soft > span { background: rgba(255,255,255,.95); padding: 8px 14px; border-radius: 999px; box-shadow: 0 2px 10px rgba(15,23,42,.15); font-weight: 600; color: #334155; }
         .vm-pin-wrap { background: none; border: 0; }
         .vm-pin { position: absolute; transform: translate(-50%, calc(-100% - 7px)); background: var(--c); color: #fff; font: 800 12.5px/1 -apple-system, 'Inter', sans-serif; padding: 6px 9px; border-radius: 999px; white-space: nowrap; box-shadow: 0 3px 10px rgba(15,23,42,.3); border: 2px solid #fff; cursor: pointer; transition: transform .15s; }
         .vm-pin::after { content: ''; position: absolute; left: 50%; bottom: -7px; transform: translateX(-50%); border: 6px solid transparent; border-top-color: #fff; border-bottom: 0; }
