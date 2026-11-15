@@ -253,6 +253,13 @@ router.put('/:id', authenticateToken, async (req, res) => {
       if (['Approved', 'Rejected', 'Returned', 'Completed'].includes(updateData.status)) {
         return res.status(403).json({ error: 'Only an admin can approve, reject or return a case.' });
       }
+      // Sending it to the admin: all 5 documents must be on the case (they may be added in any order before that)
+      if (updateData.status === 'Reviewing' && existingCase.status !== 'Reviewing') {
+        const docs = updateData.documents || existingCase.documents || {};
+        const NEED = [['saleDeed', 'Sale Deed'], ['buildingPlan', 'Approved Building Plan / Permit'], ['propertyTax', 'Property Tax receipt'], ['marketValue', 'Market Value / Guideline certificate'], ['layoutPlan', 'Layout / Approval plan']];
+        const missing = NEED.filter(([k]) => !(Array.isArray(docs[k]) && docs[k].length)).map(([, n]) => n);
+        if (missing.length) return res.status(422).json({ error: `Please upload before submitting: ${missing.join(', ')}.` });
+      }
       // Once submitted, the figures belong to the admin's review: the engineer edits again only if it is returned
       if (!['Pending', 'Returned'].includes(existingCase.status)) {
         const msg = existingCase.status === 'Approved' ? 'This case is approved and locked. Ask your admin if something must change.'

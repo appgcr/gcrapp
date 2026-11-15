@@ -30,7 +30,9 @@ export default function Step6FinalReviewSignature({
   handleCreateCase,
   onReviewReport,
   savedSignature = '',
-  bankValues
+  bankValues,
+  missingDocs = [],
+  onGoToDocs
 }) {
   const [applySignature, setApplySignature] = React.useState(false);
   const totalDocPages = Object.values(uploadedDocs).flat().reduce((sum, p) => sum + (p.pageCount || 1), 0);
@@ -316,18 +318,34 @@ export default function Step6FinalReviewSignature({
         </label>
       </div>
 
+      {missingDocs.length > 0 && (
+        <div role="alert" style={{ margin: '0 0 12px', padding: '14px', borderRadius: '14px', background: '#fff7ed', border: '1.5px solid #fdba74' }}>
+          <div style={{ fontWeight: 800, fontSize: '15px', color: '#9a3412', marginBottom: '6px' }}>
+            {missingDocs.length} document{missingDocs.length > 1 ? 's' : ''} still needed before you submit
+          </div>
+          <ul style={{ margin: '0 0 10px', paddingLeft: '18px', color: '#7c2d12', fontSize: '13.5px', lineHeight: 1.6 }}>
+            {missingDocs.map(d => <li key={d.id}>{d.label.replace(/^\d+\.\s*/, '')}</li>)}
+          </ul>
+          <button type="button" onClick={onGoToDocs}
+            style={{ width: '100%', height: '44px', border: 0, borderRadius: '11px', background: '#ea580c', color: '#fff', font: 'inherit', fontWeight: 700, fontSize: '14.5px', cursor: 'pointer' }}>
+            Upload missing documents
+          </button>
+        </div>
+      )}
+
       <button 
         type="button"
         className="btn-primary" 
         onClick={() => {
+          if (missingDocs.length) { toast.error('Upload the missing documents first.'); return; }
           if (!savedSignature) { toast.error('Save your digital signature in Settings first.'); return; }
           if (!applySignature) { toast.error('Tick “Apply my digital signature” to sign this report.'); return; }
           setSignatureDataUrl(savedSignature);
           // Preview the finished bank report with the signature; submit from the preview
           if (onReviewReport) onReviewReport(savedSignature); else setShowSubmitModal(true);
         }} 
-        disabled={!termsAccepted || !savedSignature || !applySignature}
-        style={{ opacity: (!termsAccepted || !savedSignature || !applySignature) ? 0.5 : 1, marginTop: 'auto' }}
+        disabled={missingDocs.length > 0 || !termsAccepted || !savedSignature || !applySignature}
+        style={{ opacity: (missingDocs.length > 0 || !termsAccepted || !savedSignature || !applySignature) ? 0.5 : 1, marginTop: 'auto' }}
         data-testid="preview-submit"
       >
         <PenTool size={18} /> {onReviewReport ? 'Preview Report & Submit' : 'Sign & Submit Application'}

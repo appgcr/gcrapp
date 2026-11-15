@@ -25,7 +25,7 @@ import CaseStepper, { stepIndex } from './CaseStepper';
 import Step4SiteImages from './Step4SiteImages';
 import Step5ExtractedDataReview from './Step5ExtractedDataReview';
 import Step6FinalReviewSignature from './Step6FinalReviewSignature';
-import { getPageDisplayInfo, formatFileSize, isBuiltProperty } from './caseModalHelpers';
+import { getPageDisplayInfo, formatFileSize, isBuiltProperty, REQUIRED_DOCS } from './caseModalHelpers';
 import { MAX_SITE_PHOTOS, currentPosition, addressFor, drawStamp, fileHash, readExifGps, imageToCanvas } from '../../../utils/sitePhotos';
 
 import {
@@ -1121,10 +1121,6 @@ export default function CaseCreationModal({
   };
 
   const handleNextToPropertyDetails = () => {
-    if (!uploadedDocs.saleDeed || uploadedDocs.saleDeed.length === 0) {
-      showValidationError('⚠️ SALE DEED REQUIRED\nThe Registered Sale Deed is required for every valuation. Please upload all its pages before continuing.');
-      return;
-    }
     if (Object.values(scanningDocs || {}).some(Boolean)) {
       toast.error('Please wait — a document is still being checked.');
       return;
@@ -1253,7 +1249,14 @@ export default function CaseCreationModal({
     }
   };
 
+  // All 5 documents must be on the case before it goes to the admin (they may be added in any order)
+  const missingRequiredDocs = REQUIRED_DOCS.filter(d => !(uploadedDocs[d.id]?.length > 0));
   const handleCreateCase = async () => {
+    if (missingRequiredDocs.length) {
+      showValidationError(`⚠️ DOCUMENTS MISSING\nPlease upload before submitting:\n${missingRequiredDocs.map(d => `• ${d.label.replace(/^\d+\.\s*/, '')}`).join('\n')}`);
+      setModalStep(7);
+      return;
+    }
     // FINAL FORM VALIDATION (STEP 3)
     if (rawOCRText) {
       const cleanRaw = rawOCRText.replace(/[\s\/-]/g, '').toLowerCase();
@@ -1802,6 +1805,8 @@ export default function CaseCreationModal({
             {/* STEP 7: Final Review & Digital Signature */}
             {modalStep === 7 && (
               <Step6FinalReviewSignature
+                missingDocs={missingRequiredDocs}
+                onGoToDocs={() => setModalStep(2)}
                 clientName={clientName}
                 bankName={bankName}
                 propertyDetails={propertyDetails}

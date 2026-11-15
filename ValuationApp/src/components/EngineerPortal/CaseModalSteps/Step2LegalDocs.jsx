@@ -598,10 +598,17 @@ export default function Step2LegalDocs({
             })}
           </div>
 
+          {REQUIRED_DOCS.some(d => !(uploadedDocs[d.id]?.length > 0)) && !Object.values(scanningDocs).some(Boolean) && (
+            <div style={{ marginTop: 'auto', marginBottom: '8px', fontSize: '12.5px', color: '#64748b', textAlign: 'center', lineHeight: 1.4 }}>
+              You can continue now — all 5 documents are needed before you submit.
+            </div>
+          )}
           {(() => {
             const allUploaded = REQUIRED_DOCS.every(doc => uploadedDocs[doc.id]?.length > 0);
             const anyScanningNow = Object.values(scanningDocs).some(Boolean);
-            const canProceed = allUploaded && !anyScanningNow;
+            const left = REQUIRED_DOCS.filter(d => !(uploadedDocs[d.id]?.length > 0)).length;
+            // Missing documents can be added later — they are asked for again before submitting
+            const canProceed = !anyScanningNow;
             return (
               <button
                 className="btn-primary"
@@ -621,7 +628,7 @@ export default function Step2LegalDocs({
                 ) : allUploaded ? (
                   <>Continue <ChevronRight size={18} /></>
                 ) : (
-                  <>{REQUIRED_DOCS.filter(d => uploadedDocs[d.id]?.length > 0).length} of {REQUIRED_DOCS.length} uploaded</>
+                  <>Continue · {left} to add later <ChevronRight size={18} /></>
                 )}
               </button>
             );
