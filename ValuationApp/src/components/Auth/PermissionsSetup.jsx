@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { MapPin, Camera, Bell, Check, Loader2, BatteryCharging } from 'lucide-react';
+import { MapPin, Camera, Bell, Check, Loader2, BatteryCharging, Mic } from 'lucide-react';
+import { micState, requestMic } from '../../utils/micPermission';
 import { BackgroundGeolocation } from '../../utils/backgroundGeolocation';
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
@@ -12,8 +13,8 @@ import { isAdminRole } from '../../utils/session';
 // Each permission is explained before the system prompt appears, which is what Apple and
 // Google review expect, and what makes people actually tap Allow.
 
-const doneKey = (userId) => `gcr_perm_setup_v1_${userId}`;
-const DEVICE_KEY = 'gcr_perm_setup_device_v1'; // this phone has been through the screen (any user)
+const doneKey = (userId) => `gcr_perm_setup_v2_${userId}`; // v2: microphone added — everyone sees the screen once more
+const DEVICE_KEY = 'gcr_perm_setup_device_v2'; // this phone has been through the screen (any user)
 export const permissionsSetupDone = (userId) => {
   try { return localStorage.getItem(doneKey(userId)) === '1' || localStorage.getItem(DEVICE_KEY) === '1'; } catch { return true; }
 };
@@ -21,7 +22,7 @@ const markDone = (userId) => { try { localStorage.setItem(doneKey(userId), '1');
 
 /** Phone already allows everything this person needs → no need to show the screen at all */
 export async function permissionsAlreadyGranted(user) {
-  const kinds = isAdminRole(user) ? ['notifications'] : ['location', 'camera', 'notifications'];
+  const kinds = isAdminRole(user) ? ['notifications'] : ['location', 'camera', 'microphone', 'notifications'];
   for (const k of kinds) {
     const st = await check(k).catch(() => 'prompt');
     if (st !== 'granted' && st !== 'unavailable') return false;
@@ -40,6 +41,10 @@ const ITEMS = {
   camera: {
     icon: Camera, color: 'gray', title: 'Camera',
     why: 'Take site photos for reports and your selfie when you check in.',
+  },
+  microphone: {
+    icon: Mic, color: 'purple', title: 'Microphone',
+    why: 'Speak the site details and Mahe AI fills the form. Used only when you tap Speak.',
   },
   notifications: {
     icon: Bell, color: 'red', title: 'Notifications',
@@ -70,8 +75,18 @@ async function check(kind) {
     if (!('Notification' in window)) return 'unavailable';
     return Notification.permission === 'default' ? 'prompt' : Notification.permission;
   }
-  if (kind === 'location') return navigator.geolocation ? queryBrowser('geolocation') : 'unavailable';
+  if (kind === 'location') {
+    if (isNative()) {
+      try {
+        const { Geolocation } = await import('@capacitor/geolocation');
+        const p = await Geolocation.checkPermissions();
+        return p.location === 'granted' ? 'granted' : p.location === 'denied' ? 'denied' : 'prompt';
+      } catch { /* fall back to the browser's view */ }
+    }
+    return navigator.geolocation ? queryBrowser('geolocation') : 'unavailable';
+  }
   if (kind === 'camera') return navigator.mediaDevices?.getUserMedia ? queryBrowser('camera') : 'unavailable';
+  if (kind === 'microphone') return micState();
   return 'prompt';
 }
 
@@ -99,6 +114,7 @@ async function request(kind) {
       );
     });
   }
+  if (kind === 'microphone') return requestMic();
   if (kind === 'camera') {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -115,7 +131,7 @@ async function request(kind) {
 export default function PermissionsSetup({ currentUser, onDone, fromSettings = false }) {
   const kinds = isAdminRole(currentUser)
     ? ['notifications']
-    : ['location', 'camera', 'notifications', ...(isNative() && Capacitor.getPlatform() === 'android' ? ['battery'] : [])];
+    : ['location', 'camera', 'microphone', 'notifications', ...(isNative() && Capacitor.getPlatform() === 'android' ? ['battery'] : [])];
   const [state, setState] = useState({});
   const [busy, setBusy] = useState(null);
 

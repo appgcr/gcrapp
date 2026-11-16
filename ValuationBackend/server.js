@@ -61,6 +61,20 @@ app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Routes
+// ── Request limits (brute force, runaway loops, AI cost) ──
+const { limit, userOrIp } = require('./middleware/rateLimit');
+app.set('trust proxy', 1); // Render / Vercel put one proxy in front: use the caller's real address
+app.use('/api/', limit({ name: 'all', windowMs: 60 * 1000, max: 600, key: (req) => req.ip }));
+app.use('/api/auth/login', limit({
+  name: 'login', windowMs: 15 * 60 * 1000, max: 8, onlyFailures: true,
+  key: (req) => `${req.ip}:${String((req.body && req.body.username) || '').toLowerCase()}`,
+  message: (m) => `Too many wrong tries. Please wait ${m} minute${m > 1 ? 's' : ''} and try again.`,
+}));
+app.use(['/api/extract', '/api/assist'], limit({ name: 'ai', windowMs: 10 * 60 * 1000, max: 150, key: userOrIp,
+  message: (m) => `Mahe AI is being used a lot from this login. Please wait ${m} minute${m > 1 ? 's' : ''}.` }));
+app.use('/api/cases/:id/shared-report', limit({ name: 'share', windowMs: 10 * 60 * 1000, max: 40, key: (req) => req.ip }));
+app.use('/api/bank/requests', (req, res, next) => (req.method === 'POST'
+  ? limit({ name: 'bankreq', windowMs: 60 * 60 * 1000, max: 40, key: userOrIp })(req, res, next) : next()));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/cases', require('./routes/cases'));

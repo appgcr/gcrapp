@@ -3,6 +3,8 @@ import { Mic, Square, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../../../config/api';
 import { landRateField } from './LandRateCard';
+import { requestMic, openMicSettings } from '../../../utils/micPermission';
+import askConfirm from '../../Shared/askConfirm';
 
 /**
  * Speak the site details — "road 30 feet, framed structure, 12 years, vitrified flooring,
@@ -53,6 +55,24 @@ export default function VoiceFill({ propertyDetails, setPropertyDetails, setManu
   const start = async () => {
     if (!navigator.mediaDevices?.getUserMedia || typeof window.MediaRecorder === 'undefined') {
       toast.error('Voice input is not supported on this phone. Please type the details.');
+      return;
+    }
+    // Ask for the microphone first (Android shows its own prompt; iPhone asks on first use)
+    const perm = await requestMic();
+    if (perm === 'denied') {
+      const android = /android/i.test(navigator.userAgent);
+      const go = await askConfirm({
+        title: 'Microphone is off for Gouru Valuations',
+        message: android
+          ? 'Allow the microphone to speak the site details. Tap Open Settings → Permissions → Microphone → Allow.'
+          : 'Allow the microphone to speak the site details: open iPhone Settings → Gouru Valuations → Microphone.',
+        confirmText: android ? 'Open Settings' : 'OK', cancelText: 'Not now',
+      });
+      if (go && android) openMicSettings();
+      return;
+    }
+    if (perm === 'unavailable') {
+      toast.error('Voice input is not available on this phone. Please type the details.');
       return;
     }
     try {

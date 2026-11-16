@@ -23,7 +23,8 @@ async function nextFileNumber(branchCode, date = new Date()) {
  */
 async function nextCaseId(date = new Date()) {
   const ValuationCase = require('../models/ValuationCase');
-  const prefix = date.getFullYear().toString() + (date.getMonth() + 1).toString().padStart(2, '0');
+  const [yy, mo] = istParts(date).ymd.split('-'); // India time, like the file numbers
+  const prefix = `${yy}${mo}`;
   const key = `caseid:${prefix}`;
   if (!(await Counter.exists({ key }))) {
     // First use this month: start above the highest number already used

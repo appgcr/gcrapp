@@ -1,3 +1,4 @@
+import { installNativeGeolocation } from './utils/nativeGeolocation';
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
@@ -8,6 +9,7 @@ import { Keyboard } from '@capacitor/keyboard'
 
 // Attach the login token (and branch being viewed) to every API request
 installApiAuth()
+installNativeGeolocation() // iPhone: native location prompt instead of the web view's 'localhost' one
 
 // Phone keyboard: the screen shrinks above it (capacitor.config.json → Keyboard.resize "native");
 // while it is open the bottom tab bar steps aside so the form has the room
