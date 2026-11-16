@@ -425,6 +425,19 @@ export default function CaseCreationModal({
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modalStep, editingCaseId, bankName]);
+  // Checks before submit (what a reviewing admin would send back)
+  const [preChecks, setPreChecks] = useState(null);
+  useEffect(() => {
+    if (modalStep !== 7 || !editingCaseId) { setPreChecks(null); return; }
+    let alive = true;
+    fetch(`${API_BASE_URL}/api/cases/${editingCaseId}/pre-check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ propertyDetails, siteImages: siteImages.length }),
+    }).then(r => (r.ok ? r.json() : null)).then(d => { if (alive) setPreChecks(d && Array.isArray(d.checks) ? d.checks : []); }).catch(() => { if (alive) setPreChecks([]); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modalStep, editingCaseId]);
   const [signatureUploadUrl, setSignatureUploadUrl] = useState(null);
   const [activeSignatureTab, setActiveSignatureTab] = useState('draw'); 
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -1771,6 +1784,7 @@ export default function CaseCreationModal({
                 setManuallyModifiedFields={setManuallyModifiedFields}
                 handleNextToSiteImages={handleNextToSiteImages}
                 bankName={bankName}
+                caseId={editingCaseId || ''}
               />
             )}
 
@@ -1788,6 +1802,7 @@ export default function CaseCreationModal({
                 videoRef={videoRef}
                 setPreviewImage={setPreviewImage}
                 handleRunSecurityExtraction={handleRunSecurityExtraction}
+                propertyType={propertyDetails.propertyType}
               />
             )}
 
@@ -1808,6 +1823,12 @@ export default function CaseCreationModal({
             {modalStep === 7 && (
               <Step6FinalReviewSignature
                 missingDocs={missingRequiredDocs}
+                preChecks={preChecks}
+                onFixCheck={(step) => {
+                  if (step === 'photos') { setModalStep(4); return; }
+                  setStep3Phase(step === 'check' ? 'check' : 'site');
+                  setModalStep(3);
+                }}
                 onGoToDocs={() => setModalStep(2)}
                 clientName={clientName}
                 bankName={bankName}

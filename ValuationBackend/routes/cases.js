@@ -72,6 +72,25 @@ router.get('/value-map', authenticateToken, async (req, res) => {
   }
 });
 
+// Land rates of approved valuations near this property (guide for the market rate)
+router.post('/rate-guide', authenticateToken, async (req, res) => {
+  try {
+    const { nearbyRates, caseSpot } = require('../services/rateGuide');
+    const { caseId, lat, lng, propertyType, village } = req.body || {};
+    const c = caseId ? await ValuationCase.findOne({ id: String(caseId) }).lean() : null;
+    if (c && !canSeeCase(req.user, c)) return res.status(403).json({ error: 'Not your case.' });
+    const at = await caseSpot(c, { lat, lng });
+    const pd = (c && c.propertyDetails) || {};
+    const out = await nearbyRates({
+      at, village: village || pd.village || '', propertyType: propertyType || pd.propertyType || '',
+      excludeId: c ? c.id : '', branchId: isSuper(req.user) ? null : (req.user.branchId || (c && c.branchId) || null),
+    });
+    res.json(out);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const parts = [caseFilter(req)];
@@ -394,6 +413,16 @@ router.put('/:id', authenticateToken, async (req, res) => {
       }
     }
     if (updateData.status === 'Approved' && existingCase.status !== 'Approved') updateData.approvedAt = new Date();
+    // Checks before submit, kept with the case for the reviewing admin
+    if (updateData.status === 'Reviewing') {
+      try {
+        const { runPreCheck } = require('../services/preCheck');
+        updateData.preCheck = await runPreCheck(
+          { propertyDetails: targetPropertyDetails, siteImages: (updateData.sitePhotos || existingCase.sitePhotos || []).length },
+          { user: req.user, caseDoc: existingCase.toObject() },
+        );
+      } catch (e) { console.warn('pre-check:', e.message); }
+    }
 
     const updated = await ValuationCase.findOneAndUpdate(
       { id: req.params.id },
@@ -468,6 +497,11 @@ router.put('/:id', authenticateToken, async (req, res) => {
     }
 
     notifyCaseChange(existingCase.toObject(), updated.toObject(), { name: req.user?.name || req.user?.username });
+    if (updated.status === 'Approved' && existingCase.status !== 'Approved') {
+      // Send the approved report to the bank (after the reply, so approving stays quick)
+      const baseUrl = `${req.get('x-forwarded-proto') || req.protocol}://${req.get('host')}`;
+      setImmediate(() => require('../services/reportDelivery').deliverReport(updated.id, { baseUrl, actor: req.user?.name || 'admin' }));
+    }
     res.json(updated);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -1151,6 +1185,105 @@ router.post('/:id/track', authenticateToken, async (req, res) => {
 
 // POST /api/cases/:id/report-preview — the bank-format report built from what the engineer has
 // entered so far (not saved). Lets the engineer see the exact document before submitting.
+// Report link for the bank (no login; signed, 30 days) — GET /api/cases/:id/shared-report?v&exp&sig
+router.get('/:id/shared-report', async (req, res) => {
+  try {
+    const { checkLink } = require('../services/reportDelivery');
+    const { v, exp, sig } = req.query;
+    if (!checkLink(req.params.id, v, exp, sig)) return res.status(403).send('This report link is not valid or has expired. Please ask Gouru Valuations for a new link.');
+    const c = await ValuationCase.findOne({ id: req.params.id }).select('id status version fileNumber').lean();
+    if (!c || c.status !== 'Approved' || String(c.version || 1) !== String(v || '')) return res.status(404).send('This report is no longer available. Please ask Gouru Valuations for the latest report.');
+    const { reportFile } = require('../services/reportDelivery');
+    const want = req.query.format === 'pdf' ? 'pdf' : 'docx';
+    let a = await reportFile(c, want);
+    if (!a && want === 'pdf') a = await reportFile(c, 'docx');
+    if (!a) return res.status(404).send('The report file is not ready yet. Please try again later.');
+    res.setHeader('Content-Disposition', `attachment; filename="${a.filename}"`);
+    res.setHeader('Content-Type', a.mimeType);
+    res.send(a.buffer);
+  } catch (err) {
+    res.status(500).send('Could not open the report.');
+  }
+});
+
+// Send / resend the approved report to the bank — returns the link, email and WhatsApp number
+router.post('/:id/deliver', authenticateToken, async (req, res) => {
+  try {
+    if (!isAdmin(req.user)) return res.status(403).json({ error: 'Admins only.' });
+    const c = await ValuationCase.findOne({ id: req.params.id }).lean();
+    if (!c || !canSeeCase(req.user, c)) return res.status(404).json({ error: 'Case not found.' });
+    if (c.status !== 'Approved') return res.status(400).json({ error: 'Only approved reports can be sent.' });
+    const { deliverReport, messageFor } = require('../services/reportDelivery');
+    const baseUrl = `${req.get('x-forwarded-proto') || req.protocol}://${req.get('host')}`;
+    const d = await deliverReport(c.id, { baseUrl, actor: req.user?.name || 'admin', quiet: true });
+    if (!d) return res.status(500).json({ error: 'Could not prepare the report link.' });
+    res.json({ ...d, message: messageFor(c, d.link) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Engineer → customer: "I'm on the way, reaching in about N min". Returns the message for WhatsApp / SMS.
+router.post('/:id/on-the-way', authenticateToken, async (req, res) => {
+  try {
+    const c = await ValuationCase.findOne({ id: req.params.id }).lean();
+    if (!c || !canSeeCase(req.user, c)) return res.status(404).json({ error: 'Case not found.' });
+    const { caseSpot, km } = require('../services/rateGuide');
+    const { lat, lng } = req.body || {};
+    let distanceKm = null; let etaMin = null;
+    if (Number.isFinite(+lat) && Number.isFinite(+lng)) {
+      const spot = await caseSpot(c, null).catch(() => null);
+      if (spot) {
+        distanceKm = Math.round(km({ lat: +lat, lng: +lng }, spot) * 1.3 * 10) / 10; // roads are ~30% longer than a straight line
+        etaMin = Math.max(5, Math.ceil(((distanceKm / 25) * 60 + 5) / 5) * 5);    // ~25 km/h in town, +5 min to park
+      }
+    }
+    const eng = (await User.findOne({ id: req.user.id }).select('name phone').lean()) || {};
+    const first = String(eng.name || req.user.name || 'our engineer').trim();
+    const when = etaMin && distanceKm > 80 ? 'later today' : etaMin ? (etaMin >= 60 ? `in about ${Math.round(etaMin / 30) / 2} hr` : `in about ${etaMin} min`) : 'shortly';
+    const text = [
+      `Namaste ${c.clientName || ''},`.replace(/\s+,/, ','),
+      `This is ${first} from Gouru Valuations for your ${c.bankName || 'bank'} property valuation${c.fileNumber ? ` (${c.fileNumber})` : ''}.`,
+      `I am on the way and will reach the property ${when}. Please keep the sale deed and building plan ready and be available at the site.`,
+      eng.phone ? `My number: ${eng.phone}` : '',
+    ].filter(Boolean).join('\n');
+    await ValuationCase.updateOne({ id: c.id }, { $set: { customerNotified: { at: new Date(), by: req.user.id, etaMin, distanceKm } } });
+    res.json({ phone: c.clientPhone || (c.requestDetails && c.requestDetails.contactPhone) || '', text, etaMin, distanceKm });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Best engineer for a case: nearest on duty with the fewest open cases (admin confirms)
+router.get('/:id/suggest-engineers', authenticateToken, async (req, res) => {
+  try {
+    if (!isAdmin(req.user)) return res.status(403).json({ error: 'Admins only.' });
+    const c = await ValuationCase.findOne({ id: req.params.id }).lean();
+    if (!c) return res.status(404).json({ error: 'Case not found.' });
+    if (!canSeeCase(req.user, c)) return res.status(403).json({ error: 'Not your branch.' });
+    const { suggestEngineers } = require('../services/autoAssign');
+    const out = await suggestEngineers(c);
+    res.json({ list: out.list, placed: !!out.spot });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Checks before submit — what a reviewing admin would send back
+router.post('/:id/pre-check', authenticateToken, async (req, res) => {
+  try {
+    const c = await ValuationCase.findOne({ id: req.params.id }).lean();
+    if (!c) return res.status(404).json({ error: 'Case not found.' });
+    if (!canSeeCase(req.user, c)) return res.status(403).json({ error: 'Not your case.' });
+    const { runPreCheck } = require('../services/preCheck');
+    const draft = { ...req.body, propertyDetails: { ...(c.propertyDetails || {}), ...((req.body || {}).propertyDetails || {}) } };
+    const out = await runPreCheck(draft, { user: req.user, caseDoc: c });
+    res.json(out);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/:id/report-preview', authenticateToken, async (req, res) => {
   const fs = require('fs');
   const path = require('path');

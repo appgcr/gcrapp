@@ -1608,6 +1608,49 @@ const applyExtractedMeta = (
     }
   }
 
+  // ─ Plinth / floor areas from the approved plan or permit ────────────────────────
+  {
+    const toSqft = (v) => {
+      const t = String(v == null ? '' : v).toLowerCase().replace(/,/g, '');
+      const m = t.match(/\d+(?:\.\d+)?/);
+      if (!m) return '';
+      let n = Number(m[0]);
+      if (/sq\.?\s*m|square\s*met|sqm|m2|m²/.test(t)) n *= 10.7639;
+      else if (/sq\.?\s*y|yard|sqyd/.test(t)) n *= 9;
+      return n > 0 ? String(Math.round(n * 100) / 100) : '';
+    };
+    const floorIndex = (name) => {
+      const f = String(name || '').toLowerCase();
+      const order = [/ground|\bgf\b|stilt|cellar/, /first|\b1st|\bff\b/, /second|\b2nd|\bsf\b/, /third|\b3rd|\btf\b/, /fourth|\b4th/, /fifth|\b5th/, /sixth|\b6th/, /seventh|\b7th/];
+      return order.findIndex((r) => r.test(f));
+    };
+    const LABELS = ['Ground Floor (GF)', 'First Floor (FF)', 'Second Floor (SF)', 'Third Floor (TF)', 'Fourth Floor (4F)', 'Fifth Floor (5F)', 'Sixth Floor (6F)', 'Seventh Floor (7F)'];
+    const planFloors = [];
+    (Array.isArray(meta.floorAreas) ? meta.floorAreas : []).forEach((fa) => {
+      const i = floorIndex(fa && fa.floor);
+      const v = toSqft(fa && fa.area);
+      if (i >= 0 && v) planFloors[i] = String(Math.round((Number(planFloors[i] || 0) + Number(v)) * 100) / 100);
+    });
+    const floorsList = [];
+    for (let i = 0; i < planFloors.length; i++) floorsList.push({ id: i === 0 ? 'gf' : `f${i}`, label: LABELS[i], value: planFloors[i] || '' });
+    const total = floorsList.reduce((a, f) => a + (Number(f.value) || 0), 0);
+    const plinth = toSqft(getVal(meta.plinthArea)) || (total ? String(Math.round(total * 100) / 100) : '');
+    if (plinth || floorsList.length) {
+      next.planAreas = { plinthArea: plinth, floors: floorsList };
+      const sv = next.siteValue || {};
+      const curFloors = Array.isArray(sv.floors) ? sv.floors : [];
+      const floorsEmpty = !curFloors.some((f) => String(f.value || '').trim());
+      const filled = [];
+      let nextSv = { ...sv };
+      if (plinth && isGarbage(sv.plinthArea)) { nextSv.plinthArea = plinth; filled.push('plinth area'); }
+      if (floorsList.length && floorsEmpty) { nextSv.floors = floorsList; filled.push('floor areas'); }
+      if (filled.length) {
+        next.siteValue = nextSv;
+        notifications.push(`${filled.join(' & ')} from the approved plan auto-filled!`.replace(/^./, (c) => c.toUpperCase()));
+      }
+    }
+  }
+
   // ─ Boundaries ─────────────────────────────────────────────────────────────────
   // Support both plain { boundaries: { north, south... } } and canonical { documentBoundaries: { north: { value } } }
   const rawBounds = meta.documentBoundaries || meta.boundaries;

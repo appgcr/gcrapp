@@ -78,13 +78,17 @@ async function lookup(q) {
 /** Find the deed address on the map: most precise part first. → { lat, lng, precision, query } or null */
 async function geocodeDeed(addr) {
   const tries = [];
-  const firstPlace = addr.typed.split(',').map(clean).filter((s) => s && !/^(d\.?\s*no|door|plot|h\.?\s*no|sy)/i.test(s))[0];
-  if (firstPlace && addr.district) tries.push([`${firstPlace}, ${addr.district}, ${STATE}`, 'street']);
-  if (addr.village) tries.push([[addr.village, addr.mandal, addr.district, STATE].filter(Boolean).join(', '), 'village']);
-  if (firstPlace) tries.push([`${firstPlace}, ${STATE}`, 'area']);
-  if (addr.mandal) tries.push([[addr.mandal, addr.district, STATE].filter(Boolean).join(', '), 'mandal']);
-  const town = addr.district || (addr.typed.split(',').map(clean).filter(Boolean).pop() || '');
+  const typedParts = addr.typed.split(',').map(clean).filter((x) => x && !/^(d\.?\s*no|door|plot|h\.?\s*no|sy)/i.test(x));
+  const firstPlace = typedParts[0];
+  // The town: the deed's district, else the last part of the typed address ("…, NGO Colony, Kadapa")
+  const typedTown = typedParts.length > 1 ? typedParts[typedParts.length - 1] : '';
+  const town = addr.district || typedTown || addr.mandal || '';
+  if (firstPlace && town && firstPlace !== town) tries.push([`${firstPlace}, ${town}, ${STATE}`, 'street']);
+  if (addr.village) tries.push([[addr.village, addr.mandal, addr.district || typedTown, STATE].filter(Boolean).join(', '), 'village']);
+  if (addr.mandal) tries.push([[addr.mandal, addr.district || typedTown, STATE].filter(Boolean).join(', '), 'mandal']);
   if (town) tries.push([`${town}, ${STATE}`, 'town']);
+  // A bare place name can match the same colony name in another town: only when no town is known
+  if (firstPlace && !town) tries.push([`${firstPlace}, ${STATE}`, 'area']);
   for (const [q, precision] of tries) {
     const hit = await lookup(q);
     if (hit === undefined) return undefined; // lookup service unreachable
@@ -102,13 +106,13 @@ async function locateCase(c, { allowLookup = true } = {}) {
   const gps = siteGps(c);
   if (gps) return { ...gps, precision: 'site', address: addr.text };
   const g = c.geo;
-  if (g && g.query && Number.isFinite(g.lat) && g.forAddress === addr.text) return { lat: g.lat, lng: g.lng, precision: g.precision, address: addr.text };
+  if (g && g.v === 2 && g.query && Number.isFinite(g.lat) && g.forAddress === addr.text) return { lat: g.lat, lng: g.lng, precision: g.precision, address: addr.text };
   // Looked up before and not found: try again only after a week (or when the address changes)
-  if (g && !g.query && g.forAddress === addr.text && Date.now() - new Date(g.at).getTime() < 7 * 86400000) return { address: addr.text };
+  if (g && g.v === 2 && !g.query && g.forAddress === addr.text && Date.now() - new Date(g.at).getTime() < 7 * 86400000) return { address: addr.text };
   if (!allowLookup || !addr.text) return { address: addr.text };
   const found = await geocodeDeed(addr);
   if (found === undefined) return { address: addr.text, looked: true };
-  await ValuationCase.updateOne({ id: c.id }, { $set: { geo: found ? { ...found, forAddress: addr.text, at: new Date() } : { query: '', forAddress: addr.text, at: new Date() } } });
+  await ValuationCase.updateOne({ id: c.id }, { $set: { geo: found ? { ...found, v: 2, forAddress: addr.text, at: new Date() } : { query: '', v: 2, forAddress: addr.text, at: new Date() } } });
   return found ? { lat: found.lat, lng: found.lng, precision: found.precision, address: addr.text, looked: true } : { address: addr.text, looked: true };
 }
 

@@ -80,5 +80,7 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Gouru Valuations uses the microphone only when you tap Speak, to fill the site details from your voice.</string>
 </dict>
 </plist>

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Search, MapPin, FileText, CheckCircle2, Loader2, ChevronDown, Plus, X, Edit2, Navigation, RotateCcw, History, AlertTriangle, Download, Phone, CalendarClock, User } from 'lucide-react';
 import toast from 'react-hot-toast';
 import LiveTrackingMap from './LiveTrackingMap';
+import SuggestedEngineer from './SuggestedEngineer';
+import SendToBank from './SendToBank';
 import ReportViewer, { fetchReport } from '../Shared/ReportViewer';
 import { API_BASE_URL } from '../../config/api';
 import { authHeaders, errorFrom } from '../Shared/authHeaders';
@@ -158,10 +160,11 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
     return { inspectionDate: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, inspectionTime: `${pad(d.getHours())}:${pad(d.getMinutes())}` };
   };
 
-  const handleAssign = async (caseId) => {
-    const engineerId = assignments[caseId];
+  const handleAssign = async (caseId, pickedId) => {
+    const engineerId = pickedId || assignments[caseId];
     if (!engineerId) return toast.error('Choose an engineer first.');
     const engineer = users.find(u => u.id === engineerId);
+    if (!engineer) return toast.error('That engineer is not in the list. Refresh and try again.');
     setProcessingId(caseId);
     try {
       // The server records the assignment and alerts the engineer (in-app + push)
@@ -441,6 +444,20 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
           {(c.version || 1) > 1 && <span className="cs-ver">v{c.version}</span>}
         </div>
 
+        {/* Checks flagged before submit */}
+        {(tab === 'REVIEW' || tab === 'DONE') && Array.isArray(c.preCheck?.checks) && (
+          c.preCheck.checks.length === 0
+            ? <div className="cs-checks ok">✓ All checks passed at submit</div>
+            : (
+              <details className="cs-checks">
+                <summary>{c.preCheck.checks.length} check{c.preCheck.checks.length > 1 ? 's' : ''} flagged at submit</summary>
+                {c.preCheck.checks.map(k => <div key={k.id} className={`cs-check ${k.level}`}><b>{k.title}</b><span>{k.detail}</span></div>)}
+              </details>
+            )
+        )}
+
+        {tab === 'NEW' && <SuggestedEngineer caseId={c.id} busy={busy} onAssign={(id) => handleAssign(c.id, id)} />}
+
         {/* Actions for this stage */}
         {tab === 'NEW' && (
           <div className="cs-assign">
@@ -474,6 +491,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
           {(tab === 'REVIEW' || tab === 'DONE') && (
             <button className="cs-btn cs-ghost" onClick={() => setViewing(c)}><FileText size={15} /> View Report</button>
           )}
+          {tab === 'DONE' && c.status === 'Approved' && <SendToBank c={c} />}
         </div>
 
         {tab === 'REVIEW' && (

@@ -7,6 +7,7 @@ import { API_BASE_URL } from '../../config/api';
 import IconTile from '../Shared/IconTile';
 import ReportViewer, { fetchReport } from '../Shared/ReportViewer';
 import CaseCreationModal from './CaseModalSteps/CaseCreationModal';
+import TellCustomer from './TellCustomer';
 import './AttendanceView.css';
 
 const REQUIRED_DOCS = [
@@ -250,6 +251,7 @@ export default function CaseDetailsView({ caseId }) {
                 <button className="td-action in" onClick={startValuation}>
                   <FileText size={20} /> {status === 'Returned' ? 'Make Corrections' : 'Start Valuation'}
                 </button>
+                <TellCustomer caseId={caseData.id || caseId} notified={caseData.customerNotified} />
                 <div className="cd-actions">
                   <button onClick={openMaps}><Navigation size={20} /><span>Directions</span></button>
                   <button onClick={handleToggleTracking} className={isTracking ? 'on' : ''}><Map size={20} /><span>{isTracking ? 'Stop Trip' : 'Start Trip'}</span></button>

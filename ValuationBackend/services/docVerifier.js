@@ -115,7 +115,8 @@ Reply with ONLY this JSON:
    "deedNo": null, "deedDate": "DD-MM-YYYY or null", "surveyNo": null, "plotNo": null, "doorNo": null, "flatNo": null,
    "extent": "number and unit as written, e.g. 2.58 Cents / 145 Sq.Yds / Ac 1.20", "village": null, "mandal": null, "district": null,
    "wardNo": null, "khataNo": null, "assessmentNo": null, "taxAmount": null, "marketValue": null, "guidelineRate": null,
-   "approvalPlanNo": null, "approvalPlanDate": null, "plinthArea": null,
+   "approvalPlanNo": null, "approvalPlanDate": null, "plinthArea": "total built-up / plinth area with unit, from the permit or plan, or null",
+   "floorAreas": [{"floor": "Ground Floor / First Floor / …", "area": "number and unit"}],
    "boundaries": {"north": null, "south": null, "east": null, "west": null}
  }
 }`;
@@ -223,7 +224,10 @@ function toCaseFields(ai) {
     approvalPlanNo: f.approvalPlanNo, approvalPlanDate: f.approvalPlanDate, village: f.village, mandal: f.mandal,
     ownerName: owner && owner.name, fathersName: owner && owner.relation, vendorName: vendor && vendor.name,
     boundaries: f.boundaries && Object.values(f.boundaries).some(Boolean) ? f.boundaries : null,
+    plinthArea: tidyNumber(f.plinthArea),
+    floorAreas: Array.isArray(f.floorAreas) ? f.floorAreas.filter((x) => x && x.area).map((x) => ({ floor: String(x.floor || ''), area: tidyNumber(String(x.area)) })) : null,
   };
+  if (out.floorAreas && !out.floorAreas.length) delete out.floorAreas;
   Object.keys(out).forEach(k => (out[k] === null || out[k] === undefined || out[k] === '') && delete out[k]);
   return out;
 }

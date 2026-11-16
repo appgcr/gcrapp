@@ -65,6 +65,10 @@ const valuationCaseSchema = new mongoose.Schema({
 
     boundariesDoc: { north: String, south: String, east: String, west: String },
     boundariesActual: { north: String, south: String, east: String, west: String },
+    dimensionUnit: String,
+    dimensionsDoc: { north: String, south: String, east: String, west: String },
+    dimensionsActual: { north: String, south: String, east: String, west: String },
+    planAreas: { type: mongoose.Schema.Types.Mixed, default: null }, // plinth / floor areas read from the approved plan
     buildingAge: String,
     flooringType: String,
     structureType: String,
@@ -84,6 +88,12 @@ const valuationCaseSchema = new mongoose.Schema({
     report: { type: mongoose.Schema.Types.Mixed, default: {} }
   },
 
+  // Checks run before submit (services/preCheck.js): shown to the engineer and the reviewing admin
+  preCheck: { type: mongoose.Schema.Types.Mixed, default: null },
+  // Report sent to the bank automatically after approval (services/reportDelivery.js)
+  delivery: { type: mongoose.Schema.Types.Mixed, default: null },
+  // Customer told the engineer is on the way
+  customerNotified: { type: mongoose.Schema.Types.Mixed, default: null },
   locationData: { type: String, default: '' },
   
   status: { type: String, enum: ['Pending', 'Reviewing', 'Returned', 'Completed', 'Approved', 'Rejected'], default: 'Pending' },

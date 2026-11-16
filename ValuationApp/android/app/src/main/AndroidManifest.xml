@@ -50,6 +50,8 @@
 
     <!-- Permissions (each is explained to the user in the in-app "Allow access" screen first).
          Notifications + background location come from the push / geolocation plugins. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />

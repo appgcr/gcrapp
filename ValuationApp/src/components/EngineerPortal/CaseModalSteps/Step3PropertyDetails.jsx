@@ -3,6 +3,7 @@ import { Plus, X, ChevronRight } from 'lucide-react';
 import { FLOOR_LABELS, formatCurrency, formatArea, isBuiltProperty, toFieldValue } from './caseModalHelpers';
 import BankReportDetails, { isApgb } from './BankReportDetails';
 import LandRateCard, { landRateField } from './LandRateCard';
+import VoiceFill from './VoiceFill';
 import { useBanks, matchBank } from '../../../utils/banks';
 
 export default function Step3PropertyDetails({
@@ -18,6 +19,7 @@ export default function Step3PropertyDetails({
   setManuallyModifiedFields,
   handleNextToSiteImages,
   bankName = '',
+  caseId = '',
   siteMode = false // true: the document details were checked on the previous screen, show only site-visit details
 }) {
   // Banks with their own exact report format get the extra report fields
@@ -25,8 +27,37 @@ export default function Step3PropertyDetails({
   const bankRec = matchBank(banks, bankName);
   const hasOwnFormat = bankRec ? bankRec.format && bankRec.format !== 'standard' : isApgb(bankName);
   const built = isBuiltProperty(propertyDetails.propertyType || '');
+  const markEdited = (key) => setManuallyModifiedFields && setManuallyModifiedFields(prev => new Set(prev).add(key));
+  // One tap: the site matches the documents
+  const docBounds = propertyDetails.boundariesDoc || {};
+  const hasDocBounds = ['north', 'south', 'east', 'west'].some(d => String(docBounds[d] || '').trim());
+  const copyDocBounds = () => {
+    ['north', 'south', 'east', 'west'].forEach(d => markEdited(`boundariesActual.${d}`));
+    setPropertyDetails({ ...propertyDetails, boundariesActual: { ...(propertyDetails.boundariesActual || {}), ...Object.fromEntries(['north', 'south', 'east', 'west'].map(d => [d, docBounds[d] || (propertyDetails.boundariesActual || {})[d] || ''])) } });
+  };
+  const docDims = propertyDetails.dimensionsDoc || {};
+  const hasDocDims = ['north', 'south', 'east', 'west'].some(d => String(docDims[d] || '').trim());
+  const copyDocDims = () => {
+    ['north', 'south', 'east', 'west'].forEach(d => markEdited(`dimensionsActual.${d}`));
+    setPropertyDetails({ ...propertyDetails, dimensionsActual: { ...(propertyDetails.dimensionsActual || {}), ...Object.fromEntries(['north', 'south', 'east', 'west'].map(d => [d, docDims[d] || (propertyDetails.dimensionsActual || {})[d] || ''])) } });
+  };
+  // Areas read from the approved plan / permit
+  const planAreas = propertyDetails.planAreas;
+  const usePlanAreas = () => {
+    markEdited('siteValue');
+    const sv = propertyDetails.siteValue || {};
+    const floors = (planAreas.floors || []).length ? planAreas.floors : (sv.floors || [{ id: 'gf', label: 'Ground Floor (GF)', value: '' }]);
+    setPropertyDetails({ ...propertyDetails, siteValue: { ...sv, plinthArea: planAreas.plinthArea || sv.plinthArea || '', floors } });
+  };
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', gap: '16px', paddingBottom: '16px' }}>
+      <style>{`
+        .same-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+        .same-btn { border: 1px solid #bfdbfe; background: #eff6ff; color: #1d4ed8; font-size: 12px; font-weight: 700; padding: 6px 10px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
+        .same-btn.green { border-color: #86efac; background: #fff; color: #15803d; padding: 4px 9px; font-size: 11px; }
+        .same-btn.plan { margin-top: 6px; width: 100%; border-radius: 8px; }
+        .same-btn:active { transform: scale(.97); }
+      `}</style>
       
       {!siteMode && (<>
       {/* Property Category */}
@@ -498,11 +529,25 @@ export default function Step3PropertyDetails({
       
       </>)}
 
+      {siteMode && (
+        <VoiceFill
+          propertyDetails={propertyDetails}
+          setPropertyDetails={setPropertyDetails}
+          setManuallyModifiedFields={setManuallyModifiedFields}
+          options={{ plotTypes, roadTypes, structureTypes, flooringTypes }}
+        />
+      )}
+
       {/* Boundaries (As per actual / visit) */}
       <div style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-        <label style={{ display: 'block', fontSize: '14px', fontWeight: '700', color: 'var(--primary)', marginBottom: '12px' }}>
-          Boundaries (As per actual / visit) <span style={{ color: '#ef4444' }}>*</span>
-        </label>
+        <div className="same-row">
+          <label style={{ fontSize: '14px', fontWeight: '700', color: 'var(--primary)', margin: 0 }}>
+            Boundaries (As per actual / visit) <span style={{ color: '#ef4444' }}>*</span>
+          </label>
+          {hasDocBounds && (
+            <button type="button" className="same-btn" onClick={copyDocBounds}>Same as documents</button>
+          )}
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
           <div>
             <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '4px' }}>
@@ -621,9 +666,14 @@ export default function Step3PropertyDetails({
 
         {/* As per Actual Inspection */}
         <div>
-          <span style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#15803d', marginBottom: '6px' }}>
-            Measurements Actual on Ground
-          </span>
+          <div className="same-row" style={{ marginBottom: '6px' }}>
+            <span style={{ fontSize: '11px', fontWeight: '700', color: '#15803d' }}>
+              Measurements Actual on Ground
+            </span>
+            {hasDocDims && (
+              <button type="button" className="same-btn green" onClick={copyDocDims}>Same as document</button>
+            )}
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
             {['north', 'south', 'east', 'west'].map(dir => (
               <div key={`dim-act-${dir}`}>
@@ -650,7 +700,7 @@ export default function Step3PropertyDetails({
       </div>
       {/* Market land rate: the land value depends on it, so it is asked here, not in the bank details */}
       {propertyDetails.propertyType && (
-        <LandRateCard propertyDetails={propertyDetails} setPropertyDetails={setPropertyDetails} />
+        <LandRateCard propertyDetails={propertyDetails} setPropertyDetails={setPropertyDetails} caseId={caseId} />
       )}
       {/* Structural & Site Visit Details */}
       <div style={{ display: 'flex', gap: '12px' }}>
@@ -921,6 +971,11 @@ export default function Step3PropertyDetails({
                 setPropertyDetails({...propertyDetails, siteValue: {...(propertyDetails.siteValue || {}), plinthArea: formatArea(e.target.value)}});
               }}
             />
+            {planAreas && (planAreas.plinthArea || (planAreas.floors || []).length > 0) && (
+              <button type="button" className="same-btn plan" onClick={usePlanAreas}>
+                Use plan area{planAreas.plinthArea ? ` (${Number(planAreas.plinthArea).toLocaleString('en-IN')} Sq.ft)` : ''}
+              </button>
+            )}
           </div>
           {(propertyDetails.siteValue?.floors || [{ id: 'gf', label: 'Ground Floor (GF)', value: '' }]).map((floor, index) => (
             <div key={floor.id} style={{ position: 'relative' }}>

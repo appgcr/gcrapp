@@ -25,6 +25,27 @@ function clean(body = {}) {
       seen.add(k); return true;
     }).slice(0, 300);
   }
+  const okEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+  if (body.email !== undefined) {
+    const e = String(body.email || '').trim().toLowerCase();
+    if (e && !okEmail(e)) throw new Error('The bank email does not look right.');
+    out.email = e;
+  }
+  if (body.autoSend !== undefined) out.autoSend = !!body.autoSend;
+  if (body.contacts !== undefined) {
+    // "ITI Road | itiroad@sbi.co.in | 98765 43210" per line, or [{ branch, email, phone }]
+    const rows = Array.isArray(body.contacts) ? body.contacts : String(body.contacts || '').split('\n').map((l) => {
+      const [branch, ...rest] = l.split('|').map((x) => x.trim());
+      const email = rest.find((x) => x.includes('@')) || '';
+      const phone = (rest.find((x) => /\d{6,}/.test(x.replace(/\D/g, ''))) || '').replace(/[^\d+]/g, '');
+      return { branch, email, phone };
+    });
+    out.contacts = rows.filter((r) => r && r.branch && (r.email || r.phone)).map((r) => {
+      const email = String(r.email || '').trim().toLowerCase();
+      if (email && !okEmail(email)) throw new Error(`Email for ${r.branch} does not look right.`);
+      return { branch: String(r.branch).trim().slice(0, 80), email, phone: String(r.phone || '').replace(/[^\d+]/g, '').slice(0, 15) };
+    }).slice(0, 300);
+  }
   if (body.format !== undefined) {
     if (!banks.FORMATS.some((f) => f.key === body.format)) throw new Error('Unknown report format.');
     out.format = body.format;

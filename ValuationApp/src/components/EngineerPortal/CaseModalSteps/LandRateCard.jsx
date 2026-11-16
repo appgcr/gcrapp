@@ -1,5 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { reportFormatFor } from './BankReportDetails';
+import { API_BASE_URL } from '../../../config/api';
+import { currentPosition } from '../../../utils/sitePhotos';
 
 /**
  * The market land rate — the one number the land value depends on.
@@ -33,7 +35,7 @@ export function landRateMissing(pd = {}) {
 
 const inr = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
 
-export default function LandRateCard({ propertyDetails = {}, setPropertyDetails }) {
+export default function LandRateCard({ propertyDetails = {}, setPropertyDetails, caseId = '' }) {
   const field = landRateField(propertyDetails.propertyType);
   const rep = propertyDetails.report || {};
   const value = rep[field.key] ?? '';
@@ -48,7 +50,31 @@ export default function LandRateCard({ propertyDetails = {}, setPropertyDetails 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [field.key, guide]);
 
-  const set = (v) => setPropertyDetails({ ...propertyDetails, report: { ...rep, [field.key]: v.replace(/[^\d.]/g, ''), landRateFromGuideline: false } });
+  // Rates of approved valuations near this property
+  const [near, setNear] = useState(null);
+  const [showNear, setShowNear] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      let gps = null;
+      // Don't keep the engineer waiting for GPS: 4 s, else the server uses the deed / site address
+      try { gps = await Promise.race([currentPosition(), new Promise((_, rej) => setTimeout(() => rej(new Error('slow')), 4000))]); } catch { /* no GPS */ }
+      try {
+        const r = await fetch(`${API_BASE_URL}/api/cases/rate-guide`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ caseId, lat: gps?.lat, lng: gps?.lng, propertyType: propertyDetails.propertyType, village: propertyDetails.village }),
+        });
+        const d = r.ok ? await r.json() : null;
+        if (alive) setNear(d && d.count ? d : null);
+      } catch { /* offline */ }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caseId, propertyDetails.propertyType]);
+  const nearRate = near ? Math.round(near.medianPerSqyd * field.perSqyd) : 0;
+  const useNear = () => setPropertyDetails({ ...propertyDetails, report: { ...rep, [field.key]: String(nearRate), landRateFromGuideline: false, landRateFromNearby: true } });
+
+  const set = (v) => setPropertyDetails({ ...propertyDetails, report: { ...rep, [field.key]: v.replace(/[^\d.]/g, ''), landRateFromGuideline: false, landRateFromNearby: false } });
   const n = num(value);
   const empty = field.required && !n;
   const below = n && guide && n < guide;
@@ -67,6 +93,29 @@ export default function LandRateCard({ propertyDetails = {}, setPropertyDetails 
         {!empty && n > 0 && <>{inr(n)} {field.unit}{field.perSqyd !== 1 && <> · ≈ {inr(n / field.perSqyd)} per Sq.yd</>}</>}
         {!empty && !n && 'Optional for flats — the land share is usually valued with the flat.'}
       </div>
+      {near && (
+        <div className="lrc-near">
+          <div className="lrc-near-top">
+            <span>
+              Nearby: <b>{inr(nearRate)} {field.unit}</b>
+              <small> · middle of {near.count} approved case{near.count === 1 ? '' : 's'} {near.basis === 'distance' ? `within ${near.radiusKm} km` : `in ${propertyDetails.village || 'this village'}`}</small>
+            </span>
+            {Math.round(n) !== nearRate && <button type="button" onClick={useNear}>Use</button>}
+          </div>
+          {near.count > 1 && <div className="lrc-near-range">{near.minPerSqyd !== near.maxPerSqyd ? <>Range {inr(near.minPerSqyd * field.perSqyd)} – {inr(near.maxPerSqyd * field.perSqyd)} {field.unit}</> : 'All at the same rate'}
+            {' '}<button type="button" className="lrc-link" onClick={() => setShowNear(!showNear)}>{showNear ? 'Hide' : 'See cases'}</button></div>}
+          {showNear && (
+            <ul className="lrc-list">
+              {near.items.map((it) => (
+                <li key={it.fileNumber}><span>{it.fileNumber}{it.area ? ` · ${it.area}` : ''}{it.distanceKm != null ? ` · ${it.distanceKm} km` : ''}</span><b>{inr(it.ratePerSqyd * field.perSqyd)}</b></li>
+              ))}
+            </ul>
+          )}
+          {n > 0 && nearRate > 0 && Math.abs(n - nearRate) / nearRate > 0.4 && (
+            <div className="lrc-far">Your rate is {Math.round(Math.abs(n - nearRate) / nearRate * 100)}% {n > nearRate ? 'above' : 'below'} nearby cases. Please check.</div>
+          )}
+        </div>
+      )}
       {guide > 0 && (
         <div className={`lrc-guide ${fromGuide ? 'from' : ''}`}>
           {fromGuide
@@ -88,6 +137,16 @@ export default function LandRateCard({ propertyDetails = {}, setPropertyDetails 
         .lrc.need .lrc-note { color: #c2410c; font-weight: 600; }
         .lrc-guide { margin-top: 6px; font-size: 12px; color: #64748b; }
         .lrc-guide.from { color: #1d4ed8; font-weight: 600; }
+        .lrc-near { margin-top: 10px; padding: 9px 10px; border-radius: 10px; background: #fff; border: 1px dashed #93c5fd; font-size: 12.5px; color: #0f172a; }
+        .lrc-near-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .lrc-near small { color: #64748b; }
+        .lrc-near-top button { flex-shrink: 0; border: 0; background: #2563eb; color: #fff; font-weight: 700; font-size: 12px; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+        .lrc-near-range { margin-top: 4px; font-size: 11.5px; color: #64748b; }
+        .lrc-link { border: 0; background: none; color: #2563eb; font-weight: 700; font-size: 11.5px; padding: 0; cursor: pointer; }
+        .lrc-list { list-style: none; margin: 6px 0 0; padding: 0; }
+        .lrc-list li { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-top: 1px solid #f1f5f9; font-size: 11.5px; color: #475569; }
+        .lrc-far { margin-top: 6px; color: #b45309; font-weight: 700; font-size: 12px; }
+        body.dark-theme .lrc-near { background: #2c2c2e; color: #fff; }
         body.dark-theme .lrc { background: #1c1c1e; border-color: #3a3a3c; }
         body.dark-theme .lrc-row { background: #2c2c2e; border-color: #3a3a3c; }
         body.dark-theme .lrc-row input { color: #fff; }

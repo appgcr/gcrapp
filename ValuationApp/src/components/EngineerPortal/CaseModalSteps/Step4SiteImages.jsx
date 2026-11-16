@@ -1,5 +1,6 @@
 import { MAX_SITE_PHOTOS } from '../../../utils/sitePhotos';
 import React from 'react';
+import usePhotoLabels from './usePhotoLabels';
 import { UploadCloud, X, Camera, ScanLine } from 'lucide-react';
 
 export default function Step4SiteImages({
@@ -13,8 +14,10 @@ export default function Step4SiteImages({
   captureDocument,
   videoRef,
   setPreviewImage,
-  handleRunSecurityExtraction
+  handleRunSecurityExtraction,
+  propertyType = ''
 }) {
+  const { labels, missing, busy: labelling } = usePhotoLabels(siteImages, propertyType);
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
       <input
@@ -57,10 +60,20 @@ export default function Step4SiteImages({
             </button>
           </div>
 
+          {siteImages.length > 0 && (
+            <div className={`phl ${missing && missing.length === 0 ? 'ok' : ''}`}>
+              {labelling && !missing ? 'Mahe AI is sorting your photos…'
+                : missing === null ? null
+                : missing.length === 0 ? '✓ All key photos are here.'
+                : <>Still needed: <b>{missing.map(m => m.label).join(', ')}</b></>}
+              {labelling && missing && <span className="phl-dot"> · checking…</span>}
+            </div>
+          )}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginBottom: '24px' }}>
             {siteImages.map((img) => (
               <div key={img.id} onClick={() => setPreviewImage(img)} style={{ position: 'relative', width: '80px', height: '100px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-color)', cursor: 'pointer' }}>
                 <img src={img.url} alt="Site" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                {labels[img.id] && <span className="phl-tag">{labels[img.id].label}</span>}
                 <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.7)', padding: '4px', display: 'flex', flexDirection: 'column', alignItems: 'center', pointerEvents: 'none' }}>
                   <span style={{ color: '#fde047', fontSize: '7px', fontWeight: '800', letterSpacing: '0.5px' }}>VERIFIED</span>
                   <span style={{ color: 'white', fontSize: '6px', marginTop: '1px' }}>Timestamped</span>
@@ -113,6 +126,13 @@ export default function Step4SiteImages({
             </>)}
           </div>
 
+          <style>{`
+            .phl { margin: -12px 0 14px; padding: 9px 12px; border-radius: 10px; background: #fff7ed; border: 1px solid #fed7aa; font-size: 12.5px; color: #9a3412; }
+            .phl:empty { display: none; }
+            .phl.ok { background: #f0fdf4; border-color: #bbf7d0; color: #166534; font-weight: 700; }
+            .phl-dot { color: #94a3b8; font-weight: 400; }
+            .phl-tag { position: absolute; top: 3px; left: 3px; right: 22px; background: rgba(37,99,235,.92); color: #fff; font-size: 8.5px; font-weight: 800; padding: 2px 4px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+          `}</style>
           <button 
             type="button"
             className="btn-primary" 

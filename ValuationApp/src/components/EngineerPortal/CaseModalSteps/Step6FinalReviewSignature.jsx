@@ -32,7 +32,9 @@ export default function Step6FinalReviewSignature({
   savedSignature = '',
   bankValues,
   missingDocs = [],
-  onGoToDocs
+  onGoToDocs,
+  preChecks = null,
+  onFixCheck
 }) {
   const [applySignature, setApplySignature] = React.useState(false);
   const totalDocPages = Object.values(uploadedDocs).flat().reduce((sum, p) => sum + (p.pageCount || 1), 0);
@@ -316,6 +318,42 @@ export default function Step6FinalReviewSignature({
         <label htmlFor="terms" style={{ fontSize: '13px', lineHeight: '1.4', color: 'var(--text-primary)', cursor: 'pointer' }}>
           I have thoroughly reviewed all submitted data and documents. I hereby declare that the information provided is correct to the best of my knowledge and belief, and I agree to all terms and conditions of the valuation policy.
         </label>
+      </div>
+
+      {/* Checks before submit */}
+      <div className="pck">
+        <div className="pck-h">
+          {preChecks === null ? 'Checking your valuation…'
+            : preChecks.length === 0 ? '✓ All checks passed'
+            : `${preChecks.length} thing${preChecks.length > 1 ? 's' : ''} to look at before you submit`}
+        </div>
+        {preChecks && preChecks.length > 0 && (
+          <>
+            <div className="pck-sub">The admin sees these too. Fix them, or submit if they are correct.</div>
+            {preChecks.map(c => (
+              <div key={c.id} className={`pck-i ${c.level}`}>
+                <div className="pck-t">{c.title}</div>
+                <div className="pck-d">{c.detail}</div>
+                {onFixCheck && c.step && <button type="button" onClick={() => onFixCheck(c.step)}>Fix</button>}
+              </div>
+            ))}
+          </>
+        )}
+        <style>{`
+          .pck { margin-bottom: 16px; padding: 12px; border-radius: 12px; background: #f0fdf4; border: 1px solid #bbf7d0; }
+          .pck-h { font-size: 14px; font-weight: 800; color: #166534; }
+          .pck:has(.pck-i) { background: #fffbeb; border-color: #fde68a; }
+          .pck:has(.pck-i) .pck-h { color: #92400e; }
+          .pck-sub { font-size: 12px; color: #78716c; margin: 2px 0 8px; }
+          .pck-i { position: relative; background: #fff; border-radius: 10px; padding: 9px 60px 9px 11px; margin-top: 8px; border-left: 4px solid #f59e0b; }
+          .pck-i.info { border-left-color: #60a5fa; }
+          .pck-t { font-size: 13px; font-weight: 700; color: #0f172a; }
+          .pck-d { font-size: 12px; color: #475569; margin-top: 2px; line-height: 1.4; }
+          .pck-i button { position: absolute; top: 9px; right: 9px; border: 1px solid #cbd5e1; background: #fff; border-radius: 999px; font-size: 12px; font-weight: 700; padding: 4px 12px; color: #1d4ed8; cursor: pointer; }
+          body.dark-theme .pck { background: #1c1c1e; border-color: #3a3a3c; }
+          body.dark-theme .pck-i { background: #2c2c2e; }
+          body.dark-theme .pck-t { color: #fff; }
+        `}</style>
       </div>
 
       {missingDocs.length > 0 && (

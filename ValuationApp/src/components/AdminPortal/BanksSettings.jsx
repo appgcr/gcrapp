@@ -149,6 +149,9 @@ function BankSheet({ bank, formats, onClose, onSaved }) {
     shortName: bank.shortName || '',
     aliases: (bank.aliases || []).join(', '),
     branches: (bank.branches || []).join('\n'),
+    email: bank.email || '',
+    autoSend: bank.autoSend !== false,
+    contacts: (bank.contacts || []).map((r) => [r.branch, r.email, r.phone].filter(Boolean).join(' | ')).join('\n'),
     format: bank.format || 'standard',
     status: bank.status || 'Active',
     policies: Object.fromEntries(TYPES.map(([k]) => [k, {
@@ -218,6 +221,20 @@ function BankSheet({ bank, formats, onClose, onSaved }) {
           />
         </div>
         <p className="fs-foot">These show as a list when a case for this bank is created.</p>
+
+        <div className="fs-section">Report delivery</div>
+        <div className="fs-group">
+          <label className="fs-row"><span>Bank email</span><input type="email" value={form.email} onChange={set('email')} placeholder="Used when a branch has none" autoComplete="off" /></label>
+          <label className="fs-row"><span>Email on approval</span><input type="checkbox" checked={form.autoSend} onChange={(e) => setForm((f) => ({ ...f, autoSend: e.target.checked }))} style={{ width: 22, height: 22, flex: '0 0 auto' }} /></label>
+          <textarea
+            value={form.contacts}
+            onChange={set('contacts')}
+            rows={4}
+            placeholder={'Branch | email | WhatsApp, one per line, e.g.\nITI Road | sbi.itiroad@sbi.co.in | 9876543210'}
+            style={{ width: '100%', border: 0, borderTop: '1px solid rgba(0,0,0,.06)', outline: 'none', resize: 'vertical', padding: '12px 16px', font: 'inherit', fontSize: 16, lineHeight: 1.5, background: 'transparent', color: 'inherit', boxSizing: 'border-box' }}
+          />
+        </div>
+        <p className="fs-foot">When a report is approved it is emailed to the branch (or the bank email). Admins can also send it by WhatsApp from the Done tab.</p>
 
         <div className="fs-section">Report</div>
         <div className="fs-group">

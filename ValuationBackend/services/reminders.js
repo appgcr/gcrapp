@@ -365,6 +365,68 @@ async function ruleCheckOut(ctx) {
   return count;
 }
 
+// Engineer has a case assigned 2+ hours ago, is on duty, and has not told the customer or started → nudge once a day
+async function ruleVisitNudge(ctx) {
+  const { ist, now, cases, duty } = ctx;
+  if (ist.minutes < 10 * 60 || ist.minutes >= 18 * 60) return 0;
+  let count = 0;
+  for (const c of cases) {
+    if (c.status !== 'Pending' || !isAssigned(c)) continue;
+    const assignedAt = parseInspection(c.inspectionDate, c.inspectionTime);
+    if (!assignedAt || now.getTime() - assignedAt.getTime() < 2 * HOUR) continue;
+    if (c.customerNotified && c.customerNotified.at && istParts(new Date(c.customerNotified.at)).ymd === ist.ymd) continue;
+    const eng = ctx.engineers.find((e) => e.id === c.assignedEngineerId || e.username === c.assignedEngineerId);
+    if (!eng || !duty.get(eng.id)?.checkedIn) continue;
+    const sent = await send(`visitnudge:${c.id}:${ist.ymd}`, 'visitNudge', {
+      to: eng.id, type: 'visit_nudge', caseId: c.id, priority: 'normal', now,
+      title: 'Plan your site visit',
+      message: `${c.clientName || `Case #${c.id}`}: tap “Tell customer I'm coming” when you leave so they wait at the site.`,
+    });
+    if (sent) count += 1;
+  }
+  return count;
+}
+
+// End-of-day summary for admins (Super Admin: all branches, Branch Admin: their own)
+const EVENING_AT = 19 * 60 + 30; // 7:30 PM IST
+async function ruleEveningSummary(ctx) {
+  const { ist, now, admins } = ctx;
+  if (!isDue(ist.minutes, EVENING_AT)) return 0;
+  const start = istDayStart(ist.ymd);
+  const [subs, cases] = await Promise.all([
+    ValuationCaseVersion.find({ submittedAt: { $gte: start } }).select('caseId').lean(),
+    ValuationCase.find({}).select('id branchId fileNumber clientName status approvedAt returnedAt assignedEngineerId assignedEngineerName inspectionDate inspectionTime createdAt').lean(),
+  ]);
+  const byId = new Map(cases.map((c) => [c.id, c]));
+  let count = 0;
+  for (const a of admins) {
+    const mine = (c) => c && (a.role !== 'ADMIN' || c.branchId === a.branchId);
+    const submitted = new Set(subs.map((v) => v.caseId).filter((id) => mine(byId.get(id)))).size;
+    const own = cases.filter(mine);
+    const approved = own.filter((c) => c.approvedAt && new Date(c.approvedAt) >= start).length;
+    const returned = own.filter((c) => c.returnedAt && new Date(c.returnedAt) >= start).length;
+    const waiting = own.filter((c) => c.status === 'Reviewing' || c.status === 'Completed').length;
+    const stuck = own.filter((c) => {
+      if ((c.status !== 'Pending' && c.status !== 'Returned') || !isAssigned(c)) return false;
+      const since = (c.status === 'Returned' && c.returnedAt) ? new Date(c.returnedAt) : (parseInspection(c.inspectionDate, c.inspectionTime) || new Date(c.createdAt));
+      return now.getTime() - since.getTime() > 48 * HOUR;
+    });
+    const unassigned = own.filter((c) => isOpen(c) && !isAssigned(c)).length;
+    const parts = [
+      `Today: ${submitted} submitted, ${approved} approved${returned ? `, ${returned} returned` : ''}`,
+      `${waiting} waiting for your review`,
+      unassigned ? `${unassigned} not assigned` : null,
+      stuck.length ? `${stuck.length} stuck over 2 days (${stuck.slice(0, 3).map((c) => c.fileNumber || `#${c.id}`).join(', ')}${stuck.length > 3 ? '…' : ''})` : 'nothing stuck',
+    ].filter(Boolean);
+    const sent = await send(`evening:${a.id}:${ist.ymd}`, 'eveningSummary', {
+      to: a.id, type: 'evening_summary', priority: 'digest', now,
+      title: 'Today at Gouru Valuations', message: parts.join(' · '),
+    });
+    if (sent) count += 1;
+  }
+  return count;
+}
+
 // ---------- runner ----------
 
 /**
@@ -388,7 +450,7 @@ async function runReminders(now = new Date()) {
   if (!settings.enabled) { summary.skipped = 'disabled'; return summary; }
 
   const [cases, engineers, duty] = await Promise.all([
-    ValuationCase.find({}).select('id fileNumber branchId clientName address bankName status assignedEngineerId assignedEngineerName createdAt inspectionDate inspectionTime').lean(),
+    ValuationCase.find({}).select('id fileNumber branchId clientName address bankName status assignedEngineerId assignedEngineerName createdAt inspectionDate inspectionTime customerNotified').lean(),
     User.find({ role: { $in: ['ENGINEER', 'ADMIN', 'SUPER_ADMIN'] }, status: { $ne: 'Inactive' } }).select('id username name role branchId activityLog').lean(),
     dutyStateByUser(ist.ymd),
   ]);
@@ -410,6 +472,8 @@ async function runReminders(now = new Date()) {
     summary.sent.checkIn = await ruleCheckIn(ctx);
     summary.sent.overdue = await ruleOverdue(ctx);
     summary.sent.checkOut = await ruleCheckOut(ctx);
+    summary.sent.visitNudge = await ruleVisitNudge(ctx);
+    summary.sent.eveningSummary = await ruleEveningSummary(ctx);
   }
   return summary;
 }

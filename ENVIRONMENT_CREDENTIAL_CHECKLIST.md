@@ -16,7 +16,7 @@ This checklist organizes every credential and secret across the GCR ecosystem in
 | **D** | Gemini AI Credentials | ✅ Key added 11 Nov 2026 (billing recommended) | **Required for go-live** | Yes (15 RPM Free Tier) |
 | **E** | Cloudinary Credentials | API key + secret saved 11 Nov 2026 — **Cloud name still needed** | Recommended | Yes (25 Monthly Credits Free) |
 | **F** | Firebase Credentials | ✅ Android config + server key installed, FCM on (11 Nov 2026) — **Render needs the key as a Secret File** | Optional | Yes (FCM Push is 100% Free) |
-| **G** | Email (SMTP) Secrets | Brevo SMTP key saved — **SMTP login + sender email needed; app has no email features yet** | Recommended | Yes (Gmail App Password / SendGrid) |
+| **G** | Email (SMTP) Secrets | Brevo SMTP key saved — **SMTP login + sender email needed. Used to email approved reports to bank branches automatically (16 Nov 2026); until then admins send by WhatsApp / mail from “Send to bank”** | Recommended | Yes (Gmail App Password / SendGrid) |
 | **H** | Maps Credentials | OpenStreetMap (Free) | OpenStreetMap (Free) | Yes (100% Free OpenStreetMap) |
 | **I** | Monitoring (Sentry) | Org `gcr-ue` created — **project DSN needed; SDK not yet installed** | Recommended | Yes (Sentry Free Developer Tier) |
 | **J** | Hosting Infrastructure | Localhost | Cloud Deployment | Yes / Freemium options |
@@ -91,6 +91,9 @@ This checklist organizes every credential and secret across the GCR ecosystem in
 | **SMTP Port** (`SMTP_PORT`) | Optional | Free | Email Provider Settings | `ValuationBackend/.env` | Optional (defaults to 587) |
 | **SMTP Username** (`SMTP_USERNAME`) | Optional | Free | Email Provider Settings | `ValuationBackend/.env` | Only if enabling email alerts |
 | **SMTP Password** (`SMTP_PASSWORD`) | Optional | Free | Provider App Password | `ValuationBackend/.env` | Only if enabling email alerts |
+| **Sender** (`EMAIL_FROM`) + `EMAIL_ENABLED=true` | Optional | Free | Verified sender in the provider | `ValuationBackend/.env` and Render | Yes — turns on automatic report emails to banks |
+
+Also add each bank's email / branch emails in the app: Settings → Banks → Report delivery.
 
 ---
 
