@@ -206,10 +206,15 @@ function calculateValuation(propertyDetails = {}, config = {}) {
       const extentScaled = parseExtentToSqYardsScaled(p.netExtent || p.extent || '0');
       netExtentSqYards = Number(extentScaled) / 10000;
 
-      let rawLandRate = p.siteValue?.ratePerSqYd || p.landRate || p.marketValueAmount || config.defaultLandRate;
+      // The bank-format details carry the rate too (per Sq.yd, or per cent → ÷ 48.4 Sq.yd)
+      const rep = p.report || {};
+      const num = (v) => { const n = Number(String(v == null ? '' : v).replace(/[^\d.]/g, '')); return Number.isFinite(n) && n > 0 ? n : 0; };
+      const fromReport = num(rep.landRatePerSqyd) || (num(rep.marketRatePerCent) ? Math.round(num(rep.marketRatePerCent) / 48.4) : 0)
+        || (num(rep.ratePerCent) ? Math.round(num(rep.ratePerCent) / 48.4) : 0);
+      let rawLandRate = p.siteValue?.ratePerSqYd || p.landRate || p.marketValueAmount || (fromReport ? String(fromReport) : '') || config.defaultLandRate;
       if (rawLandRate === undefined || rawLandRate === null || String(rawLandRate).trim() === '') {
         if (normCat !== 'Apartment') {
-          throw new Error('Land rate is required.');
+          throw new Error('Land rate is required. Enter the market rate (per Sq.yd or per cent) in Site details → bank details.');
         } else {
           rawLandRate = '0';
         }

@@ -26,7 +26,8 @@ function deedAddress(c) {
     mandal && mandal.toLowerCase() !== village.toLowerCase() ? `${mandal} Mandal` : '',
     district,
   ].filter(Boolean);
-  const typed = clean(c.address) || (typeof c.locationData === 'string' && !c.locationData.trim().startsWith('{') ? clean(c.locationData) : '');
+  const looksLikeAddress = (v) => typeof v === 'string' && v.trim() && !v.trim().startsWith('{') && !/^lat|location unavailable|fetching location/i.test(v.trim());
+  const typed = clean(c.address) || (looksLikeAddress(c.locationData) ? clean(c.locationData) : '');
   // Deed details are the official address; when only numbers are known, add the typed address for the place
   const placeKnown = village || mandal || district;
   let segs = parts;
@@ -46,6 +47,9 @@ function siteGps(c) {
     const j = typeof c.locationData === 'string' && c.locationData.trim().startsWith('{') ? JSON.parse(c.locationData) : null;
     if (j && Number.isFinite(+j.lat) && Number.isFinite(+j.lng) && !(+j.lat === 0 && +j.lng === 0)) return { lat: +j.lat, lng: +j.lng };
   } catch { /* not GPS */ }
+  // Site photos save it as text: "Lat: 14.466031, Long: 78.825028"
+  const t = /lat[a-z]*\s*[:=]\s*(-?\d+(?:\.\d+)?)\s*,\s*l(?:o)?ng[a-z]*\s*[:=]\s*(-?\d+(?:\.\d+)?)/i.exec(String(c.locationData || ''));
+  if (t && Math.abs(+t[1]) <= 90 && Math.abs(+t[2]) <= 180 && !(+t[1] === 0 && +t[2] === 0)) return { lat: +t[1], lng: +t[2] };
   const cur = c.currentLocation;
   if (cur && Number.isFinite(cur.lat) && Number.isFinite(cur.lng)) return { lat: cur.lat, lng: cur.lng };
   return null;

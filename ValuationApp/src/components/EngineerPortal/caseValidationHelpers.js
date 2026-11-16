@@ -1449,7 +1449,19 @@ const applyExtractedMeta = (
 
   // Guideline (SRO) rate from the Market Value certificate → the report's "Guideline rate per Sqyd"
   const guideline = getVal(meta.guidelineRate);
-  const guideNum = guideline ? guideline.replace(/[^\d.]/g, '') : '';
+  // "Rs. 8,500 per Sq. Yard" → 8500; per cent / acre / sq.ft converted to per Sq.yd
+  const guideNum = (() => {
+    if (!guideline) return '';
+    const m = guideline.replace(/,/g, '').match(/\d+(?:\.\d+)?/);
+    if (!m) return '';
+    let n = Number(m[0]);
+    const t = guideline.toLowerCase();
+    if (/per\s*cent|\/\s*cent|cents?\b/.test(t)) n = n / 48.4;
+    else if (/acre/.test(t)) n = n / 4840;
+    else if (/sq\.?\s*f(ee)?t|sft|square\s*f/.test(t)) n = n * 9;
+    else if (/sq\.?\s*m|square\s*met/.test(t)) n = n / 1.19599;
+    return n > 0 ? String(Math.round(n)) : '';
+  })();
   if (guideNum && Number(guideNum) > 0 && !getVal(next.report?.guidelineRatePerSqyd)) {
     next.guidelineRate = guideNum;
     next.report = { ...(next.report || {}), guidelineRatePerSqyd: guideNum };
