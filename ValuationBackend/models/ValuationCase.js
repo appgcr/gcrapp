@@ -37,6 +37,7 @@ const valuationCaseSchema = new mongoose.Schema({
     // Official Registration & Legal
     village: String, // village / area of the property, from the sale deed schedule
     mandal: String,
+    district: String, // from the sale deed schedule
     deedNo: String,
     deedYear: String,
     netExtent: String,
@@ -94,6 +95,7 @@ const valuationCaseSchema = new mongoose.Schema({
   delivery: { type: mongoose.Schema.Types.Mixed, default: null },
   // Our fee and invoice for this valuation (services/billing.js)
   billing: { type: mongoose.Schema.Types.Mixed, default: null },
+  billingCancelled: { type: [mongoose.Schema.Types.Mixed], default: [] }, // earlier invoices that were cancelled
   // Customer told the engineer is on the way
   customerNotified: { type: mongoose.Schema.Types.Mixed, default: null },
   locationData: { type: String, default: '' },

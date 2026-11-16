@@ -73,3 +73,4 @@
   .bp-hero h1 { font-size: 20px; }
   .bp-step-label { font-size: 10px; }
 }
+.bp-acts { display: flex; gap: 8px; flex-wrap: wrap; }

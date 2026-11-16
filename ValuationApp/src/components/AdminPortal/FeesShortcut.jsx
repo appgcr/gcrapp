@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { IndianRupee, ChevronRight } from 'lucide-react';
+import { IndianRupee, ChevronRight, CalendarRange } from 'lucide-react';
 import { API_BASE_URL } from '../../config/api';
 
 /** Dashboard row: money still due from banks this financial year → opens Fees */
-export default function FeesShortcut({ onOpen }) {
+export default function FeesShortcut({ onOpen, onMonthly }) {
   const [t, setT] = useState(null);
   useEffect(() => {
     const now = new Date(Date.now() + 330 * 60000);
@@ -13,6 +13,7 @@ export default function FeesShortcut({ onOpen }) {
   if (!t) return null;
   const inr = (n) => '₹' + Math.round(n || 0).toLocaleString('en-IN');
   return (
+    <>
     <button type="button" className="fsc" onClick={onOpen}>
       <span className="fsc-ic"><IndianRupee size={18} /></span>
       <span className="fsc-t"><b>Fees</b><small>{t.outstanding > 0 ? `${inr(t.outstanding)} due · ${t.unpaid} unpaid` : `${inr(t.received)} received this year`}</small></span>
@@ -28,5 +29,13 @@ export default function FeesShortcut({ onOpen }) {
         body.dark-theme .fsc-t b { color: #fff; }
       `}</style>
     </button>
+    {onMonthly && (
+      <button type="button" className="fsc" onClick={onMonthly}>
+        <span className="fsc-ic" style={{ background: '#6366f1' }}><CalendarRange size={18} /></span>
+        <span className="fsc-t"><b>Monthly report</b><small style={{ color: '#64748b' }}>Work, time taken, engineers, banks, money</small></span>
+        <ChevronRight size={18} className="fsc-ch" />
+      </button>
+    )}
+    </>
   );
 }

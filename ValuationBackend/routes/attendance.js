@@ -219,7 +219,17 @@ router.post('/', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'You can only record your own attendance.' });
     }
     if (!payload.userId) payload.userId = req.user.id;
-    const now = new Date(); // Server-side authoritative timestamp
+    let now = new Date(); // Server-side authoritative timestamp
+    // Check-in / check-out made with no signal: the phone's time is kept if it is recent (≤ 12 h) and not in the future
+    delete payload.offline;
+    if (payload.offlineAt && ['Clock-In', 'Clock-Out'].includes(payload.attendanceType)) {
+      const t = new Date(payload.offlineAt);
+      if (!Number.isNaN(t.getTime()) && t <= now && now - t <= 12 * 3600 * 1000) {
+        const lastAny = await Attendance.findOne({ userId: payload.userId || req.user.id, attendanceType: { $in: ['Clock-In', 'Clock-Out'] } }).sort({ timestamp: -1 }).select('timestamp').lean();
+        if (!lastAny || new Date(lastAny.timestamp) < t) { now = t; payload.offline = true; payload.formattedTime = ''; payload.formattedDate = ''; }
+      }
+    }
+    delete payload.offlineAt;
     payload.timestamp = now;
 
     if (!payload.id) {

@@ -80,9 +80,37 @@ export async function dropQueued(syncId) {
   await publishCounts();
 }
 
+// ── Check-in / check-out with no signal ───────────────────────────────────────
+const ATT_KEY = 'gcr_offline_attendance_v1';
+export async function queueAttendance(record) {
+  const q = (await localforage.getItem(ATT_KEY)) || [];
+  q.push({ ...record, offlineAt: record.timestamp || new Date().toISOString() });
+  await localforage.setItem(ATT_KEY, q);
+  scheduleRetry();
+}
+export async function pendingAttendance() {
+  return (await localforage.getItem(ATT_KEY)) || [];
+}
+async function syncAttendance() {
+  const q = (await localforage.getItem(ATT_KEY)) || [];
+  if (!q.length) return 0;
+  const left = []; let sent = 0;
+  for (const rec of q) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/attendance`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rec) });
+      if (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 401 && res.status !== 429)) sent += 1; // done, or the server says it no longer applies
+      else left.push(rec);
+    } catch { left.push(rec); }
+  }
+  await localforage.setItem(ATT_KEY, left);
+  if (sent) window.dispatchEvent(new CustomEvent('gcr_duty_changed'));
+  return sent;
+}
+
 /** Upload every waiting case */
 export async function syncPendingCases() {
   if (isSyncing || (typeof navigator !== 'undefined' && navigator.onLine === false)) return;
+  try { await syncAttendance(); } catch { /* retried later */ }
   const queue = await readQueue();
   const todo = queue.filter(i => i.status !== 'refused');
   if (!todo.length) { await publishCounts({ status: 'idle' }); return; }
@@ -135,7 +163,7 @@ function scheduleRetry() {
   retryTimer = setTimeout(async () => {
     retryTimer = null;
     const q = await readQueue();
-    if (q.some(i => i.status === 'pending')) { await syncPendingCases(); }
+    if (q.some(i => i.status === 'pending') || (await pendingAttendance()).length) { await syncPendingCases(); }
   }, RETRY_MS);
 }
 

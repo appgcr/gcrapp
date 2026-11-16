@@ -1608,6 +1608,15 @@ const applyExtractedMeta = (
     }
   }
 
+  // ─ District (deed schedule) → also fills the case's District when empty (see CaseCreationModal)
+  {
+    const district = getVal(meta.district);
+    if (district && isGarbage(next.district)) {
+      next.district = district.replace(/\s+district$/i, '').trim();
+      notifications.push(`District ${next.district} detected & auto-filled!`);
+    }
+  }
+
   // ─ Plinth / floor areas from the approved plan or permit ────────────────────────
   {
     const toSqft = (v) => {

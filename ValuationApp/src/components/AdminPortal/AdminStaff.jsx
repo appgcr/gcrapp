@@ -1,3 +1,4 @@
+import askConfirm from '../Shared/askConfirm';
 import { API_BASE_URL } from '../../config/api';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Loader2, X, Eye, EyeOff, Maximize2, Copy, Lock, KeyRound, MessageCircle, Navigation, Phone } from 'lucide-react';
@@ -183,7 +184,7 @@ export default function AdminStaff({ currentUser }) {
   };
   const handleResetPassword = async () => {
     if (!selectedStaff) return;
-    if (!window.confirm(`Reset ${selectedStaff.displayName}'s password? Their current password will stop working.`)) return;
+    if (!(await askConfirm({ title: `Reset ${selectedStaff.displayName}'s password?`, message: 'Their current password will stop working.', confirmText: 'Reset', tone: 'danger' }))) return;
     setResetting(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/users/${encodeURIComponent(selectedStaff.id)}/reset-password`, { method: 'POST', headers: authHeaders(), body: '{}' });

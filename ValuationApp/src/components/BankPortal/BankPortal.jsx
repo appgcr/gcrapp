@@ -1,10 +1,11 @@
 import PullDownReach from '../Shared/PullDownReach';
 import React, { useCallback, useEffect, useState } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
-import { Plus, FileText, LogOut, Download, Loader2, RefreshCw, KeyRound, CheckCircle2, Building2 } from 'lucide-react';
+import { Plus, FileText, LogOut, Download, Loader2, RefreshCw, KeyRound, CheckCircle2, Building2, Receipt } from 'lucide-react';
 import { API_BASE_URL } from '../../config/api';
 import ReportViewer, { fetchReport } from '../Shared/ReportViewer';
 import './BankPortal.css';
+import { PdfSheet } from '../AdminPortal/AdminFees';
 
 const STEPS = ['Received by Gouru', 'Engineer assigned', 'Site visit done', 'Under Gouru review', 'Report ready'];
 const EMPTY = {
@@ -22,6 +23,7 @@ export default function BankPortal({ currentUser, handleLogout }) {
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
   const [viewing, setViewing] = useState(null);
+  const [invoiceFor, setInvoiceFor] = useState(null);
   const [pwOpen, setPwOpen] = useState(false);
 
   const load = useCallback(() => {
@@ -147,10 +149,15 @@ export default function BankPortal({ currentUser, handleLogout }) {
                     ))}
                   </ol>
                   <div className="bp-card-foot">
-                    <span>Sent {fmtDate(r.requestedAt)}{r.engineerName ? ` · Engineer: ${r.engineerName}` : ''}{r.inspectionDate ? ` · Visit ${fmtDate(r.inspectionDate)}` : ''}</span>
-                    {r.reportReady && (
-                      <button className="bp-btn bp-primary" onClick={() => setViewing(r)} data-testid="download-report"><Download size={16} /> View / download report</button>
-                    )}
+                    <span>Sent {fmtDate(r.requestedAt)}{r.engineerName ? ` · Engineer: ${r.engineerName}` : ''}{r.visitPlanned && r.step < 3 ? ` · On the way ${new Date(r.visitPlanned.at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}` : ''}</span>
+                    <span className="bp-acts">
+                      {r.invoice && (
+                        <button className="bp-btn" onClick={() => setInvoiceFor(r)}><Receipt size={16} /> Invoice {r.invoice.paid ? '· Paid' : `· ₹${Math.round(r.invoice.total - r.invoice.received).toLocaleString('en-IN')} due`}</button>
+                      )}
+                      {r.reportReady && (
+                        <button className="bp-btn bp-primary" onClick={() => setViewing(r)} data-testid="download-report"><Download size={16} /> View / download report</button>
+                      )}
+                    </span>
                   </div>
                 </article>
               ))}
@@ -214,6 +221,14 @@ export default function BankPortal({ currentUser, handleLogout }) {
         {me?.gcrBranch?.phone ? <> · Gouru {me.gcrBranch.name}: {me.gcrBranch.phone}</> : null}
       </footer>
 
+      {invoiceFor && (
+        <PdfSheet
+          url={`${API_BASE_URL}/api/bank/requests/${encodeURIComponent(invoiceFor.id)}/invoice.pdf`}
+          title={`Invoice ${invoiceFor.invoice.no}`}
+          fileName={`Invoice_${String(invoiceFor.invoice.no).replace(/[^A-Za-z0-9]+/g, '-')}.pdf`}
+          onClose={() => setInvoiceFor(null)}
+        />
+      )}
       {viewing && (
         <ReportViewer
           title={viewing.clientName}

@@ -39,6 +39,10 @@ function view(c) {
     engineerName: s.step >= 2 && c.assignedEngineerName && c.assignedEngineerName !== 'Unknown' ? c.assignedEngineerName : '',
     inspectionDate: c.inspectionDate || '', stage: s.key, stageLabel: s.label, step: s.step,
     reportReady: c.status === 'Approved', approvedAt: c.approvedAt || null,
+    visitPlanned: c.customerNotified && c.customerNotified.at ? { at: c.customerNotified.at, etaMin: c.customerNotified.etaMin || null } : null,
+    invoice: c.billing && c.billing.invoiceNo && c.billing.status !== 'cancelled' && c.billing.feeSet
+      ? { no: c.billing.invoiceNo, date: c.billing.invoiceDate, total: c.billing.total, received: c.billing.received || 0, paid: (c.billing.received || 0) >= c.billing.total }
+      : null,
   };
 }
 
@@ -121,7 +125,7 @@ router.post('/requests', onlyBank, async (req, res) => {
 
 router.get('/requests', onlyBank, async (req, res) => {
   const rows = await ValuationCase.find({ 'requestedBy.id': req.user.id })
-    .select('id fileNumber clientName clientPhone propertyDetails.propertyType bankName bankBranch requestDetails requestedAt createdAt assignedEngineerId assignedEngineerName inspectionDate status sitePhotos approvedAt')
+    .select('id fileNumber clientName clientPhone propertyDetails.propertyType bankName bankBranch requestDetails requestedAt createdAt assignedEngineerId assignedEngineerName inspectionDate status sitePhotos approvedAt billing customerNotified')
     .sort({ requestedAt: -1, createdAt: -1 }).lean();
   res.json(rows.map(view));
 });
@@ -136,6 +140,18 @@ router.get('/requests/:id/report', onlyBank, async (req, res, next) => {
   const casesRouter = require('./cases');
   req.url = `/${encodeURIComponent(c.id)}/report${req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : ''}`;
   return casesRouter(req, res, next);
+});
+
+// The invoice for an approved request (same PDF the admin sees)
+router.get('/requests/:id/invoice.pdf', onlyBank, async (req, res) => {
+  try {
+    const c = await ValuationCase.findOne({ id: req.params.id, 'requestedBy.id': req.user.id }).lean();
+    if (!c || !c.billing || !c.billing.invoiceNo || c.billing.status === 'cancelled' || !c.billing.feeSet) return res.status(404).json({ error: 'No invoice for this request yet.' });
+    const pdf = await require('../services/billing').invoicePdf(c);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="Invoice_${c.billing.invoiceNo.replace(/[^A-Za-z0-9]+/g, '-')}.pdf"`);
+    res.send(pdf);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 module.exports = router;

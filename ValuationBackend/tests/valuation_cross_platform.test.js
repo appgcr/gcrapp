@@ -273,7 +273,7 @@ print(json.dumps({
       }, { engineVersion: tc.engineVersion });
 
       expect(res.valuationStatus).toBe('POLICY_NOT_CONFIGURED');
-      expect(res.error).toMatch(/No approved valuation policy configured/);
+      expect(res.error).toMatch(/percentages are not set for/);
     });
 
     test('TC-14: Unconfigured Bank under v1_universal_shortcut STILL returns POLICY_NOT_CONFIGURED', () => {
@@ -285,7 +285,7 @@ print(json.dumps({
       }, { engineVersion: tc.engineVersion });
 
       expect(res.valuationStatus).toBe('POLICY_NOT_CONFIGURED');
-      expect(res.error).toMatch(/No approved valuation policy configured/);
+      expect(res.error).toMatch(/percentages are not set for/);
     });
 
     test('TC-15: Unsupported SBI Agricultural Land under v2_option_a returns POLICY_NOT_CONFIGURED', () => {

@@ -1,3 +1,4 @@
+import askConfirm from './askConfirm';
 import React, { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { pdfjs } from 'react-pdf';
@@ -151,7 +152,7 @@ export default function LetterheadSettings({ branchId, branchName }) {
   };
 
   const removeLetterhead = async () => {
-    if (!window.confirm('Remove this letterhead? Reports will go back to the Kadapa letterhead.')) return;
+    if (!(await askConfirm({ title: 'Remove this letterhead?', message: 'Reports will go back to the Kadapa letterhead.', confirmText: 'Remove', tone: 'danger' }))) return;
     setBusy(true);
     try {
       const r = await fetch(`${API_BASE_URL}/api/branches/${branchId}/letterhead`, {

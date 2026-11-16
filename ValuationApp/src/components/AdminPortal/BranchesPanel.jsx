@@ -1,3 +1,4 @@
+import askConfirm from '../Shared/askConfirm';
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus, ChevronRight, Loader2, UserPlus, Eye, Building2, FileImage } from 'lucide-react';
@@ -258,8 +259,8 @@ function BranchSheet({ branch, onClose, onSaved, onAddAdmin, onOpenPerson }) {
         )}
 
         <div className="fs-group" style={{ marginTop: 20 }}>
-          <button className={`fs-row bd-action ${branch.status === 'Active' ? 'bd-danger' : ''}`} onClick={() => {
-            if (branch.status === 'Active' && !window.confirm(`Mark ${branch.name} as inactive? Its data stays, but it won’t be offered for new cases.`)) return;
+          <button className={`fs-row bd-action ${branch.status === 'Active' ? 'bd-danger' : ''}`} onClick={async () => {
+            if (branch.status === 'Active' && !(await askConfirm({ title: `Mark ${branch.name} inactive?`, message: 'Its data stays, but it won’t be offered for new cases.', confirmText: 'Mark inactive', tone: 'danger' }))) return;
             save({ status: branch.status === 'Active' ? 'Inactive' : 'Active' });
           }}>
             {branch.status === 'Active' ? 'Mark Branch Inactive' : 'Reactivate Branch'}

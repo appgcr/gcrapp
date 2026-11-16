@@ -8,7 +8,7 @@ import IconTile from '../Shared/IconTile';
 import ReportViewer, { fetchReport } from '../Shared/ReportViewer';
 import CaseCreationModal from './CaseModalSteps/CaseCreationModal';
 import TellCustomer from './TellCustomer';
-import { queuedItemFor, subscribeSyncStatus } from '../../services/offlineSyncService';
+import { queuedItemFor, subscribeSyncStatus, pendingAttendance } from '../../services/offlineSyncService';
 import './AttendanceView.css';
 const queuedCss = `.cd-queued { margin-top: 12px; padding: 10px 12px; border-radius: 12px; font-size: 13px; line-height: 1.4; background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; } .cd-queued.bad { background: #fef2f2; color: #991b1b; border-color: #fecaca; }`;
 
@@ -136,7 +136,8 @@ export default function CaseDetailsView({ caseId }) {
       const me = JSON.parse(localStorage.getItem('sbi_valuation_current_user_v3') || 'null');
       const res = await fetch(`${API_BASE_URL}/api/attendance?userId=${encodeURIComponent(me?.id || '')}`);
       const data = await res.json();
-      const duty = (Array.isArray(data) ? data : []).filter(l => l.attendanceType === 'Clock-In' || l.attendanceType === 'Clock-Out')
+      const waiting = await pendingAttendance().catch(() => []); // check-ins saved with no signal
+      const duty = [...(Array.isArray(data) ? data : []), ...waiting.filter(w => w.userId === me?.id)].filter(l => l.attendanceType === 'Clock-In' || l.attendanceType === 'Clock-Out')
         .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
       if (duty?.attendanceType !== 'Clock-In') {
         toast.error('Please Check In on the Today tab first.', { duration: 4000 });

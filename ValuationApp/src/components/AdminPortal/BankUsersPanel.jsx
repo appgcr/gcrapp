@@ -1,3 +1,4 @@
+import askConfirm from '../Shared/askConfirm';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Plus, Landmark, KeyRound, Power, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -26,7 +27,7 @@ export default function BankUsersPanel({ superAdmin, branches = [], scope = 'all
   const branchName = (id) => branches.find((b) => b.id === id)?.name || '';
 
   const resetPassword = async (u) => {
-    if (!window.confirm(`Give ${u.name} a new password? The old one stops working.`)) return;
+    if (!(await askConfirm({ title: `New password for ${u.name}?`, message: 'The old one stops working.', confirmText: 'Give new password', tone: 'danger' }))) return;
     setBusyId(u.id);
     try {
       const r = await fetch(`${API_BASE_URL}/api/users/${encodeURIComponent(u.id)}/reset-password`, { method: 'POST', headers: authHeaders(), body: '{}' });
@@ -38,7 +39,7 @@ export default function BankUsersPanel({ superAdmin, branches = [], scope = 'all
 
   const toggle = async (u) => {
     const next = u.status === 'Inactive' ? 'Active' : 'Inactive';
-    if (next === 'Inactive' && !window.confirm(`Turn off ${u.name}'s login? Their past requests stay.`)) return;
+    if (next === 'Inactive' && !(await askConfirm({ title: `Turn off ${u.name}'s login?`, message: 'Their past requests stay.', confirmText: 'Turn off', tone: 'danger' }))) return;
     setBusyId(u.id);
     try {
       const r = await fetch(`${API_BASE_URL}/api/users/${encodeURIComponent(u.username)}`, { method: 'PUT', headers: authHeaders(), body: JSON.stringify({ status: next }) });

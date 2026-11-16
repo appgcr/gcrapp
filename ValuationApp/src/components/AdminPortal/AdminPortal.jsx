@@ -1,6 +1,6 @@
 import { API_BASE_URL } from '../../config/api';
 import React, { useState, useEffect, useRef } from 'react';
-import { LayoutDashboard, ClipboardList, PenSquare, Users, Settings, MessageCircle, Megaphone, LogOut, MapPinned, IndianRupee } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, PenSquare, Users, Settings, MessageCircle, Megaphone, LogOut, MapPinned, IndianRupee, CalendarRange } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import './AdminPortal.css';
@@ -18,6 +18,7 @@ import BroadcastSheet from './BroadcastSheet';
 import { GridIcon, DocIcon, CalendarIcon, PeopleIcon, GearIcon, MapIcon } from '../Shared/TabIcons';
 import AdminValueMap from './AdminValueMap';
 import AdminFees from './AdminFees';
+import AdminMonthly from './AdminMonthly';
 import { isSuperAdmin } from '../../utils/session';
 import GcrLogo from '../Shared/GcrLogo';
 import PullDownReach from '../Shared/PullDownReach';
@@ -242,6 +243,7 @@ export default function AdminPortal({ currentUser, handleLogout }) {
       case 'staff': return <AdminStaff currentUser={currentUser} />;
       case 'valuemap': return <AdminValueMap />;
       case 'fees': return <AdminFees currentUser={currentUser} />;
+      case 'monthly': return <AdminMonthly />;
       case 'chat': return <div className="admin-chat-host"><ChatSystem key={chatWith?.id || 'all'} currentUser={currentUser} otherUserId={chatWith?.id} otherUserName={chatWith?.name} onBack={() => setActiveTab('dashboard')} /></div>;
       case 'settings': return <AdminSettings currentUser={currentUser} handleLogout={handleLogout} />;
       default: return <AdminDashboard />;
@@ -289,6 +291,13 @@ export default function AdminPortal({ currentUser, handleLogout }) {
           >
             <Users size={18} />
             <span>Field Engineers</span>
+          </button>
+          <button
+            className={`admin-sidebar-item ${activeTab === 'monthly' ? 'active' : ''}`}
+            onClick={() => setActiveTab('monthly')}
+          >
+            <CalendarRange size={18} />
+            <span>Monthly Report</span>
           </button>
           <button
             className={`admin-sidebar-item ${activeTab === 'fees' ? 'active' : ''}`}

@@ -36,6 +36,9 @@ export default function ReportViewer({ title = 'Valuation Report', subtitle, loa
         if (!alive) return;
         setState('ready');
         fit();
+        // Photos and maps change the layout as they load: fit again
+        setTimeout(fit, 400);
+        pagesRef.current?.querySelectorAll('img').forEach((im) => { if (!im.complete) im.addEventListener('load', fit, { once: true }); });
       } catch (err) {
         if (!alive) return;
         setError(err?.message || 'The report could not be opened.');
@@ -47,13 +50,18 @@ export default function ReportViewer({ title = 'Valuation Report', subtitle, loa
   }, [attempt]);
 
   // Pages are A4 width; shrink them to fit a phone screen
+  const [fitZoom, setFitZoom] = useState(1);
   const fit = () => {
-    const page = pagesRef.current?.querySelector('section.rv-docx');
+    const pages = [...(pagesRef.current?.querySelectorAll('section.rv-docx') || [])];
     const box = scrollRef.current;
-    if (!page || !box) return;
-    const avail = box.clientWidth - 24;
-    setZoom(Math.min(1, avail / page.offsetWidth));
+    if (!pages.length || !box) return;
+    // Widest page (a wide table can stick out of its page)
+    const widest = Math.max(...pages.map((p) => Math.max(p.offsetWidth, p.scrollWidth)));
+    const z = Math.min(1, (box.clientWidth - 16) / widest);
+    setFitZoom(z);
+    setZoom(z);
   };
+  const zoomBy = (k) => setZoom((z) => Math.min(2.5, Math.max(fitZoom * 0.8, Math.round(z * k * 100) / 100)));
   useEffect(() => {
     window.addEventListener('resize', fit);
     return () => window.removeEventListener('resize', fit);
@@ -88,6 +96,13 @@ export default function ReportViewer({ title = 'Valuation Report', subtitle, loa
           <strong>{title}</strong>
           {subtitle && <span>{subtitle}</span>}
         </div>
+        {state === 'ready' && (
+          <div className="rv-zoom" role="group" aria-label="Zoom">
+            <button type="button" onClick={() => zoomBy(1 / 1.25)} aria-label="Zoom out">−</button>
+            <button type="button" onClick={() => setZoom(fitZoom)} aria-label="Fit to screen" className="rv-fit">{Math.round((zoom / fitZoom) * 100)}%</button>
+            <button type="button" onClick={() => zoomBy(1.25)} aria-label="Zoom in">+</button>
+          </div>
+        )}
         <button type="button" className="rv-dl" onClick={download} disabled={!blob}>
           <Download size={16} /> <span>Word</span>
         </button>
@@ -121,6 +136,10 @@ export default function ReportViewer({ title = 'Valuation Report', subtitle, loa
         .rv-titles span { font-size: 12px; color: #8e8e93; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .rv-dl { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border: 0; border-radius: 17px; background: #007aff; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
         .rv-dl:disabled { opacity: .45; }
+        .rv-zoom { display: flex; align-items: center; background: rgba(118,118,128,.14); border-radius: 17px; flex-shrink: 0; }
+        .rv-zoom button { border: 0; background: none; height: 34px; min-width: 32px; padding: 0 6px; font-size: 18px; font-weight: 700; color: #1c1c1e; cursor: pointer; }
+        .rv-zoom .rv-fit { font-size: 12px; min-width: 44px; }
+        @media (max-width: 380px) { .rv-dl span { display: none; } }
         .rv-scroll { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; padding: 12px 0 24px; }
         .rv-pages .rv-docx-wrapper { background: transparent !important; padding: 0 !important; display: flex; flex-direction: column; align-items: center; }
         .rv-pages section.rv-docx { margin: 0 auto 14px !important; box-shadow: 0 2px 10px rgba(0,0,0,.14) !important; }

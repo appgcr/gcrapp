@@ -1,3 +1,4 @@
+import { queueAttendance, pendingAttendance } from '../../services/offlineSyncService';
 import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import {
   Camera,
@@ -241,6 +242,10 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
       const data = await res.json();
 
       if (Array.isArray(data)) {
+        // Check-ins made with no signal that have not uploaded yet
+        const waiting = (await pendingAttendance().catch(() => [])).filter(r => r.userId === uid).map(r => ({ ...r, offline: true }));
+        data.unshift(...waiting.filter(w => !data.some(d => d.id === w.id)));
+        data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
         setAllLogs(data);
         const now = new Date();
         const filtered = data.filter(log => {
@@ -603,6 +608,19 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
 
       await fetchTodayLogs();
     } catch (err) {
+      // No signal: keep it on the phone with its real time; it uploads when the signal is back
+      if (err instanceof TypeError || (typeof navigator !== 'undefined' && navigator.onLine === false)) {
+        try {
+          await queueAttendance(newRecord);
+          const rec = { ...newRecord, offline: true };
+          setAllLogs(prev => [rec, ...(Array.isArray(prev) ? prev : [])]);
+          setTodayLogs(prev => [rec, ...(Array.isArray(prev) ? prev : [])]);
+          localStorage.removeItem('bgWatcherId');
+          window.dispatchEvent(new CustomEvent('gcr_duty_changed'));
+          toast.success(`${scannerType_ === 'Clock-In' ? 'Checked in' : 'Checked out'} with no signal — saved on this phone, uploads when you're back online.`, { duration: 6000 });
+          return;
+        } catch { /* fall through */ }
+      }
       console.error('Save attendance error:', err);
       toast.error(err.message);
       await fetchTodayLogs(); // show the real state (e.g. already checked in on another device)

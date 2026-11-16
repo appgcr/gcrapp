@@ -4,6 +4,7 @@ import SignatureCanvas from 'react-signature-canvas';
 import toast from 'react-hot-toast';
 import { getPageDisplayInfo } from './caseModalHelpers';
 import { calculateValuation } from '../../../utils/valuationCalculator';
+import DrawSignature from './DrawSignature';
 
 export default function Step6FinalReviewSignature({
   clientName,
@@ -34,9 +35,11 @@ export default function Step6FinalReviewSignature({
   missingDocs = [],
   onGoToDocs,
   preChecks = null,
-  onFixCheck
+  onFixCheck,
+  onSignatureSaved
 }) {
   const [applySignature, setApplySignature] = React.useState(false);
+  const [drawing, setDrawing] = React.useState(false);
   const totalDocPages = Object.values(uploadedDocs).flat().reduce((sum, p) => sum + (p.pageCount || 1), 0);
 
   const valSummary = useMemo(() => {
@@ -291,7 +294,12 @@ export default function Step6FinalReviewSignature({
 
       <div style={{ marginBottom: '24px' }} data-testid="final-signature">
         <h4 style={{ margin: '0 0 12px 0', fontSize: '15px', color: 'var(--text-primary)' }}>Digital Signature</h4>
-        {savedSignature ? (
+        {(drawing || (!savedSignature && onSignatureSaved)) ? (
+          <DrawSignature
+            onSaved={(url) => { onSignatureSaved && onSignatureSaved(url); setApplySignature(true); setDrawing(false); }}
+            onCancel={savedSignature ? () => setDrawing(false) : undefined}
+          />
+        ) : savedSignature ? (
           <label style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px', borderRadius: '12px', border: applySignature ? '2px solid var(--primary)' : '1px solid var(--border-color)', backgroundColor: applySignature ? 'rgba(0,82,204,0.04)' : '#fff', cursor: 'pointer' }}>
             <input type="checkbox" checked={applySignature} onChange={e => setApplySignature(e.target.checked)} style={{ width: '22px', height: '22px', cursor: 'pointer' }} data-testid="apply-signature" />
             <div style={{ flex: 1 }}>
@@ -300,10 +308,9 @@ export default function Step6FinalReviewSignature({
             </div>
             <img src={savedSignature} alt="Your signature" style={{ height: '48px', maxWidth: '120px', objectFit: 'contain', background: '#fff', borderRadius: '6px' }} />
           </label>
-        ) : (
-          <div style={{ padding: '14px', borderRadius: '12px', border: '1px solid #fecaca', backgroundColor: '#fef2f2', fontSize: '13px', color: '#991b1b', lineHeight: 1.45 }}>
-            You have no digital signature saved. Open <strong>Settings → Digital Signature</strong>, save your signature, then come back to this case (your work here is kept as a draft).
-          </div>
+        ) : null}
+        {savedSignature && !drawing && onSignatureSaved && (
+          <button type="button" onClick={() => setDrawing(true)} style={{ marginTop: '8px', border: 0, background: 'none', color: 'var(--primary)', fontWeight: 700, fontSize: '13px', padding: 0, cursor: 'pointer' }}>Sign again instead</button>
         )}
       </div>
 
@@ -376,7 +383,7 @@ export default function Step6FinalReviewSignature({
         className="btn-primary" 
         onClick={() => {
           if (missingDocs.length) { toast.error('Upload the missing documents first.'); return; }
-          if (!savedSignature) { toast.error('Save your digital signature in Settings first.'); return; }
+          if (!savedSignature) { toast.error('Sign in the box above first.'); return; }
           if (!applySignature) { toast.error('Tick “Apply my digital signature” to sign this report.'); return; }
           setSignatureDataUrl(savedSignature);
           // Preview the finished bank report with the signature; submit from the preview

@@ -57,7 +57,7 @@ async function defaultFee(c) {
 async function createInvoice(caseId, { by = 'system' } = {}) {
   const c = await ValuationCase.findOne({ id: caseId }).lean();
   if (!c || c.status !== 'Approved') return null;
-  if (c.billing && c.billing.invoiceNo) return c.billing;
+  if (c.billing && c.billing.invoiceNo && c.billing.status !== 'cancelled') return c.billing;
   const firm = await firmDetails();
   const fee = await defaultFee(c);
   const at = new Date();
@@ -68,14 +68,20 @@ async function createInvoice(caseId, { by = 'system' } = {}) {
     ...money(fee || 0, firm), feeSet: fee != null,
     status: 'unpaid', received: 0, payments: [], createdBy: by,
   };
-  // Only set it if no one else did meanwhile
-  const r = await ValuationCase.updateOne({ id: c.id, 'billing.invoiceNo': { $exists: false } }, { $set: { billing } });
+  // Only set it if no one else did meanwhile (a cancelled invoice is kept in billingCancelled)
+  const guard = c.billing && c.billing.status === 'cancelled'
+    ? { id: c.id, 'billing.invoiceNo': c.billing.invoiceNo, 'billing.status': 'cancelled' }
+    : { id: c.id, 'billing.invoiceNo': { $exists: false } };
+  const update = { $set: { billing } };
+  if (c.billing && c.billing.status === 'cancelled') update.$push = { billingCancelled: c.billing };
+  const r = await ValuationCase.updateOne(guard, update);
   if (!r.modifiedCount) return (await ValuationCase.findOne({ id: c.id }).select('billing').lean()).billing;
   return billing;
 }
 
 function statusOf(b) {
   if (!b) return 'none';
+  if (b.status === 'cancelled') return 'cancelled';
   if (b.received >= b.total && b.total > 0) return 'paid';
   if (b.received > 0) return 'partial';
   return 'unpaid';
@@ -84,6 +90,7 @@ function statusOf(b) {
 async function setFee(caseId, fee, { by } = {}) {
   const c = await ValuationCase.findOne({ id: caseId }).lean();
   if (!c || !c.billing) throw new Error('No invoice on this case yet.');
+  if (c.billing.status === 'cancelled') throw new Error('This invoice is cancelled. Create a new one.');
   const firm = await firmDetails();
   const m = money(fee, firm);
   const billing = { ...c.billing, ...m, feeSet: true, editedBy: by, editedAt: new Date() };
@@ -95,6 +102,7 @@ async function setFee(caseId, fee, { by } = {}) {
 async function addPayment(caseId, { amount, mode = '', ref = '', date, by }) {
   const c = await ValuationCase.findOne({ id: caseId }).lean();
   if (!c || !c.billing) throw new Error('No invoice on this case yet.');
+  if (c.billing.status === 'cancelled') throw new Error('This invoice is cancelled.');
   const amt = round(amount);
   if (!(amt > 0)) throw new Error('Enter the amount received.');
   const pay = { amount: amt, mode: String(mode).slice(0, 30), ref: String(ref).slice(0, 60), date: date ? new Date(date) : new Date(), by, at: new Date() };
@@ -204,7 +212,38 @@ async function invoicePdf(c) {
   right(`For ${firm.name}`, 555, 120, { f: bold });
   right('Authorised signatory', 555, 80, { size: 9, color: grey });
   text('This is a computer-generated invoice.', 40, 50, { size: 8, color: grey });
+  if (b.status === 'cancelled') {
+    page.drawText('CANCELLED', { x: 150, y: 380, size: 72, font: bold, color: rgb(0.86, 0.15, 0.15), opacity: 0.25, rotate: { type: 'degrees', angle: 30 } });
+    if (b.cancelled && b.cancelled.reason) text(`Cancelled: ${b.cancelled.reason}`, 40, 64, { size: 9, color: rgb(0.7, 0.1, 0.1) });
+  }
   return Buffer.from(await doc.save());
 }
 
-module.exports = { slotFor, firmDetails, money, fyOf, defaultFee, createInvoice, setFee, addPayment, removeLastPayment, statusOf, invoicePdf, words };
+/** Cancel an invoice (wrong fee / wrong bank). Payments must be undone first. */
+async function cancelInvoice(caseId, { reason = '', by } = {}) {
+  const c = await ValuationCase.findOne({ id: caseId }).lean();
+  if (!c || !c.billing) throw new Error('No invoice on this case yet.');
+  if (c.billing.status === 'cancelled') return c.billing;
+  if ((c.billing.received || 0) > 0) throw new Error('Undo the payments on this invoice before cancelling it.');
+  const why = String(reason || '').trim();
+  if (!why) throw new Error('Write why the invoice is cancelled.');
+  const billing = { ...c.billing, status: 'cancelled', cancelled: { at: new Date(), by, reason: why.slice(0, 200) } };
+  await ValuationCase.updateOne({ id: caseId }, { $set: { billing } });
+  return billing;
+}
+
+function csvOf(items) {
+  const q = (v) => { const t = v == null ? '' : String(v); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const d = (x) => (x ? new Date(x).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }) : '');
+  const head = ['Invoice No', 'Invoice Date', 'File No', 'Customer', 'Bank', 'Branch', 'Property', 'Approved', 'Fee', 'CGST', 'SGST', 'Total', 'Received', 'Due', 'Status', 'Paid On', 'Payments'];
+  const rows = items.map((i) => {
+    const b = i.billing || {};
+    const live = b.invoiceNo && b.status !== 'cancelled';
+    return [b.invoiceNo || '', d(b.invoiceDate), i.fileNumber, i.clientName, i.bankName, i.bankBranch, i.propertyType, d(i.approvedAt),
+      live ? b.fee : '', live ? b.cgst : '', live ? b.sgst : '', live ? b.total : '', live ? b.received || 0 : '', live ? Math.max(0, b.total - (b.received || 0)) : '',
+      i.status, d(b.paidAt), (b.payments || []).map((p) => `${d(p.date)} ${p.mode} ${p.amount}${p.ref ? ` (${p.ref})` : ''}`).join('; ')];
+  });
+  return '\ufeff' + [head, ...rows].map((r) => r.map(q).join(',')).join('\r\n');
+}
+
+module.exports = { cancelInvoice, csvOf, slotFor, firmDetails, money, fyOf, defaultFee, createInvoice, setFee, addPayment, removeLastPayment, statusOf, invoicePdf, words };

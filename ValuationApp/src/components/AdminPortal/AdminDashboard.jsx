@@ -473,7 +473,7 @@ export default function AdminDashboard({ onNavigate }) {
       {/* Key numbers (live data) */}
       <DashboardSummary cases={cases} users={users} />
 
-      {onNavigate && <FeesShortcut onOpen={() => onNavigate('fees')} />}
+      {onNavigate && <FeesShortcut onOpen={() => onNavigate('fees')} onMonthly={() => onNavigate('monthly')} />}
 
       {/* Only what needs action — or a single "All caught up" row */}
       <AdminInsights cases={cases} users={users} onNavigate={onNavigate} only="attention" />

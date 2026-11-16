@@ -221,7 +221,7 @@ function toCaseFields(ai) {
     deedNo: f.deedNo, deedDate: f.deedDate, deedYear: yearOf(f.deedDate) || (/\/(\d{4})/.exec(String(f.deedNo || '')) || [])[1],
     surveyNo: f.surveyNo, plotNo: f.plotNo, doorNo: f.doorNo, flatNo: f.flatNo, netExtent: tidyNumber(f.extent), wardNo: f.wardNo,
     khathaNo: f.khataNo, assessmentNo: f.assessmentNo, taxAmount: f.taxAmount, marketValue: f.marketValue, guidelineRate: f.guidelineRate,
-    approvalPlanNo: f.approvalPlanNo, approvalPlanDate: f.approvalPlanDate, village: f.village, mandal: f.mandal,
+    approvalPlanNo: f.approvalPlanNo, approvalPlanDate: f.approvalPlanDate, village: f.village, mandal: f.mandal, district: f.district,
     ownerName: owner && owner.name, fathersName: owner && owner.relation, vendorName: vendor && vendor.name,
     boundaries: f.boundaries && Object.values(f.boundaries).some(Boolean) ? f.boundaries : null,
     plinthArea: tidyNumber(f.plinthArea),

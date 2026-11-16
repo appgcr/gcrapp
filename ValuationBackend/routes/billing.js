@@ -12,9 +12,8 @@ router.use((req, res, next) => (isAdmin(req.user) ? next() : res.status(403).jso
 
 const actor = (req) => req.user?.name || req.user?.username || 'admin';
 
-// GET /api/billing?from=YYYY-MM-DD&to=YYYY-MM-DD&bank=&status=paid|unpaid|partial|none
-router.get('/', async (req, res) => {
-  try {
+// GET /api/billing?from=YYYY-MM-DD&to=YYYY-MM-DD&bank=&status=paid|unpaid|partial|none|cancelled
+async function listItems(req) {
     const q = { $and: [caseFilter(req), { status: 'Approved' }] };
     if (req.query.from || req.query.to) {
       const r = {};
@@ -32,19 +31,36 @@ router.get('/', async (req, res) => {
       billing: c.billing || null, status: billing.statusOf(c.billing),
     }));
     if (req.query.status) items = items.filter((i) => i.status === req.query.status);
-    const sum = (f) => items.reduce((a, i) => a + (i.billing ? f(i.billing) : 0), 0);
+    return items;
+}
+
+router.get('/export.csv', async (req, res) => {
+  try {
+    const items = await listItems(req);
+    const name = `Gouru_Fees_${req.query.from || 'all'}_${req.query.to || 'today'}.csv`.replace(/[^A-Za-z0-9_.-]/g, '');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+    res.send(billing.csvOf(items));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/', async (req, res) => {
+  try {
+    const items = await listItems(req);
+    const live = (b) => b && b.status !== 'cancelled';
+    const sum = (f) => items.reduce((a, i) => a + (live(i.billing) ? f(i.billing) : 0), 0);
     const totals = {
       billed: sum((b) => b.total), received: sum((b) => b.received || 0),
       outstanding: sum((b) => Math.max(0, b.total - (b.received || 0))),
       count: items.length, unpaid: items.filter((i) => i.status === 'unpaid' || i.status === 'partial').length,
-      noInvoice: items.filter((i) => i.status === 'none').length, feeMissing: items.filter((i) => i.billing && !i.billing.feeSet).length,
+      noInvoice: items.filter((i) => i.status === 'none' || i.status === 'cancelled').length, feeMissing: items.filter((i) => live(i.billing) && !i.billing.feeSet).length,
     };
     const byBank = {};
     items.forEach((i) => {
       const k = i.bankName || 'No bank';
       byBank[k] = byBank[k] || { bank: k, count: 0, billed: 0, outstanding: 0 };
       byBank[k].count += 1;
-      if (i.billing) { byBank[k].billed += i.billing.total; byBank[k].outstanding += Math.max(0, i.billing.total - (i.billing.received || 0)); }
+      if (live(i.billing)) { byBank[k].billed += i.billing.total; byBank[k].outstanding += Math.max(0, i.billing.total - (i.billing.received || 0)); }
     });
     res.json({ items, totals, byBank: Object.values(byBank).sort((a, b) => b.outstanding - a.outstanding) });
   } catch (err) {
@@ -93,6 +109,14 @@ router.post('/:id/invoice', async (req, res) => {
     if (c.status !== 'Approved') return res.status(400).json({ error: 'Invoices are made for approved reports only.' });
     res.json(await billing.createInvoice(c.id, { by: actor(req) }));
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Cancel a wrong invoice (a new one can then be created)
+router.post('/:id/cancel', async (req, res) => {
+  try {
+    const c = await visibleCase(req, res); if (!c) return;
+    res.json(await billing.cancelInvoice(c.id, { reason: req.body?.reason, by: actor(req) }));
+  } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
 // Change the fee for this case

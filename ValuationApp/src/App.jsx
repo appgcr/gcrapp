@@ -5,7 +5,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import AppLock from './components/Auth/AppLock';
 import LocationConsent from './components/Auth/LocationConsent';
 import LoginScreen from './components/Auth/LoginScreen';
-import PermissionsSetup, { permissionsSetupDone } from './components/Auth/PermissionsSetup';
+import PermissionsSetup, { permissionsSetupDone, permissionsAlreadyGranted } from './components/Auth/PermissionsSetup';
 import LaunchSplash from './components/Shared/LaunchSplash';
 const EngineerDashboard = lazy(() => import('./components/EngineerPortal/EngineerDashboard'));
 const CaseListView = lazy(() => import('./components/EngineerPortal/CaseListView'));
@@ -79,7 +79,10 @@ export default function App() {
   // "Allow access" screen: once after first sign-in, or reopened from Settings
   const [permScreen, setPermScreen] = useState(null); // null | 'first' | 'settings'
   useEffect(() => {
-    if (currentUser?.id && !isBankRole(currentUser) && !permissionsSetupDone(currentUser.id)) setPermScreen('first');
+    if (currentUser?.id && !isBankRole(currentUser) && !permissionsSetupDone(currentUser.id)) {
+      // Skip it when the phone already allows everything (reinstall, second person on the same phone)
+      permissionsAlreadyGranted(currentUser).then((ok) => { if (!ok) setPermScreen('first'); }).catch(() => setPermScreen('first'));
+    }
   }, [currentUser?.id]);
   useEffect(() => {
     const open = () => setPermScreen('settings');

@@ -1,3 +1,4 @@
+import askConfirm from '../Shared/askConfirm';
 import React, { useState, useEffect } from 'react';
 import { Search, MapPin, FileText, CheckCircle2, Loader2, ChevronDown, Plus, X, Edit2, Navigation, RotateCcw, History, AlertTriangle, Download, Phone, CalendarClock, User } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -256,7 +257,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
 
       // The server alerts the engineer (in-app + push) — no extra client-side notification
 
-      toast.success(newTask.id ? (engineer ? "Task updated and assigned!" : "Task details updated!") : "Task created and assigned successfully!");
+      toast.success(newTask.id ? (engineer ? "Case updated and assigned." : "Case details updated.") : "Case created and assigned.");
       saveRecentAddress(newTask.address);
       setNewTask({ id: null, branchId: scope !== 'all' ? scope : '', borrowerName: '', bankName: '', bankBranch: '', mobileNumber: '', note: '', assignedStaffId: '', address: '', date: '', time: '' });
       setIsCreateFormOpen(false); // Close form on success
@@ -272,7 +273,9 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
   const handleCreateNewTask = handleCreateOrUpdateTask;
 
   const handleApprove = async (caseId) => {
-    if (!window.confirm(`Approve Case #${caseId}? The engineer will be notified and the report becomes final.`)) return;
+    const cs = cases.find(x => x.id === caseId) || {};
+    const flagged = (cs.preCheck?.checks || []).length;
+    if (!(await askConfirm({ title: `Approve ${cs.clientName || `case #${caseId}`}?`, message: `${cs.fileNumber ? `${cs.fileNumber} · ` : ''}${cs.bankName || ''}\nThe report becomes final, the engineer is told, and the report and invoice go to the bank.${flagged ? `\n\n⚠ ${flagged} check${flagged > 1 ? 's were' : ' was'} flagged at submit.` : ''}`, confirmText: 'Approve', tone: 'success' }))) return;
     setProcessingId(caseId);
     try {
       const res = await fetch(`${API_BASE_URL}/api/cases/${caseId}`, {
@@ -620,7 +623,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
                 <div className="admin-card relative">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                     <h2 style={{ fontSize: '18px', fontWeight: '700', color: '#0f172a' }}>
-                      {newTask.id ? `Edit ${newTask.fileNumber || `#${newTask.id}`}` : 'Create & Assign New Task'}
+                      {newTask.id ? `Edit ${newTask.fileNumber || `#${newTask.id}`}` : 'New Case'}
                     </h2>
                     <button 
                       onClick={() => {
@@ -892,7 +895,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Task Note / Instructions</label>
+                  <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Note for the engineer</label>
                   <textarea 
                     rows="3"
                     placeholder="Enter any specific instructions for the staff..."
@@ -940,8 +943,8 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
                 >
                   {processingId === 'creating' ? <Loader2 size={16} className="spin" /> : (
                     newTask.id 
-                      ? (newTask.assignedStaffId ? 'Update & Assign Task' : 'Update Task Details') 
-                      : 'Assign Task to Staff'
+                      ? (newTask.assignedStaffId ? 'Update & Assign Case' : 'Update Case Details') 
+                      : 'Create & Assign Case'
                   )}
                 </button>
                   </form>

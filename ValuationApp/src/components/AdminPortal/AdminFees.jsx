@@ -1,7 +1,8 @@
+import askConfirm from '../Shared/askConfirm';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Document, Page, pdfjs } from 'react-pdf';
-import { FileText, Loader2, X, Plus, Building2, Undo2, Download, Pencil } from 'lucide-react';
+import { FileText, Loader2, X, Plus, Building2, Undo2, Download, Pencil, Ban, FileSpreadsheet } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../../config/api';
 import { isSuperAdmin } from '../../utils/session';
@@ -23,7 +24,7 @@ function periodRange(p) {
   if (p === 'fy') { const fy = m >= 3 ? y : y - 1; return { from: `${fy}-04-01`, to: ymd(now) }; }
   return {};
 }
-const STATUS = { paid: ['Paid', 'ok'], partial: ['Part paid', 'warn'], unpaid: ['Unpaid', 'due'], none: ['No invoice', 'muted'] };
+const STATUS = { paid: ['Paid', 'ok'], partial: ['Part paid', 'warn'], unpaid: ['Unpaid', 'due'], none: ['No invoice', 'muted'], cancelled: ['Cancelled', 'muted'] };
 
 export default function AdminFees({ currentUser }) {
   const [period, setPeriod] = useState('fy');
@@ -35,6 +36,7 @@ export default function AdminFees({ currentUser }) {
   const [feeEdit, setFeeEdit] = useState(null);
   const [pdfFor, setPdfFor] = useState(null);
   const [firmOpen, setFirmOpen] = useState(false);
+  const [cancelFor, setCancelFor] = useState(null);
 
   const load = useCallback(() => {
     const r = periodRange(period);
@@ -42,6 +44,20 @@ export default function AdminFees({ currentUser }) {
     fetch(`${API_BASE_URL}/api/billing?${qs}`).then((x) => x.json()).then((d) => setData(d.items ? d : { items: [], totals: {}, byBank: [] })).catch(() => setData({ items: [], totals: {}, byBank: [] }));
   }, [period, status, bank]);
   useEffect(() => { load(); }, [load]);
+
+  const exportCsv = async () => {
+    try {
+      const r = periodRange(period);
+      const qs = new URLSearchParams({ ...r, ...(status ? { status } : {}), ...(bank ? { bank } : {}) });
+      const res = await fetch(`${API_BASE_URL}/api/billing/export.csv?${qs}`);
+      if (!res.ok) throw new Error('Could not export.');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob); const a = document.createElement('a');
+      a.href = url; a.download = `Gouru_Fees_${r.from || 'all'}_${r.to || 'today'}.csv`; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      toast.success('Fees exported — opens in Excel');
+    } catch (e) { toast.error(e.message); }
+  };
 
   const banks = useMemo(() => [...new Set((data?.byBank || []).map((b) => b.bank))], [data]);
   const t = data?.totals || {};
@@ -65,7 +81,10 @@ export default function AdminFees({ currentUser }) {
           <h2>Fees</h2>
           <p>Invoices are made when a report is approved.</p>
         </div>
-        <button type="button" className="fee-firm" onClick={() => setFirmOpen(true)}><Building2 size={16} /> Firm details</button>
+        <div className="fee-topbtns">
+          <button type="button" className="fee-firm" onClick={exportCsv}><FileSpreadsheet size={16} /> Excel</button>
+          <button type="button" className="fee-firm" onClick={() => setFirmOpen(true)}><Building2 size={16} /> Firm details</button>
+        </div>
       </div>
 
       <div className="fee-chips">
@@ -93,7 +112,7 @@ export default function AdminFees({ currentUser }) {
       )}
 
       <div className="fee-filter">
-        {[['', 'All'], ['unpaid', 'Unpaid'], ['partial', 'Part paid'], ['paid', 'Paid'], ['none', 'No invoice']].map(([k, l]) => (
+        {[['', 'All'], ['unpaid', 'Unpaid'], ['partial', 'Part paid'], ['paid', 'Paid'], ['none', 'No invoice'], ['cancelled', 'Cancelled']].map(([k, l]) => (
           <button type="button" key={k || 'all'} className={status === k ? 'on' : ''} onClick={() => setStatus(k)}>{l}</button>
         ))}
         {banks.length > 1 && (
@@ -107,7 +126,8 @@ export default function AdminFees({ currentUser }) {
       {!data ? <div className="fee-empty"><Loader2 className="spin" size={20} /></div>
         : data.items.length === 0 ? <div className="fee-empty">No approved reports in this period.</div>
         : data.items.map((c) => {
-          const b = c.billing; const [label, tone] = STATUS[c.status] || STATUS.none;
+          const live = c.billing && c.status !== 'cancelled';
+          const b = live ? c.billing : null; const [label, tone] = STATUS[c.status] || STATUS.none;
           const due = b ? Math.max(0, b.total - (b.received || 0)) : 0;
           return (
             <div className="fee-row" key={c.id}>
@@ -129,10 +149,12 @@ export default function AdminFees({ currentUser }) {
                 </div>
               ) : null}
               <div className="fee-actions">
-                {!b && <button type="button" disabled={busyId === c.id} onClick={() => call(c.id, `/api/billing/${c.id}/invoice`, { method: 'POST' }, 'Invoice created')}><Plus size={14} /> Create invoice</button>}
+                {c.status === 'cancelled' && <span className="fee-cxl">{c.billing.invoiceNo} cancelled{c.billing.cancelled?.reason ? `: ${c.billing.cancelled.reason}` : ''}</span>}
+                {!b && <button type="button" disabled={busyId === c.id} onClick={() => call(c.id, `/api/billing/${c.id}/invoice`, { method: 'POST' }, 'Invoice created')}><Plus size={14} /> {c.status === 'cancelled' ? 'New invoice' : 'Create invoice'}</button>}
                 {b && <button type="button" onClick={() => setPdfFor(c)}><FileText size={14} /> Invoice</button>}
                 {b && due > 0 && b.feeSet && <button type="button" className="pri" onClick={() => setPay({ ...c, due })}>Mark paid</button>}
-                {b && (b.payments || []).length > 0 && <button type="button" disabled={busyId === c.id} onClick={() => { if (window.confirm('Undo the last payment entry?')) call(c.id, `/api/billing/${c.id}/payment`, { method: 'DELETE' }, 'Payment removed'); }}><Undo2 size={14} /> Undo</button>}
+                {b && !(b.received > 0) && <button type="button" onClick={() => setCancelFor(c)}><Ban size={14} /> Cancel</button>}
+                {b && (b.payments || []).length > 0 && <button type="button" disabled={busyId === c.id} onClick={async () => { if (await askConfirm({ title: 'Undo last payment?', message: 'The last payment entry is removed from this invoice.', confirmText: 'Undo', tone: 'danger' })) call(c.id, `/api/billing/${c.id}/payment`, { method: 'DELETE' }, 'Payment removed'); }}><Undo2 size={14} /> Undo</button>}
               </div>
             </div>
           );
@@ -141,6 +163,7 @@ export default function AdminFees({ currentUser }) {
       {pay && <PaySheet c={pay} onClose={() => setPay(null)} onSave={async (body) => { const ok = await call(pay.id, `/api/billing/${pay.id}/payment`, { method: 'POST', body: JSON.stringify(body) }, 'Payment recorded'); if (ok) setPay(null); }} />}
       {feeEdit && <FeeSheet f={feeEdit} onClose={() => setFeeEdit(null)} onSave={async (fee) => { const ok = await call(feeEdit.id, `/api/billing/${feeEdit.id}/fee`, { method: 'PUT', body: JSON.stringify({ fee }) }, 'Fee saved'); if (ok) setFeeEdit(null); }} />}
       {pdfFor && <InvoiceViewer c={pdfFor} onClose={() => setPdfFor(null)} />}
+      {cancelFor && <CancelSheet c={cancelFor} onClose={() => setCancelFor(null)} onSave={async (reason) => { const ok = await call(cancelFor.id, `/api/billing/${cancelFor.id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }, 'Invoice cancelled'); if (ok) setCancelFor(null); }} />}
       {firmOpen && <FirmSheet canEdit={isSuperAdmin(currentUser)} onClose={() => setFirmOpen(false)} />}
 
       <style>{CSS}</style>
@@ -178,6 +201,17 @@ function PaySheet({ c, onClose, onSave }) {
   );
 }
 
+function CancelSheet({ c, onClose, onSave }) {
+  const [reason, setReason] = useState('');
+  return (
+    <Sheet title="Cancel invoice" onClose={onClose}>
+      <div className="fee-sub">{c.billing.invoiceNo} · {c.clientName}. The number stays in your records as cancelled; you can make a new invoice after.</div>
+      <label className="fee-f"><span>Reason</span><input autoFocus value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. wrong fee, wrong bank" /></label>
+      <button type="button" className="fee-save danger" disabled={!reason.trim()} onClick={() => onSave(reason.trim())}>Cancel invoice</button>
+    </Sheet>
+  );
+}
+
 function FeeSheet({ f, onClose, onSave }) {
   const [fee, setFee] = useState(f.fee ? String(f.fee) : '');
   return (
@@ -190,25 +224,30 @@ function FeeSheet({ f, onClose, onSave }) {
 }
 
 function InvoiceViewer({ c, onClose }) {
+  return <PdfSheet url={`${API_BASE_URL}/api/billing/${c.id}/invoice.pdf`} title={c.billing.invoiceNo} fileName={`Invoice_${String(c.billing.invoiceNo).replace(/[^A-Za-z0-9]+/g, '-')}.pdf`} onClose={onClose} />;
+}
+
+/** Any PDF from our API in a bottom sheet, with Download (used for invoices; also by the bank portal) */
+export function PdfSheet({ url, title, fileName, onClose }) {
   const [blob, setBlob] = useState(null);
   const [err, setErr] = useState('');
   const [pages, setPages] = useState(1);
   const [w, setW] = useState(Math.min(520, window.innerWidth - 48));
   useEffect(() => {
-    fetch(`${API_BASE_URL}/api/billing/${c.id}/invoice.pdf`).then(async (r) => { if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Could not make the invoice.'); return r.blob(); })
+    fetch(url).then(async (r) => { if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Could not make the invoice.'); return r.blob(); })
       .then(setBlob).catch((e) => setErr(e.message));
     const onR = () => setW(Math.min(520, window.innerWidth - 48));
     window.addEventListener('resize', onR);
     return () => window.removeEventListener('resize', onR);
-  }, [c.id]);
-  const name = `Invoice_${String(c.billing.invoiceNo).replace(/[^A-Za-z0-9]+/g, '-')}.pdf`;
+  }, [url]);
+  const name = fileName;
   const download = () => {
     const url = URL.createObjectURL(blob); const a = document.createElement('a');
     a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   };
   return (
-    <Sheet title={c.billing.invoiceNo} onClose={onClose}>
+    <Sheet title={title} onClose={onClose}>
       {err ? <div className="fee-empty">{err}</div> : !blob ? <div className="fee-empty"><Loader2 className="spin" size={20} /></div> : (
         <>
           <div className="fee-pdf">
@@ -311,6 +350,9 @@ const CSS = `
 .fee-f em { display: block; font-style: normal; font-size: 11.5px; color: #94a3b8; margin-top: 3px; }
 .fee-save { width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 16px; border: 0; border-radius: 12px; padding: 13px; background: #2563eb; color: #fff; font-size: 15px; font-weight: 800; cursor: pointer; }
 .fee-save:disabled { opacity: .5; }
+.fee-save.danger { background: #dc2626; }
+.fee-topbtns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.fee-cxl { font-size: 12px; color: #b91c1c; align-self: center; }
 .fee-pdf { display: flex; flex-direction: column; align-items: center; gap: 8px; background: #f1f5f9; border-radius: 12px; padding: 8px; overflow: hidden; }
 .fee-pdf canvas { max-width: 100%; height: auto !important; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
 body.dark-theme .fee-top h2, body.dark-theme .fee-who b, body.dark-theme .fee-amt, body.dark-theme .fee-tiles b:not(.ok):not(.due) { color: #fff; }

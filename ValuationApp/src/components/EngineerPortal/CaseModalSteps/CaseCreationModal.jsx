@@ -1,3 +1,4 @@
+import askConfirm from '../../Shared/askConfirm';
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronLeft, X, Loader2, FileText } from 'lucide-react';
 import { Document, Page, pdfjs } from 'react-pdf';
@@ -425,6 +426,13 @@ export default function CaseCreationModal({
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modalStep, editingCaseId, bankName]);
+  // District read from the deed fills the case's District when the admin left it empty
+  useEffect(() => {
+    const d = String(propertyDetails.district || '').trim();
+    if (d && !String(bankDistrict || '').trim() && !lockedFields.bankDistrict) setBankDistrict(d);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [propertyDetails.district]);
+
   // Checks before submit (what a reviewing admin would send back)
   const [preChecks, setPreChecks] = useState(null);
   useEffect(() => {
@@ -1393,7 +1401,7 @@ export default function CaseCreationModal({
       
       if (editingCaseId) {
         if (onCaseSaved) onCaseSaved(formattedNewCase, true);
-        toast.success(`Task successfully submitted for Review!`);
+        toast.success('Case submitted for review.');
         
         // Notify Admin
         fetch(`${API_BASE_URL}/api/notifications`, {
@@ -1401,7 +1409,7 @@ export default function CaseCreationModal({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             targetUser: 'ADMIN',
-            title: 'Task Submitted',
+            title: 'Case Submitted',
             message: `${currentUser?.name} has submitted Case #${editingCaseId} for review.`
           })
         }).catch(err => console.error(err));
@@ -1761,9 +1769,9 @@ export default function CaseCreationModal({
                 propertyDetails={propertyDetails}
                 setPropertyDetails={setPropertyDetails}
                 setManuallyModifiedFields={setManuallyModifiedFields}
-                onNext={() => {
+                onNext={async () => {
                   const miss = missingDocDetails(propertyDetails);
-                  if (miss.length && !window.confirm(`These details are still missing:\n\n• ${miss.join('\n• ')}\n\nContinue to the site details anyway?`)) return;
+                  if (miss.length && !(await askConfirm({ title: 'Some details are missing', message: `• ${miss.join('\n• ')}\n\nYou can add them later, before you submit.`, confirmText: 'Continue anyway', cancelText: 'Fill them now' }))) return;
                   setStep3Phase('site');
                 }}
               />
@@ -1852,6 +1860,7 @@ export default function CaseCreationModal({
                 setShowSubmitModal={setShowSubmitModal}
                 handleCreateCase={handleCreateCase}
                 savedSignature={savedSignature}
+                onSignatureSaved={setSavedSignature}
                 onReviewReport={editingCaseId ? openReportReview : undefined}
                 bankValues={bankValues}
               />

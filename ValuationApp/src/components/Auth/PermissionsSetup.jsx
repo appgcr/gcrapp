@@ -13,10 +13,22 @@ import { isAdminRole } from '../../utils/session';
 // Google review expect, and what makes people actually tap Allow.
 
 const doneKey = (userId) => `gcr_perm_setup_v1_${userId}`;
+const DEVICE_KEY = 'gcr_perm_setup_device_v1'; // this phone has been through the screen (any user)
 export const permissionsSetupDone = (userId) => {
-  try { return localStorage.getItem(doneKey(userId)) === '1'; } catch { return true; }
+  try { return localStorage.getItem(doneKey(userId)) === '1' || localStorage.getItem(DEVICE_KEY) === '1'; } catch { return true; }
 };
-const markDone = (userId) => { try { localStorage.setItem(doneKey(userId), '1'); } catch { /* ignore */ } };
+const markDone = (userId) => { try { localStorage.setItem(doneKey(userId), '1'); localStorage.setItem(DEVICE_KEY, '1'); } catch { /* ignore */ } };
+
+/** Phone already allows everything this person needs → no need to show the screen at all */
+export async function permissionsAlreadyGranted(user) {
+  const kinds = isAdminRole(user) ? ['notifications'] : ['location', 'camera', 'notifications'];
+  for (const k of kinds) {
+    const st = await check(k).catch(() => 'prompt');
+    if (st !== 'granted' && st !== 'unavailable') return false;
+  }
+  if (user?.id) markDone(user.id);
+  return true;
+}
 
 const isNative = () => Capacitor.isNativePlatform?.();
 
