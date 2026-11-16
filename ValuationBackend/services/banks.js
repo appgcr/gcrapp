@@ -214,5 +214,5 @@ async function bankInfoForReport(caseObj) {
 
 module.exports = {
   FORMATS, SEED, ensureBanks, allBanks, clearCache, findBank, policyTable, policyForName,
-  reportFormatFor, bankInfoForReport, syncConfigList, nextBankId, norm,
+  reportFormatFor, bankInfoForReport, syncConfigList, nextBankId, norm, CATEGORY_SLOT,
 };

@@ -33,6 +33,42 @@ export function installApiAuth() {
     const u = currentUser();
     if (u?.id && !headers.has('x-user-id')) headers.set('x-user-id', u.id);
     if (isSuperAdmin(u) && !headers.has('x-branch-scope')) headers.set('x-branch-scope', getBranchScope());
-    return original(input, { ...init, headers });
+    const method = String(init.method || (typeof input !== 'string' && input?.method) || 'GET').toUpperCase();
+    const cacheKey = method === 'GET' && offlineCacheable(url) ? `apiCache:${u?.id || 'anon'}:${url.slice(API_BASE_URL.length)}` : null;
+    const p = original(input, { ...init, headers });
+    if (!cacheKey) return p;
+    // Keep the last answer on the phone; with no signal, serve it instead of failing
+    return p.then((res) => {
+      if (res.ok && (res.headers.get('content-type') || '').includes('json')) {
+        res.clone().text().then((text) => {
+          if (text.length < 8 * 1024 * 1024) offlineStore().then((st) => st.setItem(cacheKey, { text, at: Date.now() })).catch(() => {});
+        }).catch(() => {});
+      }
+      return res;
+    }, async (err) => {
+      try {
+        const st = await offlineStore();
+        const hit = await st.getItem(cacheKey);
+        if (hit && hit.text) {
+          window.dispatchEvent(new CustomEvent('gcr_offline_cache', { detail: { at: hit.at } }));
+          return new Response(hit.text, { status: 200, headers: { 'Content-Type': 'application/json', 'X-Offline-Cache': String(hit.at) } });
+        }
+      } catch { /* no saved copy */ }
+      throw err;
+    });
   };
+}
+
+// What an engineer needs at a site with no signal: their cases, a case's details, attendance, banks, settings
+const OFFLINE_PATHS = [/\/api\/cases(\?|$)/, /\/api\/cases\/[^/?]+(\?|$)/, /\/api\/attendance(\?|$)/, /\/api\/banks(\?|$)/, /\/api\/auth\/me(\?|$)/, /\/api\/config(\?|$)/];
+const offlineCacheable = (url) => OFFLINE_PATHS.some((r) => r.test(url.slice(API_BASE_URL.length).split('#')[0]));
+let storePromise = null;
+function offlineStore() {
+  if (!storePromise) storePromise = import('localforage').then((m) => m.default.createInstance({ name: 'gcr', storeName: 'apiCache' }));
+  return storePromise;
+}
+
+/** Remove saved copies (on logout, so the next person on this phone sees nothing) */
+export async function clearOfflineCache() {
+  try { const st = await offlineStore(); await st.clear(); } catch { /* ignore */ }
 }

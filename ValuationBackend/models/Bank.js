@@ -15,6 +15,11 @@ const bankSchema = new mongoose.Schema({
   email: { type: String, default: '', trim: true },
   contacts: { type: [{ branch: String, email: String, phone: String }], default: [] },
   autoSend: { type: Boolean, default: true },                      // email the report when it is approved
+  // Our fee for this bank's valuations (Rs, before GST), per property type
+  fees: {
+    house: { type: Number, default: null }, apartment: { type: Number, default: null }, openSite: { type: Number, default: null },
+    agriculture: { type: Number, default: null }, industrial: { type: Number, default: null },
+  },
   // Which report layout the bank uses: 'apgb' = the bank's own exact format (installed),
   // 'standard' = the general GCR report until that bank's format is supplied
   format: { type: String, default: 'standard' },

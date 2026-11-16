@@ -115,6 +115,8 @@ const appConfigSchema = new mongoose.Schema({
       }
     ]
   },
+  // Firm details printed on invoices (Fees → Firm details)
+  billing: { type: mongoose.Schema.Types.Mixed, default: {} },
   attendanceSettings: {
     fullDayHours: { type: Number, default: 7 },
     halfDayHours: { type: Number, default: 4 },

@@ -500,7 +500,11 @@ router.put('/:id', authenticateToken, async (req, res) => {
     if (updated.status === 'Approved' && existingCase.status !== 'Approved') {
       // Send the approved report to the bank (after the reply, so approving stays quick)
       const baseUrl = `${req.get('x-forwarded-proto') || req.protocol}://${req.get('host')}`;
-      setImmediate(() => require('../services/reportDelivery').deliverReport(updated.id, { baseUrl, actor: req.user?.name || 'admin' }));
+      setImmediate(async () => {
+        // Invoice first, so the report email can carry it
+        try { await require('../services/billing').createInvoice(updated.id, { by: req.user?.name || 'admin' }); } catch (e) { console.warn('invoice:', e.message); }
+        require('../services/reportDelivery').deliverReport(updated.id, { baseUrl, actor: req.user?.name || 'admin' });
+      });
     }
     res.json(updated);
   } catch (err) {

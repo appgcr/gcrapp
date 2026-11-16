@@ -8,7 +8,9 @@ import IconTile from '../Shared/IconTile';
 import ReportViewer, { fetchReport } from '../Shared/ReportViewer';
 import CaseCreationModal from './CaseModalSteps/CaseCreationModal';
 import TellCustomer from './TellCustomer';
+import { queuedItemFor, subscribeSyncStatus } from '../../services/offlineSyncService';
 import './AttendanceView.css';
+const queuedCss = `.cd-queued { margin-top: 12px; padding: 10px 12px; border-radius: 12px; font-size: 13px; line-height: 1.4; background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; } .cd-queued.bad { background: #fef2f2; color: #991b1b; border-color: #fecaca; }`;
 
 const REQUIRED_DOCS = [
   { id: 'saleDeed', label: '1. Registered Document / Sale Deed' },
@@ -102,6 +104,16 @@ export default function CaseDetailsView({ caseId }) {
   };
 
   const [formOpen, setFormOpen] = useState(false); // the 6-step valuation form for this case
+  // This case finished with no signal: waiting on the phone, or refused by the server
+  const [queued, setQueued] = useState(null);
+  useEffect(() => {
+    const check = () => queuedItemFor(caseId).then(setQueued).catch(() => {});
+    check();
+    const off = subscribeSyncStatus(() => { check(); });
+    const onChanged = () => setReloadKey(k => k + 1);
+    window.addEventListener('gcr_cases_changed', onChanged);
+    return () => { off(); window.removeEventListener('gcr_cases_changed', onChanged); };
+  }, [caseId]);
   const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/cases/${caseId}`)
@@ -132,6 +144,8 @@ export default function CaseDetailsView({ caseId }) {
       }
       setFormOpen(true);
     } catch {
+      // No signal and no saved attendance: don't stop field work
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) { setFormOpen(true); return; }
       toast.error('Could not check your attendance. Please try again.');
     }
   };
@@ -246,6 +260,14 @@ export default function CaseDetailsView({ caseId }) {
               )}
             </div>
 
+            <style>{queuedCss}</style>
+            {queued && (
+              <div className={`cd-queued ${queued.status === 'refused' ? 'bad' : ''}`}>
+                {queued.status === 'refused'
+                  ? <><b>Not accepted by the server:</b> {queued.error} Open the form to fix it — your work is still on this phone.</>
+                  : <><b>Submitted with no signal.</b> Saved on this phone; it uploads by itself when you're back online.</>}
+              </div>
+            )}
             {!isStarted && (
               <>
                 <button className="td-action in" onClick={startValuation}>

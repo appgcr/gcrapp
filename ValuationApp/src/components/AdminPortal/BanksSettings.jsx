@@ -154,6 +154,7 @@ function BankSheet({ bank, formats, onClose, onSaved }) {
     contacts: (bank.contacts || []).map((r) => [r.branch, r.email, r.phone].filter(Boolean).join(' | ')).join('\n'),
     format: bank.format || 'standard',
     status: bank.status || 'Active',
+    fees: Object.fromEntries(TYPES.map(([k]) => [k, bank.fees?.[k] ?? ''])),
     policies: Object.fromEntries(TYPES.map(([k]) => [k, {
       realizable: bank.policies?.[k]?.realizable ?? '',
       distress: bank.policies?.[k]?.distress ?? '',
@@ -245,6 +246,16 @@ function BankSheet({ bank, formats, onClose, onSaved }) {
             </select>
           </label>
         </div>
+
+        <div className="fs-section">Our fee (₹, before GST)</div>
+        <div className="fs-group">
+          {TYPES.map(([k, label]) => (
+            <label className="fs-row" key={k}><span>{label}</span>
+              <input inputMode="decimal" value={form.fees[k]} placeholder="—" onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, '').slice(0, 8); setForm((f) => ({ ...f, fees: { ...f.fees, [k]: v } })); }} aria-label={`${label} fee`} />
+            </label>
+          ))}
+        </div>
+        <p className="fs-foot">Used for the invoice made when a report for this bank is approved. Can be changed per case in Fees.</p>
 
         <div className="fs-section">Valuation % of fair market value</div>
         <div className="fs-group">

@@ -1,132 +1,151 @@
 import localforage from 'localforage';
 import { API_BASE_URL } from '../config/api';
 
+/**
+ * Cases finished with no signal wait here (on the phone) and upload by themselves:
+ * when the app opens, when the phone is back online, when the app comes to the front,
+ * and every 45 seconds while something is waiting.
+ * The form's draft stays on the phone until the upload succeeds, so nothing is lost.
+ * If the server refuses a case (e.g. a document is missing), it is kept as "needs fixing"
+ * with the reason — reopening the case restores everything to correct and submit again.
+ */
+
 const OFFLINE_QUEUE_KEY = 'gcr_offline_sync_queue_v1';
+const RETRY_MS = 45 * 1000;
 
 let isSyncing = false;
 const listeners = new Set();
+let lastStatus = { status: 'idle', count: 0, refused: [] };
 
 export function subscribeSyncStatus(listener) {
   listeners.add(listener);
+  listener(lastStatus);
   return () => listeners.delete(listener);
 }
 
 function notifyListeners(status) {
-  listeners.forEach(fn => fn(status));
+  lastStatus = { ...lastStatus, ...status };
+  listeners.forEach(fn => fn(lastStatus));
 }
 
-/**
- * Queue a completed or draft case locally when network is unavailable
- */
-export async function queueOfflineCase(payload, editingCaseId = null) {
-  try {
-    const queue = (await localforage.getItem(OFFLINE_QUEUE_KEY)) || [];
-    const syncId = payload.offlineSyncId || `SYNC-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-
-    const queueItem = {
-      syncId,
-      editingCaseId,
-      payload: {
-        ...payload,
-        offlineSyncId: syncId,
-        offlineSavedAt: new Date().toISOString()
-      },
-      status: 'pending', // 'pending', 'syncing', 'failed'
-      error: null,
-      queuedAt: new Date().toISOString()
-    };
-
-    // Replace if same syncId exists, else push
-    const existingIndex = queue.findIndex(q => q.syncId === syncId || (editingCaseId && q.editingCaseId === editingCaseId));
-    if (existingIndex >= 0) {
-      queue[existingIndex] = queueItem;
-    } else {
-      queue.push(queueItem);
-    }
-
-    await localforage.setItem(OFFLINE_QUEUE_KEY, queue);
-    notifyListeners({ status: 'queued', count: queue.length });
-    return queueItem;
-  } catch (err) {
-    console.error('Failed to queue case offline:', err);
-    throw err;
-  }
-}
-
-/**
- * Get all pending offline items
- */
-export async function getPendingOfflineQueue() {
+async function readQueue() {
   return (await localforage.getItem(OFFLINE_QUEUE_KEY)) || [];
 }
 
-/**
- * Sync all queued offline cases to the server
- */
+async function publishCounts(extra = {}) {
+  const q = await readQueue();
+  notifyListeners({
+    count: q.filter(i => i.status !== 'refused').length,
+    refused: q.filter(i => i.status === 'refused').map(i => ({ syncId: i.syncId, caseId: i.editingCaseId, clientName: i.payload?.clientName, error: i.error })),
+    ...extra,
+  });
+}
+
+/** Queue a case to upload when there is signal */
+export async function queueOfflineCase(payload, editingCaseId = null, draftKey = null) {
+  const queue = await readQueue();
+  const syncId = payload.offlineSyncId || `SYNC-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const queueItem = {
+    syncId,
+    editingCaseId,
+    draftKey,
+    payload: { ...payload, offlineSyncId: syncId, offlineSavedAt: new Date().toISOString() },
+    status: 'pending',
+    error: null,
+    tries: 0,
+    queuedAt: new Date().toISOString(),
+  };
+  const i = queue.findIndex(q => q.syncId === syncId || (editingCaseId && q.editingCaseId === editingCaseId));
+  if (i >= 0) queue[i] = queueItem; else queue.push(queueItem);
+  await localforage.setItem(OFFLINE_QUEUE_KEY, queue);
+  await publishCounts({ status: 'queued' });
+  scheduleRetry();
+  return queueItem;
+}
+
+export async function getPendingOfflineQueue() {
+  return readQueue();
+}
+
+/** Is this case waiting to upload (or refused)? → queue item or null */
+export async function queuedItemFor(caseId) {
+  const q = await readQueue();
+  return q.find(i => i.editingCaseId && String(i.editingCaseId) === String(caseId)) || null;
+}
+
+/** Forget a refused item (the engineer opened the case to fix it) */
+export async function dropQueued(syncId) {
+  const q = await readQueue();
+  await localforage.setItem(OFFLINE_QUEUE_KEY, q.filter(i => i.syncId !== syncId));
+  await publishCounts();
+}
+
+/** Upload every waiting case */
 export async function syncPendingCases() {
-  if (isSyncing || !navigator.onLine) return;
+  if (isSyncing || (typeof navigator !== 'undefined' && navigator.onLine === false)) return;
+  const queue = await readQueue();
+  const todo = queue.filter(i => i.status !== 'refused');
+  if (!todo.length) { await publishCounts({ status: 'idle' }); return; }
   isSyncing = true;
   notifyListeners({ status: 'syncing' });
-
+  let synced = 0;
   try {
-    const queue = (await localforage.getItem(OFFLINE_QUEUE_KEY)) || [];
-    if (queue.length === 0) {
-      isSyncing = false;
-      notifyListeners({ status: 'idle', count: 0 });
-      return;
-    }
-
-    const remaining = [];
-    const synced = [];
-
-    for (const item of queue) {
+    for (const item of todo) {
       try {
-        let response;
-        if (item.editingCaseId) {
-          response = await fetch(`${API_BASE_URL}/api/cases/${item.editingCaseId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(item.payload)
-          });
+        const res = await fetch(item.editingCaseId ? `${API_BASE_URL}/api/cases/${item.editingCaseId}` : `${API_BASE_URL}/api/cases`, {
+          method: item.editingCaseId ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(item.payload),
+        });
+        if (res.ok) {
+          item.status = 'done';
+          synced += 1;
+          if (item.draftKey) await localforage.removeItem(item.draftKey).catch(() => {});
+        } else if (res.status >= 400 && res.status < 500 && ![401, 408, 429].includes(res.status)) {
+          // The server looked at it and said no — retrying will not help; the engineer must fix it
+          const d = await res.json().catch(() => ({}));
+          item.status = 'refused';
+          item.error = d.details || d.error || `The server refused this case (${res.status}).`;
         } else {
-          response = await fetch(`${API_BASE_URL}/api/cases`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(item.payload)
-          });
-        }
-
-        if (response.ok) {
-          synced.push(item);
-        } else {
-          item.status = 'failed';
-          item.error = `HTTP ${response.status}`;
-          remaining.push(item);
+          item.status = 'pending'; item.tries = (item.tries || 0) + 1; item.error = `Server busy (${res.status}). Will retry.`;
         }
       } catch (networkErr) {
-        item.status = 'failed';
-        item.error = networkErr.message;
-        remaining.push(item);
+        item.status = 'pending'; item.tries = (item.tries || 0) + 1; item.error = 'No signal. Will retry.';
       }
     }
-
-    await localforage.setItem(OFFLINE_QUEUE_KEY, remaining);
-    notifyListeners({
-      status: remaining.length === 0 ? 'success' : 'partial_failure',
-      count: remaining.length,
-      syncedCount: synced.length
-    });
+    // Keep everything not uploaded (and anything queued meanwhile)
+    const latest = await readQueue();
+    const doneIds = new Set(todo.filter(i => i.status === 'done').map(i => i.syncId));
+    const byId = new Map(todo.map(i => [i.syncId, i]));
+    const next = latest.filter(i => !doneIds.has(i.syncId)).map(i => byId.get(i.syncId) || i);
+    await localforage.setItem(OFFLINE_QUEUE_KEY, next);
+    if (synced) window.dispatchEvent(new CustomEvent('gcr_cases_changed'));
+    await publishCounts({ status: synced && !next.some(i => i.status === 'pending') ? 'success' : next.length ? 'waiting' : 'idle', syncedCount: synced });
   } catch (err) {
-    console.error('Offline sync error:', err);
     notifyListeners({ status: 'error', error: err.message });
   } finally {
     isSyncing = false;
+    scheduleRetry();
   }
 }
 
-// Automatically trigger sync when network comes back online
-if (typeof window !== 'undefined') {
-  window.addEventListener('online', () => {
-    syncPendingCases().catch(() => {});
-  });
+let retryTimer = null;
+function scheduleRetry() {
+  if (retryTimer) return;
+  retryTimer = setTimeout(async () => {
+    retryTimer = null;
+    const q = await readQueue();
+    if (q.some(i => i.status === 'pending')) { await syncPendingCases(); }
+  }, RETRY_MS);
+}
+
+let started = false;
+export function startAutoSync() {
+  if (started || typeof window === 'undefined') return;
+  started = true;
+  window.addEventListener('online', () => { notifyListeners({ online: true }); syncPendingCases().catch(() => {}); });
+  window.addEventListener('offline', () => notifyListeners({ online: false }));
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncPendingCases().catch(() => {}); });
+  notifyListeners({ online: navigator.onLine !== false });
+  setTimeout(() => syncPendingCases().catch(() => {}), 3000);
 }

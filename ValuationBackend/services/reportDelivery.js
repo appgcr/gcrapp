@@ -71,7 +71,14 @@ async function sendEmail(to, c, link, attachment) {
     auth: { user: env('SMTP_USERNAME'), pass: env('SMTP_PASSWORD') },
   });
   const { subject, text } = messageFor(c, link);
-  await t.sendMail({ from: env('EMAIL_FROM'), to, subject, text, attachments: attachment ? [attachment] : [] });
+  const attachments = attachment ? [attachment] : [];
+  if (c.billing && c.billing.invoiceNo) {
+    try {
+      const { invoicePdf } = require('./billing');
+      attachments.push({ filename: `Invoice_${c.billing.invoiceNo.replace(/[^A-Za-z0-9]+/g, '-')}.pdf`, content: await invoicePdf(c) });
+    } catch (err) { console.warn('invoice attach:', err.message); }
+  }
+  await t.sendMail({ from: env('EMAIL_FROM'), to, subject, text, attachments });
 }
 
 /**

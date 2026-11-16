@@ -32,6 +32,15 @@ function clean(body = {}) {
     out.email = e;
   }
   if (body.autoSend !== undefined) out.autoSend = !!body.autoSend;
+  if (body.fees) {
+    out.fees = {};
+    for (const k of ['house', 'apartment', 'openSite', 'agriculture', 'industrial']) {
+      const v = body.fees[k];
+      const n = v === '' || v == null ? null : Math.round(Number(String(v).replace(/[^\d.]/g, '')));
+      if (n != null && (!Number.isFinite(n) || n < 0 || n > 10000000)) throw new Error('Enter the fee in rupees.');
+      out.fees[k] = n;
+    }
+  }
   if (body.contacts !== undefined) {
     // "ITI Road | itiroad@sbi.co.in | 98765 43210" per line, or [{ branch, email, phone }]
     const rows = Array.isArray(body.contacts) ? body.contacts : String(body.contacts || '').split('\n').map((l) => {

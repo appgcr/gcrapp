@@ -1,6 +1,6 @@
 import { API_BASE_URL } from '../../config/api';
 import React, { useState, useEffect, useRef } from 'react';
-import { LayoutDashboard, ClipboardList, PenSquare, Users, Settings, MessageCircle, Megaphone, LogOut, MapPinned } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, PenSquare, Users, Settings, MessageCircle, Megaphone, LogOut, MapPinned, IndianRupee } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import './AdminPortal.css';
@@ -17,6 +17,7 @@ import GlobalChatWidget from '../Shared/GlobalChatWidget';
 import BroadcastSheet from './BroadcastSheet';
 import { GridIcon, DocIcon, CalendarIcon, PeopleIcon, GearIcon, MapIcon } from '../Shared/TabIcons';
 import AdminValueMap from './AdminValueMap';
+import AdminFees from './AdminFees';
 import { isSuperAdmin } from '../../utils/session';
 import GcrLogo from '../Shared/GcrLogo';
 import PullDownReach from '../Shared/PullDownReach';
@@ -240,6 +241,7 @@ export default function AdminPortal({ currentUser, handleLogout }) {
       case 'forms': return <AttendanceLogs />; // Repurposing attendance logs as Forms for now
       case 'staff': return <AdminStaff currentUser={currentUser} />;
       case 'valuemap': return <AdminValueMap />;
+      case 'fees': return <AdminFees currentUser={currentUser} />;
       case 'chat': return <div className="admin-chat-host"><ChatSystem key={chatWith?.id || 'all'} currentUser={currentUser} otherUserId={chatWith?.id} otherUserName={chatWith?.name} onBack={() => setActiveTab('dashboard')} /></div>;
       case 'settings': return <AdminSettings currentUser={currentUser} handleLogout={handleLogout} />;
       default: return <AdminDashboard />;
@@ -287,6 +289,13 @@ export default function AdminPortal({ currentUser, handleLogout }) {
           >
             <Users size={18} />
             <span>Field Engineers</span>
+          </button>
+          <button
+            className={`admin-sidebar-item ${activeTab === 'fees' ? 'active' : ''}`}
+            onClick={() => setActiveTab('fees')}
+          >
+            <IndianRupee size={18} />
+            <span>Fees & Invoices</span>
           </button>
           {isSuperAdmin(currentUser) && (
             <button

@@ -1,3 +1,4 @@
+import FeesShortcut from './FeesShortcut';
 import { API_BASE_URL } from '../../config/api';
 import React, { useState, useEffect } from 'react';
 import DateRangePicker, { toYMD, fromYMD } from '../Shared/DateRangePicker';
@@ -471,6 +472,8 @@ export default function AdminDashboard({ onNavigate }) {
     <div className="animate-fade-in gcr-dashboard ios-settings ios-dash">
       {/* Key numbers (live data) */}
       <DashboardSummary cases={cases} users={users} />
+
+      {onNavigate && <FeesShortcut onOpen={() => onNavigate('fees')} />}
 
       {/* Only what needs action — or a single "All caught up" row */}
       <AdminInsights cases={cases} users={users} onNavigate={onNavigate} only="attention" />

@@ -71,6 +71,7 @@ app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/chat', require('./routes/chat'));
 app.use('/api/extract', require('./routes/extract'));
 app.use('/api/assist', require('./routes/assist'));
+app.use('/api/billing', require('./routes/billing'));
 app.use('/api/config', require('./routes/config'));
 app.use('/api/location', require('./routes/location'));
 app.use('/api/live', require('./routes/live'));

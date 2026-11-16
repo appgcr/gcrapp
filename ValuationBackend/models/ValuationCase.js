@@ -92,6 +92,8 @@ const valuationCaseSchema = new mongoose.Schema({
   preCheck: { type: mongoose.Schema.Types.Mixed, default: null },
   // Report sent to the bank automatically after approval (services/reportDelivery.js)
   delivery: { type: mongoose.Schema.Types.Mixed, default: null },
+  // Our fee and invoice for this valuation (services/billing.js)
+  billing: { type: mongoose.Schema.Types.Mixed, default: null },
   // Customer told the engineer is on the way
   customerNotified: { type: mongoose.Schema.Types.Mixed, default: null },
   locationData: { type: String, default: '' },

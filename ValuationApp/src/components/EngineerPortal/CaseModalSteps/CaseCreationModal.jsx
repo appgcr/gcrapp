@@ -13,7 +13,7 @@ import localforage from 'localforage';
 import toast from 'react-hot-toast';
 import { isWordFile, fileMime, uploadDocumentFile, formatMB, resolveDocUrl } from '../../../utils/docFiles';
 import { API_BASE_URL } from '../../../config/api';
-import { queueOfflineCase } from '../../../services/offlineSyncService';
+import { queueOfflineCase, queuedItemFor, dropQueued } from '../../../services/offlineSyncService';
 import { reconcileDocuments } from '../../../utils/reconciliation';
 import { isStrictlyEmpty } from '../../../utils/canonicalSchema';
 
@@ -1332,8 +1332,7 @@ export default function CaseCreationModal({
     // If device is offline, immediately queue offline
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       try {
-        await queueOfflineCase(payload, editingCaseId);
-        await localforage.removeItem(draftKey);
+        await queueOfflineCase(payload, editingCaseId, draftKey); // the draft stays until the upload succeeds
         const formattedOfflineCase = {
           id: editingCaseId || `OFFLINE-${Date.now().toString().slice(-6)}`,
           title: (payload.clientName && payload.bankName) ? `${payload.clientName} - ${payload.bankName}` : payload.clientName,
@@ -1342,7 +1341,7 @@ export default function CaseCreationModal({
           status: 'Pending Sync'
         };
         if (onCaseSaved) onCaseSaved(formattedOfflineCase, !!editingCaseId);
-        toast.success(`Saved offline! Queued to sync automatically when reconnected.`, { icon: '💾', duration: 6000 });
+        toast.success('No signal — saved on this phone. It uploads by itself when you are back online.', { duration: 6000 });
         closeModal();
         return;
       } catch (queueErr) {
@@ -1378,6 +1377,7 @@ export default function CaseCreationModal({
       const newCase = await response.json();
       
       localforage.removeItem(draftKey); // Clear draft on success
+      if (editingCaseId) queuedItemFor(editingCaseId).then(q => q && dropQueued(q.syncId)).catch(() => {}); // an older waiting copy is replaced by this one
       
       const formattedNewCase = {
         ...newCase, // name, file number, bank… so the case list shows it correctly straight away
@@ -1415,8 +1415,7 @@ export default function CaseCreationModal({
     } catch (err) {
       console.warn('Network error while saving case, saving to offline queue:', err);
       try {
-        await queueOfflineCase(payload, editingCaseId);
-        await localforage.removeItem(draftKey);
+        await queueOfflineCase(payload, editingCaseId, draftKey); // the draft stays until the upload succeeds
         const formattedOfflineCase = {
           id: editingCaseId || `OFFLINE-${Date.now().toString().slice(-6)}`,
           title: (payload.clientName && payload.bankName) ? `${payload.clientName} - ${payload.bankName}` : payload.clientName,
@@ -1425,7 +1424,7 @@ export default function CaseCreationModal({
           status: 'Pending Sync'
         };
         if (onCaseSaved) onCaseSaved(formattedOfflineCase, !!editingCaseId);
-        toast.success(`Network unavailable. Case saved locally and queued for auto-sync!`, { icon: '💾', duration: 7000 });
+        toast.success('No signal — saved on this phone. It uploads by itself when you are back online.', { duration: 7000 });
         closeModal();
       } catch (fallbackErr) {
         console.error(fallbackErr);

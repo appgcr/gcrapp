@@ -10,6 +10,7 @@ import LaunchSplash from './components/Shared/LaunchSplash';
 const EngineerDashboard = lazy(() => import('./components/EngineerPortal/EngineerDashboard'));
 const CaseListView = lazy(() => import('./components/EngineerPortal/CaseListView'));
 const CaseDetailsView = lazy(() => import('./components/EngineerPortal/CaseDetailsView'));
+const OfflineBar = lazy(() => import('./components/EngineerPortal/OfflineBar'));
 const AttendanceView = lazy(() => import('./components/EngineerPortal/AttendanceView'));
 const AttendanceLogs = lazy(() => import('./components/EngineerPortal/AttendanceLogs'));
 const SettingsView = lazy(() => import('./components/EngineerPortal/SettingsView'));
@@ -25,7 +26,7 @@ import { GridIcon, DocIcon, CalendarIcon, ChatIcon, GearIcon } from './component
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 import { Toaster } from 'react-hot-toast';
-import { isAdminRole } from './utils/session';
+import { isAdminRole, clearOfflineCache } from './utils/session';
 const PublicSite = lazy(() => import('./components/Public/PublicSite'));
 const BankPortal = lazy(() => import('./components/BankPortal/BankPortal'));
 
@@ -222,6 +223,7 @@ export default function App() {
 
   const handleLogout = () => {
     unregisterPush(currentUser?.id); // stop this phone receiving the old user's alerts
+    clearOfflineCache(); // saved copies of cases are for this person only
     setCurrentUser(null);
     setIsAppLocked(false);
     localStorage.removeItem('sbi_valuation_current_user_v3');
@@ -361,6 +363,7 @@ export default function App() {
       {/* Main Scrollable Content */}
       <main key={refreshKey} className="main-content" style={activeTab === 'chat' ? { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', zIndex: 1000 } : {}}>
         <Suspense fallback={<PartLoading />}>
+        {activeTab !== 'chat' && <OfflineBar onOpenCase={(id) => { setSelectedCaseId(id); setActiveTab('cases'); }} />}
         {activeTab === 'dashboard' && !selectedCaseId && (
           <EngineerDashboard onOpenCase={(id) => { setSelectedCaseId(id); setActiveTab('cases'); }} currentUser={currentUser} />
         )}

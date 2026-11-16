@@ -153,24 +153,6 @@ export default function EngineerDashboard({ currentUser, onOpenCase }) {
         <p>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
       </div>
 
-      {/* Offline / waiting to upload */}
-      {(!isOnline || offlineCount > 0) && (
-        <div className="td-group" style={{ marginBottom: 16 }}>
-          <div className="td-row">
-            <IconTile icon={!isOnline ? WifiOff : CloudUpload} color={!isOnline ? 'orange' : 'green'} size={30} />
-            <div className="td-main">
-              <div className="td-title">{!isOnline ? 'You’re offline' : `${offlineCount} case${offlineCount === 1 ? '' : 's'} ready to upload`}</div>
-              <div className="td-sub">{!isOnline ? 'Your work is saved on this phone and uploads when you’re back online.' : 'Saved on this phone while offline.'}</div>
-            </div>
-            {isOnline && offlineCount > 0 && (
-              <button className="ed-pill-btn" onClick={handleManualSync} disabled={isSyncing}>
-                {isSyncing ? <RefreshCw size={14} className="animate-spin" /> : 'Upload'}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Overview */}
       <div className="ed-tiles">
         <div><b style={{ color: '#2a78d6' }}>{inField.length}</b><span>In field</span></div>
