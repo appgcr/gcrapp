@@ -62,7 +62,7 @@ def common(f, case, rep, extent_yd):
             act = bd_act.get(side.lower()) if k == 1 else None
             f[f'bd{k}Actual{side}'] = (act or f[f'bd{k}{side}']) if have else DROP_ROW
     loc = (f'Site Survey No : {f["surveyNo"] or "---"}, Door No : {f["doorNo"] or "---"}, Ward No: {rep.get("wardNo") or "---"}, '
-           f'In {rep.get("landmark") or "---"}, {rep.get("village") or "---"} Village Field, {lb}, '
+           + (f'In {rep.get("landmark")}, ' if rep.get("landmark") else '') + f'{rep.get("village") or "---"} Village Field, {lb}, '
            f'{rep.get("mandal") or "---"} Mandal of {dotted(district)} (Dt).')
     def _has(v):
         return bool(v) and str(v).strip(' -,.') not in ('', 'NA')

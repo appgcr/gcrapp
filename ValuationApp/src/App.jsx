@@ -26,6 +26,7 @@ import { GridIcon, DocIcon, CalendarIcon, ChatIcon, GearIcon } from './component
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 import { Toaster } from 'react-hot-toast';
+import ToastLimit from './components/Shared/ToastLimit';
 import { isAdminRole, clearOfflineCache } from './utils/session';
 const PublicSite = lazy(() => import('./components/Public/PublicSite'));
 const BankPortal = lazy(() => import('./components/BankPortal/BankPortal'));
@@ -269,7 +270,7 @@ export default function App() {
     return (
       <>
         {/* Confirmations & errors (was missing on the admin side, so they never showed) */}
-        <Toaster position="top-center" containerStyle={{ top: 'calc(env(safe-area-inset-top, 0px) + 10px)' }} toastOptions={{ duration: 3000, style: { background: '#1c1c1e', color: '#fff', borderRadius: '14px', fontSize: '14px', maxWidth: '92vw' } }} />
+        <ToastLimit /><Toaster position="top-center" containerStyle={{ top: 'calc(env(safe-area-inset-top, 0px) + 10px)' }} toastOptions={{ duration: 3000, style: { background: '#1c1c1e', color: '#fff', borderRadius: '14px', fontSize: '14px', maxWidth: '92vw' } }} />
         <PushRegistration currentUser={currentUser} />
         <Suspense fallback={<PartLoading />}><AdminPortal currentUser={currentUser} handleLogout={handleLogout} /></Suspense>
         {tracking}
@@ -291,7 +292,7 @@ export default function App() {
     {lockLayer}
     <PullDownReach disabled={activeTab === 'chat' || !!permScreen || isAppLocked}>
     <div className="app-container">
-      <Toaster position="top-center" containerStyle={{ top: 'calc(env(safe-area-inset-top, 0px) + 10px)' }} toastOptions={{ duration: 4000, style: { background: '#1c1c1e', color: '#fff', borderRadius: '14px', fontSize: '14px', maxWidth: '92vw' } }} />
+      <ToastLimit /><Toaster position="top-center" containerStyle={{ top: 'calc(env(safe-area-inset-top, 0px) + 10px)' }} toastOptions={{ duration: 4000, style: { background: '#1c1c1e', color: '#fff', borderRadius: '14px', fontSize: '14px', maxWidth: '92vw' } }} />
       {permissionsOverlay}
       {/* Shares live GPS with the admin map while the engineer is on duty */}
       <PushRegistration currentUser={currentUser} />

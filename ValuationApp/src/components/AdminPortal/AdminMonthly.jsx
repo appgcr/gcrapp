@@ -19,7 +19,7 @@ export default function AdminMonthly() {
 
   const exportCsv = () => {
     if (!d || d.error) return;
-    const q = (v) => { const t = v == null ? '' : String(v); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+    const q = (v) => { let t = v == null ? '' : String(v); if (typeof v === 'string' && /^[=+\-@\t\r]/.test(t)) t = `'${t}`; return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
     const rows = [
       [`Gouru Valuations — ${d.label}`], [],
       ['Requests', d.work.requests], ['Submitted', d.work.submitted], ['Approved', d.work.approved], ['Returned', d.work.returned], ['Return rate %', d.work.returnRate],

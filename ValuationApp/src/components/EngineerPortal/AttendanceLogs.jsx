@@ -219,6 +219,7 @@ export default function AttendanceLogs() {
                         <div className="at-event-title">{isIn ? 'Checked in' : 'Checked out'} · {fmtTime(r.timestamp)}
                           {r.faceVerified && <span className="at-face">Face verified</span>}
                           {r.verifiedBy === 'Fingerprint' && <span className="at-face">Fingerprint verified</span>}
+                          {r.offline && <span className="at-face" style={{ background: '#fff7ed', color: '#c2410c' }} title="Made with no signal; the time is the phone's">No signal · phone time</span>}
                         </div>
                         {(r.address || (r.lat && r.lng)) && (
                           <a className="at-place" href={`https://www.google.com/maps?q=${encodeURIComponent(r.lat && r.lng ? `${r.lat},${r.lng}` : r.address)}`} target="_blank" rel="noopener noreferrer">

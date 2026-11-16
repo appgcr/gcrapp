@@ -257,7 +257,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
 
       // The server alerts the engineer (in-app + push) — no extra client-side notification
 
-      toast.success(newTask.id ? (engineer ? "Case updated and assigned." : "Case details updated.") : "Case created and assigned.");
+      toast.success(newTask.id ? (engineer ? "Case updated and assigned." : "Case details updated.") : (engineer ? `Case created and assigned to ${engineer.name}.` : "Case created. Assign an engineer from the Unassigned tab."));
       saveRecentAddress(newTask.address);
       setNewTask({ id: null, branchId: scope !== 'all' ? scope : '', borrowerName: '', bankName: '', bankBranch: '', mobileNumber: '', note: '', assignedStaffId: '', address: '', date: '', time: '' });
       setIsCreateFormOpen(false); // Close form on success
@@ -284,7 +284,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
         body: JSON.stringify({ status: 'Approved' })
       });
       if (!res.ok) throw new Error(await errorFrom(res, 'Could not approve the case'));
-      toast.success(`Case #${caseId} approved`);
+      toast.success(`${cs.fileNumber || `Case #${caseId}`} approved — invoice made, report ready to send to the bank.`);
       fetchData();
     } catch (err) {
       console.error(err);
@@ -395,7 +395,8 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
     const stage = STAGES.find(st => st.key === stageOf(c));
     const age = ageOf(c);
     const overdue = age && OVERDUE[tab] && age.ms > OVERDUE[tab];
-    const value = c.valuation?.realizableValue || c.valuation?.fairMarketValue || 0;
+    const value = c.valuation?.fairMarketValue || c.valuation?.realizableValue || 0;
+    const valueLabel = c.valuation?.fairMarketValue ? 'Market value' : 'Realizable';
     const inspection = fmtInspection(c);
     const address = c.address || c.locationData || '';
     const engineer = c.assignedEngineerName && c.assignedEngineerName !== 'Unknown' ? c.assignedEngineerName : null;
@@ -443,7 +444,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
 
         <div className="cs-meta">
           {age && <span className={`cs-age ${overdue ? 'is-overdue' : ''}`}>{overdue && <AlertTriangle size={12} />}{age.text} old</span>}
-          {value > 0 && <span className="cs-value">{fmtINR(value)}</span>}
+          {value > 0 && <span className="cs-value" title={valueLabel}>{valueLabel} {fmtINR(value)}</span>}
           {(c.version || 1) > 1 && <span className="cs-ver">v{c.version}</span>}
         </div>
 

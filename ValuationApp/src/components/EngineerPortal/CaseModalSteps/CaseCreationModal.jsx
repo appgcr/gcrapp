@@ -15,6 +15,7 @@ import toast from 'react-hot-toast';
 import { isWordFile, fileMime, uploadDocumentFile, formatMB, resolveDocUrl } from '../../../utils/docFiles';
 import { API_BASE_URL } from '../../../config/api';
 import { queueOfflineCase, queuedItemFor, dropQueued } from '../../../services/offlineSyncService';
+import TellCustomer from '../TellCustomer';
 import { reconcileDocuments } from '../../../utils/reconciliation';
 import { isStrictlyEmpty } from '../../../utils/canonicalSchema';
 
@@ -108,6 +109,8 @@ export default function CaseCreationModal({
   // form would be saved and later "restored" over the real case details.
   const [draftReady, setDraftReady] = useState(!propEditingCaseId);
   const usableDraft = (d) => d && d.modalStep > 0 && String(d.clientName || '').trim();
+  // Which case a saved draft belongs to (file number), so an old draft never fills a different case
+  const caseStampRef = useRef('');
 
   useEffect(() => {
     setEditingCaseId(propEditingCaseId || null);
@@ -462,7 +465,8 @@ export default function CaseCreationModal({
         clientName, clientFatherName, bankName, bankBranch, bankDistrict,
         propertyDetails, locationData, modalStep,
         uploadedDocs, // already contains data URLs — no conversion needed
-        siteImages
+        siteImages,
+        forCase: caseStampRef.current,
       };
       localforage.setItem(draftKey, draft).catch(err => console.error('Auto-save failed', err));
     }
@@ -537,10 +541,15 @@ export default function CaseCreationModal({
           setSiteImages(fullCase.sitePhotos.map((url, idx) => ({ id: `site_${idx}`, url, name: `Site Image ${idx + 1}` })));
         }
         // Work saved on this phone for this case (e.g. app closed mid-way) wins over the server copy
+        caseStampRef.current = fullCase.fileNumber || String(fullCase.createdAt || '');
         return localforage.getItem(draftKey).then((draft) => {
-          if (usableDraft(draft)) {
+          const sameCase = draft && (draft.forCase ? draft.forCase === caseStampRef.current
+            : String(draft.clientName || '').trim().toLowerCase() === String(fullCase.clientName || '').trim().toLowerCase());
+          if (draft && !sameCase) localforage.removeItem(draftKey).catch(() => {}); // left over from another case
+          if (sameCase && usableDraft(draft)) {
             handleResumeDraft(draft);
-            toast('📋 Restored your unsaved work on this case.', { id: 'session-restored', duration: 3000, icon: '✅' });
+            const progress = draft.modalStep > 1 || Object.values(draft.uploadedDocs || {}).some(a => (a || []).length) || (draft.siteImages || []).length;
+            if (progress) toast('📋 Restored your unsaved work on this case.', { id: 'session-restored', duration: 3000, icon: '✅' });
           } else {
             setModalStep(1);
           }
@@ -1708,6 +1717,7 @@ export default function CaseCreationModal({
             )}
 
             {/* STEP 1: Case Setup */}
+            {modalStep === 1 && editingCaseId && <div style={{ marginTop: -6, marginBottom: 10 }}><TellCustomer caseId={editingCaseId} /></div>}
             {modalStep === 1 && (
               <Step1CaseSetup
                 propertyTypes={propertyTypes}

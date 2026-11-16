@@ -75,6 +75,7 @@ router.get('/value-map', authenticateToken, async (req, res) => {
 // Land rates of approved valuations near this property (guide for the market rate)
 router.post('/rate-guide', authenticateToken, async (req, res) => {
   try {
+    if (!['ENGINEER', 'ADMIN', 'SUPER_ADMIN'].includes(req.user?.role)) return res.status(403).json({ error: 'Not available for this login.' });
     const { nearbyRates, caseSpot } = require('../services/rateGuide');
     const { caseId, lat, lng, propertyType, village } = req.body || {};
     const c = caseId ? await ValuationCase.findOne({ id: String(caseId) }).lean() : null;
@@ -196,11 +197,7 @@ router.post('/', authenticateToken, canCreateCase, async (req, res) => {
     }
 
     const today = new Date();
-    const prefix = today.getFullYear().toString() + (today.getMonth() + 1).toString().padStart(2, '0');
-
-    const count = await ValuationCase.countDocuments({ id: new RegExp(`^${prefix}`) });
-    const nextSeq = (count + 1).toString().padStart(2, '0');
-    const newId = prefix + nextSeq;
+    const newId = await require('../services/fileNumber').nextCaseId(today);
 
     const config = (await AppConfig.findOne({ key: 'global' })) || {};
     const caseData = { ...req.body, id: newId, branchId: branch.id, fileNumber: await nextFileNumber(branch.code, today) };
@@ -1230,6 +1227,7 @@ router.post('/:id/deliver', authenticateToken, async (req, res) => {
 // Engineer → customer: "I'm on the way, reaching in about N min". Returns the message for WhatsApp / SMS.
 router.post('/:id/on-the-way', authenticateToken, async (req, res) => {
   try {
+    if (!['ENGINEER', 'ADMIN', 'SUPER_ADMIN'].includes(req.user?.role)) return res.status(403).json({ error: 'Not available for this login.' });
     const c = await ValuationCase.findOne({ id: req.params.id }).lean();
     if (!c || !canSeeCase(req.user, c)) return res.status(404).json({ error: 'Case not found.' });
     const { caseSpot, km } = require('../services/rateGuide');
@@ -1276,6 +1274,7 @@ router.get('/:id/suggest-engineers', authenticateToken, async (req, res) => {
 // Checks before submit — what a reviewing admin would send back
 router.post('/:id/pre-check', authenticateToken, async (req, res) => {
   try {
+    if (!['ENGINEER', 'ADMIN', 'SUPER_ADMIN'].includes(req.user?.role)) return res.status(403).json({ error: 'Not available for this login.' });
     const c = await ValuationCase.findOne({ id: req.params.id }).lean();
     if (!c) return res.status(404).json({ error: 'Case not found.' });
     if (!canSeeCase(req.user, c)) return res.status(403).json({ error: 'Not your case.' });

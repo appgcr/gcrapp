@@ -83,12 +83,11 @@ router.post('/requests', onlyBank, async (req, res) => {
     if (open) return res.status(409).json({ error: `This request is already open as ${open.fileNumber}. Track it in "My requests".` });
 
     const today = new Date();
-    const prefix = today.getFullYear().toString() + (today.getMonth() + 1).toString().padStart(2, '0');
-    const count = await ValuationCase.countDocuments({ id: new RegExp(`^${prefix}`) });
+    const newId = await require('../services/fileNumber').nextCaseId(today);
     const typeForReport = propertyType === 'Apartment / Flat' ? 'Apartment' : propertyType === 'Agricultural Land' ? 'Agricultural Land' : propertyType;
 
     const saved = await ValuationCase.create({
-      id: prefix + String(count + 1).padStart(2, '0'),
+      id: newId,
       fileNumber: await nextFileNumber(branch.code, today),
       branchId: branch.id,
       source: 'BANK',

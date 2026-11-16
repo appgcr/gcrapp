@@ -880,7 +880,7 @@ def build_open_site(case, temps):
         'distress': inr(distress), 'distressWords': words(distress),
         'advantage1': rep.get('advantage1') or (f'It is In {landmark}' if rep.get('landmark') else 'Medium demand locality'),
         'declBackground': (f'{considered:.2f} Cents of freehold land belonging to the client. The land bearing At Site '
-                           f'Survey No : {survey}, Door No : {door},  Ward No : {f["wardNo"]}, In {landmark}, '
+                           f'Survey No : {survey}, Door No : {door},  Ward No : {f["wardNo"]}, ' + (f'In {landmark}, ' if rep.get('landmark') else '') +
                            f'{village} Village Field At {local_body}'),
         'declPurpose': f'For collateral security.  The Manager, A.P.G.B, {case.get("bankBranch") or "---"}, {f["district"]}. (Dt).',
     })
@@ -925,7 +925,7 @@ def build_agriculture(case, temps):
     local_body = rep.get('localBody') or f'{lb_name} of {f["district"]} (Dt).'
     landmark = rep.get('landmark') or '---'
     village = rep.get('village') or '---'
-    postal = rep.get('postalAddress') or (f'In Site Survey No : {survey}, In {landmark},  {village} Village Field '
+    postal = rep.get('postalAddress') or (f'In Site Survey No : {survey}, ' + (f'In {landmark}, ' if rep.get('landmark') else '') + f' {village} Village Field '
                                           f'At {local_body}')
     f.update({
         'khathaNo': pd.get('khathaNo') or rep.get('khathaNo') or '---', 'village': village, 'landmark': landmark,

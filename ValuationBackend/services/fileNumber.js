@@ -17,4 +17,26 @@ async function nextFileNumber(branchCode, date = new Date()) {
   return `${PREFIX}/${code}/${yyyy}/${mm}/${String(seq).padStart(4, '0')}`;
 }
 
-module.exports = { nextFileNumber };
+/**
+ * Case id YYYYMM + running number (2026111 → 20261121…). Taken from a counter so a number is
+ * never handed out twice — not even after a case is deleted (a phone may still hold a draft for it).
+ */
+async function nextCaseId(date = new Date()) {
+  const ValuationCase = require('../models/ValuationCase');
+  const prefix = date.getFullYear().toString() + (date.getMonth() + 1).toString().padStart(2, '0');
+  const key = `caseid:${prefix}`;
+  if (!(await Counter.exists({ key }))) {
+    // First use this month: start above the highest number already used
+    const rows = await ValuationCase.find({ id: new RegExp(`^${prefix}\\d+$`) }).select('id').lean();
+    const max = rows.reduce((m, r) => Math.max(m, Number(r.id.slice(prefix.length)) || 0), 0);
+    await Counter.updateOne({ key }, { $max: { seq: max } }, { upsert: true });
+  }
+  for (let i = 0; i < 5; i++) {
+    const { seq } = await Counter.findOneAndUpdate({ key }, { $inc: { seq: 1 } }, { new: true, upsert: true });
+    const id = prefix + String(seq).padStart(2, '0');
+    if (!(await ValuationCase.exists({ id }))) return id;
+  }
+  throw new Error('Could not get a new case number. Please try again.');
+}
+
+module.exports = { nextFileNumber, nextCaseId };

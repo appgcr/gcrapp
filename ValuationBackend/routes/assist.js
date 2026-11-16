@@ -5,6 +5,8 @@ const { authenticateToken } = require('../middleware/auth');
 const { askJson, aiOn } = require('../services/aiJson');
 
 router.use(authenticateToken);
+// Field tools: engineers and admins only (not bank logins)
+router.use((req, res, next) => (['ENGINEER', 'ADMIN', 'SUPER_ADMIN'].includes(req.user?.role) ? next() : res.status(403).json({ error: 'Not available for this login.' })));
 
 const list = (a) => (Array.isArray(a) ? a.filter((x) => typeof x === 'string' && x.length < 60).slice(0, 30) : []);
 

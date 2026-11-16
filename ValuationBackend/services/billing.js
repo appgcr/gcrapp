@@ -233,7 +233,8 @@ async function cancelInvoice(caseId, { reason = '', by } = {}) {
 }
 
 function csvOf(items) {
-  const q = (v) => { const t = v == null ? '' : String(v); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  // Text starting with = + - @ would run as a formula in Excel: prefix it with '
+  const q = (v) => { let t = v == null ? '' : String(v); if (typeof v === 'string' && /^[=+\-@\t\r]/.test(t)) t = `'${t}`; return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
   const d = (x) => (x ? new Date(x).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }) : '');
   const head = ['Invoice No', 'Invoice Date', 'File No', 'Customer', 'Bank', 'Branch', 'Property', 'Approved', 'Fee', 'CGST', 'SGST', 'Total', 'Received', 'Due', 'Status', 'Paid On', 'Payments'];
   const rows = items.map((i) => {

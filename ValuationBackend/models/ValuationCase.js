@@ -38,6 +38,8 @@ const valuationCaseSchema = new mongoose.Schema({
     village: String, // village / area of the property, from the sale deed schedule
     mandal: String,
     district: String, // from the sale deed schedule
+    wardNo: String, // from the tax receipt / deed — printed in every bank report
+    fathersName: String, // owner's S/o / W/o as read from the deed
     deedNo: String,
     deedYear: String,
     netExtent: String,

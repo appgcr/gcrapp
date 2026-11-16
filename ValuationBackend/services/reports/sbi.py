@@ -58,7 +58,7 @@ def build_apartment(case, temps, bank=None):
     fmv, _, _ = bob.final_values(f, case, rep, 'apartment', total, step=1000, bank=BANK)
     code = {'Ground': 'GF', 'First': 'FF', 'Second': 'SF', 'Third': 'TF'}.get(floor, floor[:1] + 'F')
     loc = (f'Flat No: {flat} ({floor} Floor), In Survey No: {survey}, Door No :- {door}, Ward No : {ward}, '
-           f'in {rep.get("landmark") or "---"},' + (f' Near {near},' if near else '')
+           + (f'in {rep.get("landmark")},' if rep.get("landmark") else '') + (f' Near {near},' if near else '')
            + f' {rep.get("village") or "---"} Village Field  At {lb} of  {dotted(district)} (Dt).')
     partners = [k for k in ('ownerLine1', 'ownerLine2')]
     f.update({
@@ -163,7 +163,8 @@ def build_house(case, temps, bank=None):
         row.update({'sno': str(i), 'label': row['label'].title(), 'plinthNum': f'{area:.2f}', 'height': rep.get('floorHeight') or ' 10’0”',
                     'age': f'{age} Y', 'depPct': row['depPct'].replace('(-', '(-') + ' ', 'depAmount': row['depAmount'].replace('Rs. 000', 'Rs 0.00').replace('Rs. ', 'Rs ')})
     floors = '+'.join(codes) or 'GF'
-    loc = (f'In  Site Survey No’s : {survey}, Door No : {door}, Ward No : {ward}, In {f["landmark"]},'
+    _lm = f["landmark"] if f.get("landmark") and f["landmark"] != '---' else ''
+    loc = (f'In  Site Survey No’s : {survey}, Door No : {door}, Ward No : {ward},' + (f' In {_lm},' if _lm else '')
            + (f' Near {near},' if near else '') + f' {f["village"]} Village Field At {lb} Of  {dotted(district)}. (Dt).')
     i2 = items[1]
     f.update({

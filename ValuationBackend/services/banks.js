@@ -189,6 +189,22 @@ async function bankInfoForReport(caseObj) {
     if (!rate) rate = ({ 'Framed structure': 1800, 'Load bearing': 1400, 'Steel / Precast': 1600 })[pdNow.structureType] || 1800;
     out.valuation = { ...(out.valuation || {}), constructionRate: rate };
   }
+  // Village / mandal read from the sale deed are kept on the property; the bank formats read report.village / mandal.
+  // Area (landmark) falls back to the typed address part that isn't the plot/door, village or town.
+  {
+    const pd0 = out.propertyDetails || {};
+    const rep0 = { ...(pd0.report || {}) };
+    const clean = (v) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+    if (!clean(rep0.village) && clean(pd0.village)) rep0.village = clean(pd0.village);
+    if (!clean(rep0.mandal) && clean(pd0.mandal)) rep0.mandal = clean(pd0.mandal);
+    if (!clean(rep0.landmark)) {
+      const skip = [rep0.village, rep0.mandal, pd0.district, out.bankDistrict].map((x) => clean(x).toLowerCase()).filter(Boolean);
+      const parts = clean(caseObj.address).split(',').map(clean).filter(Boolean);
+      const area = parts.slice(0, -1).find((x) => !/^(d\.?\s*no|door|plot|h\.?\s*no|sy|flat)/i.test(x) && !skip.some((k) => x.toLowerCase().includes(k) || k.includes(x.toLowerCase())));
+      if (area) rep0.landmark = area;
+    }
+    out.propertyDetails = { ...pd0, report: rep0 };
+  }
   // Site sizes are entered once (Step 3 → Boundary Dimensions); the bank formats read them as report.dimDeed* / dimActual*
   const pd = out.propertyDetails || {};
   if (pd.dimensionsDoc || pd.dimensionsActual || pd.guidelineRate) {
