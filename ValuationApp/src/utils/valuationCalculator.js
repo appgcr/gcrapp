@@ -174,7 +174,8 @@ export function calculateValuation(propertyDetails = {}, config = {}) {
       const rep = p.report || {};
       const num = (v) => { const n = Number(String(v == null ? '' : v).replace(/[^\d.]/g, '')); return Number.isFinite(n) && n > 0 ? n : 0; };
       const fromReport = num(rep.landRatePerSqyd) || (num(rep.marketRatePerCent) ? Math.round(num(rep.marketRatePerCent) / 48.4) : 0)
-        || (num(rep.ratePerCent) ? Math.round(num(rep.ratePerCent) / 48.4) : 0);
+        || (num(rep.ratePerCent) ? Math.round(num(rep.ratePerCent) / 48.4) : 0)
+        || (num(rep.ratePerAcre) ? Math.round(num(rep.ratePerAcre) / 4840) : 0);
       let rawLandRate = p.siteValue?.ratePerSqYd || p.landRate || p.marketValueAmount || (fromReport ? String(fromReport) : '') || config.defaultLandRate;
       if (rawLandRate === undefined || rawLandRate === null || String(rawLandRate).trim() === '') {
         if (normCat !== 'Apartment') {

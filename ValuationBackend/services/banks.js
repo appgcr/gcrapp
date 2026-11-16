@@ -174,6 +174,21 @@ async function bankInfoForReport(caseObj) {
   if (!bank) return caseObj;
   const fmt = await reportFormatFor(bank.name);
   const out = { ...caseObj, reportFormat: fmt, bankPolicy: bank.policies || {} };
+  // Building rate per sq.ft: always worked out from the details being reported, never a rate left over
+  // from an earlier save (the engineer's preview and the submitted report must show the same money)
+  {
+    const pdNow = out.propertyDetails || {};
+    let rate = Number(pdNow.constructionRate) || 0;
+    if (!rate) {
+      try {
+        const { calculateValuation } = require('./valuationCalculator');
+        const v = calculateValuation({ ...pdNow, bankName: out.bankName });
+        rate = Number(v && v.constructionRate) || 0;
+      } catch { /* fall back below */ }
+    }
+    if (!rate) rate = ({ 'Framed structure': 1800, 'Load bearing': 1400, 'Steel / Precast': 1600 })[pdNow.structureType] || 1800;
+    out.valuation = { ...(out.valuation || {}), constructionRate: rate };
+  }
   // Site sizes are entered once (Step 3 → Boundary Dimensions); the bank formats read them as report.dimDeed* / dimActual*
   const pd = out.propertyDetails || {};
   if (pd.dimensionsDoc || pd.dimensionsActual || pd.guidelineRate) {

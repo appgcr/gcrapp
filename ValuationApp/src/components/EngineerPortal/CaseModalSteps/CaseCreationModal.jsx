@@ -19,6 +19,7 @@ import { isStrictlyEmpty } from '../../../utils/canonicalSchema';
 
 import Step1CaseSetup from './Step1CaseSetup';
 import Step2LegalDocs from './Step2LegalDocs';
+import { landRateMissing } from './LandRateCard';
 import Step3PropertyDetails from './Step3PropertyDetails';
 import Step3CheckDetails, { missingDocDetails } from './Step3CheckDetails';
 import CaseStepper, { stepIndex } from './CaseStepper';
@@ -1147,6 +1148,7 @@ export default function CaseCreationModal({
       if (!String(p.siteValue?.plinthArea || '').trim()) missing.push('Plinth area value');
       (p.siteValue?.floors || []).forEach(f => { if (!String(f.value || '').trim()) missing.push(`${f.label} area`); });
     }
+    if (landRateMissing(p)) missing.push('Market land rate');
     if (missing.length) {
       toast.error(`Please fill in: ${missing.join(', ')}.`, { duration: 6000 });
       return;

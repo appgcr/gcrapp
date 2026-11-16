@@ -2,6 +2,7 @@ import React from 'react';
 import { Plus, X, ChevronRight } from 'lucide-react';
 import { FLOOR_LABELS, formatCurrency, formatArea, isBuiltProperty, toFieldValue } from './caseModalHelpers';
 import BankReportDetails, { isApgb } from './BankReportDetails';
+import LandRateCard, { landRateField } from './LandRateCard';
 import { useBanks, matchBank } from '../../../utils/banks';
 
 export default function Step3PropertyDetails({
@@ -647,6 +648,10 @@ export default function Step3PropertyDetails({
           </div>
         </div>
       </div>
+      {/* Market land rate: the land value depends on it, so it is asked here, not in the bank details */}
+      {propertyDetails.propertyType && (
+        <LandRateCard propertyDetails={propertyDetails} setPropertyDetails={setPropertyDetails} />
+      )}
       {/* Structural & Site Visit Details */}
       <div style={{ display: 'flex', gap: '12px' }}>
         {built && (
@@ -780,7 +785,7 @@ export default function Step3PropertyDetails({
 
       {/* Details the bank's own report format asks for */}
       {hasOwnFormat && propertyDetails.propertyType && (
-        <BankReportDetails bankName={bankName} propertyDetails={propertyDetails} setPropertyDetails={setPropertyDetails} skip={siteMode ? ['guidelineRatePerSqyd'] : []} />
+        <BankReportDetails bankName={bankName} propertyDetails={propertyDetails} setPropertyDetails={setPropertyDetails} skip={[...(siteMode ? ['guidelineRatePerSqyd'] : []), landRateField(propertyDetails.propertyType).key]} />
       )}
 
       {/* Additions Work / Cost Estimates */}
