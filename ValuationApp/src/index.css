@@ -54,6 +54,7 @@ textarea, input, select, button { font-family: inherit; }
   box-shadow: 0 0 30px rgba(0, 0, 0, 0.1);
   position: relative;
   overflow-x: hidden;
+  overflow-x: clip; /* hides sideways overflow without making #root a second scroll box (blank screens) */
 }
 
 /* App Shell Layout */

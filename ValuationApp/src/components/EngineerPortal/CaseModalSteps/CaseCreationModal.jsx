@@ -1,4 +1,6 @@
 import askConfirm from '../../Shared/askConfirm';
+import { ListMessage } from '../../Shared/AppToaster';
+import { ensureCheckedIn } from '../../../utils/dutyCheck';
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronLeft, X, Loader2, FileText } from 'lucide-react';
 import { Document, Page, pdfjs } from 'react-pdf';
@@ -183,25 +185,7 @@ export default function CaseCreationModal({
 
 
   const handleNewCaseClick = async () => {
-    // Check if clocked in via API
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/attendance?userId=${currentUser?.id || 'ENG-001'}`);
-      const data = await res.json();
-      // On duty = the latest Check-In / Check-Out (location on/off events and updates don't change it)
-      const todayLogs = Array.isArray(data) ? data.filter(log => log.attendanceType === 'Clock-In' || log.attendanceType === 'Clock-Out') : [];
-      const sortedLogs = [...todayLogs].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-      const lastLog = sortedLogs.length > 0 ? sortedLogs[0] : null;
-      const lastAction = lastLog ? lastLog.attendanceType : null;
-      
-      if (lastAction !== 'Clock-In') {
-        toast.error('Please Check In on the Today tab first.', { duration: 4000 });
-        return;
-      }
-    } catch (err) {
-      console.error('Failed to verify attendance status', err);
-      toast.error('Failed to verify attendance status. Please try again.');
-      return;
-    }
+    if (!(await ensureCheckedIn(currentUser?.id))) return;
 
     try {
       const draft = await localforage.getItem(draftKey);
@@ -264,25 +248,7 @@ export default function CaseCreationModal({
   };
 
   const handleResumeAssignedTask = async (c) => {
-    // Check if clocked in via API
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/attendance?userId=${currentUser?.id || 'ENG-001'}`);
-      const data = await res.json();
-      // On duty = the latest Check-In / Check-Out (location on/off events and updates don't change it)
-      const todayLogs = Array.isArray(data) ? data.filter(log => log.attendanceType === 'Clock-In' || log.attendanceType === 'Clock-Out') : [];
-      const sortedLogs = [...todayLogs].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-      const lastLog = sortedLogs.length > 0 ? sortedLogs[0] : null;
-      const lastAction = lastLog ? lastLog.attendanceType : null;
-      
-      if (lastAction !== 'Clock-In') {
-        toast.error('Please Check In on the Today tab first.', { duration: 4000 });
-        return;
-      }
-    } catch (err) {
-      console.error('Failed to verify attendance status', err);
-      toast.error('Failed to verify attendance status. Please try again.');
-      return;
-    }
+    if (!(await ensureCheckedIn(currentUser?.id))) return;
 
     try {
       // Fetch full details of the assigned case
@@ -355,6 +321,7 @@ export default function CaseCreationModal({
   
   // Preview Modal State
   const [previewImage, setPreviewImage] = useState(null);
+  useEffect(() => { if (previewImage) window.dispatchEvent(new Event('gcr_reach_up')); }, [previewImage]);
 
   // Camera State
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -1166,7 +1133,8 @@ export default function CaseCreationModal({
     const built = isBuiltProperty(p.propertyType);
     const ba = p.boundariesActual || {};
     const missing = [];
-    ['north', 'south', 'east', 'west'].forEach(s => { if (!String(ba[s] || '').trim()) missing.push(`Boundary ${s[0].toUpperCase()}${s.slice(1)} (as per visit)`); });
+    const noSides = ['north', 'south', 'east', 'west'].filter(s => !String(ba[s] || '').trim()).map(s => s[0].toUpperCase() + s.slice(1));
+    if (noSides.length) missing.push(noSides.length === 4 ? 'Boundaries (all 4)' : `Boundary ${noSides.join(', ')}`);
     if (!p.propertyType) missing.push('Category type');
     if (!String(p.roadWidth || '').trim()) missing.push('Road width');
     if (!p.plotType) missing.push('Plot type');
@@ -1180,7 +1148,7 @@ export default function CaseCreationModal({
     }
     if (landRateMissing(p)) missing.push('Market land rate');
     if (missing.length) {
-      toast.error(`Please fill in: ${missing.join(', ')}.`, { duration: 6000 });
+      toast.error(<ListMessage title={`Fill ${missing.length === 1 ? 'this' : `these ${missing.length}`} to continue`} items={missing} hint={noSides.length ? "Boundaries: as seen at the site today." : undefined} />, { id: 'step-missing', duration: 7000 });
       return;
     }
     setModalStep(4);
@@ -1584,11 +1552,11 @@ export default function CaseCreationModal({
       {previewImage && (() => {
         const previewInfo = getPageDisplayInfo(previewImage, 0);
         return (
-          <div style={{
+          <div role="dialog" aria-modal="true" aria-label="Document preview" data-no-reach style={{
             position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.92)', zIndex: 9999,
             display: 'flex', flexDirection: 'column', animation: 'fadeIn 0.2s ease-out'
           }}>
-            <div style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'white', backgroundColor: 'rgba(15, 23, 42, 0.9)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+            <div style={{ padding: 'calc(env(safe-area-inset-top, 0px) + 10px) 12px 10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, color: 'white', backgroundColor: 'rgba(15, 23, 42, 0.9)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, maxWidth: '85%' }}>
                 <span style={{
                   backgroundColor: previewInfo.isPdf ? '#ef4444' : '#3b82f6',
@@ -1615,14 +1583,16 @@ export default function CaseCreationModal({
                 </div>
               </div>
               <button 
+                type="button"
                 onClick={() => { setPreviewImage(null); setNumPdfPages(null); }} 
-                style={{ background: 'rgba(255,255,255,0.12)', border: 'none', color: 'white', cursor: 'pointer', padding: '6px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                style={{ flex: '0 0 44px', width: 44, height: 44, background: 'rgba(255,255,255,0.16)', border: 'none', color: 'white', cursor: 'pointer', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'manipulation' }}
                 title="Close"
+                aria-label="Close preview"
               >
-                <X size={20} />
+                <X size={22} strokeWidth={2.6} />
               </button>
             </div>
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', overflow: 'hidden' }}>
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px 12px calc(env(safe-area-inset-bottom, 0px) + 12px)', overflow: 'hidden' }}>
             {isWordFile(previewImage) ? (
               <div style={{ color: 'white', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
                 <FileText size={56} color="#60a5fa" />
@@ -1630,7 +1600,7 @@ export default function CaseCreationModal({
                 <a href={resolveDocUrl(previewImage.url)} target="_blank" rel="noreferrer" style={{ background: '#2563eb', color: 'white', padding: '10px 18px', borderRadius: '10px', fontWeight: 600, textDecoration: 'none' }}>Open / download</a>
               </div>
             ) : previewImage.isPdf ? (
-              <div style={{ width: '100%', height: '100%', overflow: 'auto', backgroundColor: '#222', borderRadius: '8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', padding: '16px 0' }}>
+              <div className="doc-scroll" style={{ width: '100%', height: '100%', minHeight: 0, overflowY: 'auto', overflowX: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', touchAction: 'pan-x pan-y pinch-zoom', backgroundColor: '#222', borderRadius: '8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', padding: '16px 0' }}>
                 <Document 
                   file={resolveDocUrl(previewImage.url)} 
                   onLoadSuccess={({ numPages }) => setNumPdfPages(numPages)}
@@ -1645,7 +1615,9 @@ export default function CaseCreationModal({
                 </Document>
               </div>
             ) : (
-              <img src={resolveDocUrl(previewImage.url)} alt="Preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '8px' }} />
+              <div className="doc-scroll" style={{ width: '100%', height: '100%', minHeight: 0, overflow: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', touchAction: 'pan-x pan-y pinch-zoom', display: 'flex' }}>
+                <img src={resolveDocUrl(previewImage.url)} alt="Preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '8px', margin: 'auto' }} />
+              </div>
             )}
           </div>
         </div>

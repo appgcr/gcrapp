@@ -7,6 +7,7 @@ import IconTile from '../Shared/IconTile';
 import './AttendanceView.css';
 import { API_BASE_URL } from '../../config/api';
 import CaseCreationModal from './CaseModalSteps/CaseCreationModal';
+import { ensureCheckedIn } from '../../utils/dutyCheck';
 
 export default function CaseListView({ onOpenCase, currentUser }) {
   const [casesList, setCasesList] = useState([]);
@@ -59,27 +60,7 @@ export default function CaseListView({ onOpenCase, currentUser }) {
     (c.fileNumber && c.fileNumber.toLowerCase().includes(search.toLowerCase()))
   );
 
-  const checkAttendanceClockIn = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/attendance?userId=${currentUser?.id || 'ENG-001'}`);
-      const data = await res.json();
-      // On duty = the latest Check-In / Check-Out (location on/off events and updates don't change it)
-      const todayLogs = Array.isArray(data) ? data.filter(log => log.attendanceType === 'Clock-In' || log.attendanceType === 'Clock-Out') : [];
-      const sortedLogs = [...todayLogs].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-      const lastLog = sortedLogs.length > 0 ? sortedLogs[0] : null;
-      const lastAction = lastLog ? lastLog.attendanceType : null;
-      
-      if (lastAction !== 'Clock-In') {
-        toast.error('Please Check In on the Today tab first.', { duration: 4000 });
-        return false;
-      }
-      return true;
-    } catch (err) {
-      console.error('Failed to verify attendance status', err);
-      toast.error('Failed to verify attendance status. Please try again.');
-      return false;
-    }
-  };
+  const checkAttendanceClockIn = () => ensureCheckedIn(currentUser?.id);
 
   const handleResumeAssignedTask = async (c) => {
     const isClockedIn = await checkAttendanceClockIn();

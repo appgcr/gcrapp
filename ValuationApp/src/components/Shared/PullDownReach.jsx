@@ -47,6 +47,12 @@ export default function PullDownReach({ scrollSelector, disabled = false, childr
     else setSettled(false);
   };
   const lowerTo = () => Math.round(window.innerHeight * LOWER_RATIO);
+  // While lowered, the browser must not bring fields / items into view under the navy area
+  useEffect(() => {
+    const html = document.documentElement;
+    html.style.scrollPaddingTop = settled ? `${offset + 72}px` : '';
+    return () => { html.style.scrollPaddingTop = ''; };
+  }, [settled, offset]);
   const raise = () => {
     // Back to the transform at the same spot first (no jump), then slide up on the next frames.
     setSettled(false); clearTimeout(settleTimer.current);
@@ -70,6 +76,8 @@ export default function PullDownReach({ scrollSelector, disabled = false, childr
       const t = e.target;
       const y = e.touches[0].clientY, x = e.touches[0].clientX;
       if (phaseRef.current === 'lowered') {
+        // Windows shown on top of the app (report viewer, yes/no sheets, messages) scroll normally
+        if (!rootRef.current?.contains(t)) { drag.current = null; return; }
         // While lowered: a swipe up anywhere, or any gesture, brings the screen back
         drag.current = { y, x, from: offsetRef.current, mode: 'lowered', onPage: !!pageRef.current?.contains(t) };
         return;
@@ -127,7 +135,41 @@ export default function PullDownReach({ scrollSelector, disabled = false, childr
     window.addEventListener('touchcancel', onEnd);
     const onResize = () => { if (phaseRef.current === 'lowered') set(lowerTo(), 'lowered'); };
     window.addEventListener('resize', onResize);
+    // A full-screen view (document preview…) opened: back to full screen so nothing is hidden
+    const onUp = () => { if (phaseRef.current !== 'idle') raise(); };
+    window.addEventListener('gcr_reach_up', onUp);
+    // A window opened while lowered (case form, preview, selfie, menu…): go back to full screen so
+    // its top isn't hidden behind the navy area. Checked only while lowered, once per frame.
+    let raf = 0;
+    let added = [];
+    const isCover = (el) => {
+      if (!(el instanceof HTMLElement)) return false;
+      const cs = getComputedStyle(el);
+      if (cs.position !== 'fixed' || cs.display === 'none' || cs.visibility === 'hidden' || cs.pointerEvents === 'none') return false;
+      const r = el.getBoundingClientRect();
+      return r.height >= window.innerHeight * 0.6 && r.width >= window.innerWidth * 0.8;
+    };
+    const coversScreen = (nodes) => nodes.some((n) => {
+      if (!(n instanceof HTMLElement) || !n.isConnected) return false;
+      if (isCover(n)) return true;
+      // look a few levels down the new block (a dialog is usually near its top)
+      const kids = n.querySelectorAll(':scope > *, :scope > * > *, :scope > * > * > *');
+      for (let k = 0; k < kids.length && k < 60; k++) if (isCover(kids[k])) return true;
+      return false;
+    });
+    const mo = new MutationObserver((records) => {
+      if (phaseRef.current !== 'lowered') return;
+      records.forEach((r) => r.addedNodes.forEach((n) => added.push(n)));
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0; const nodes = added; added = [];
+        if (phaseRef.current === 'lowered' && coversScreen(nodes)) raise();
+      });
+    });
+    if (pageRef.current) mo.observe(pageRef.current, { childList: true, subtree: true });
     return () => {
+      mo.disconnect(); cancelAnimationFrame(raf);
+      window.removeEventListener('gcr_reach_up', onUp);
       window.removeEventListener('touchstart', onStart);
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onEnd);
@@ -169,6 +211,8 @@ export default function PullDownReach({ scrollSelector, disabled = false, childr
            layout (which scrolls inside itself) shrinks to the space left so it scrolls to the end */
         .reach-settled .reach-top { z-index: 2; }
         .reach-settled .reach-page { overflow: visible; }
+        /* While lowered a screen only has to fill the space under the navy area, so short pages don't scroll into it */
+        .reach-settled .reach-page > :not(.admin-portal-wrapper) { min-height: calc(100vh - var(--reach-offset, 0px)) !important; }
         .reach-settled .reach-page > .admin-portal-wrapper { height: calc(100vh - var(--reach-offset, 0px)); }
         /* Headers pinned to the top of the screen (engineer app) come down with the page */
         .reach-settled .reach-page .top-header { top: var(--reach-offset, 0px); }

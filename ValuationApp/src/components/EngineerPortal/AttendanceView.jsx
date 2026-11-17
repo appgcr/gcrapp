@@ -30,6 +30,8 @@ import {
 import { Capacitor } from '@capacitor/core';
 import { NativeBiometric } from '@capgo/capacitor-native-biometric';
 import toast from 'react-hot-toast';
+import askConfirm from '../Shared/askConfirm';
+import { openMicSettings } from '../../utils/micPermission';
 // The face engine is large, so it loads only when a check-in or face set-up is opened
 const BiometricFaceScanner = lazy(() => import('./BiometricFaceScanner'));
 const FaceEnrollmentModal = lazy(() => import('./FaceEnrollmentModal'));
@@ -453,6 +455,33 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
   const targetShiftHours = 8.0;
   const progressPercent = Math.min(100, Math.round((netDayHours / targetShiftHours) * 100));
 
+  // Location is off: ask the phone again where it allows, else explain clearly and offer Settings
+  const askLocationOn = async () => {
+    const native = Capacitor.isNativePlatform();
+    if (native) {
+      try {
+        const { Geolocation } = await import('@capacitor/geolocation');
+        const p = await Geolocation.requestPermissions({ permissions: ['location'] });
+        if (p.location === 'granted' || p.coarseLocation === 'granted') { acquireLocation(true); toast('Location on. Tap Check In again.', { icon: '📍' }); return; }
+      } catch { /* phone location switched off, or no plugin: fall through */ }
+    }
+    const isAndroid = native && Capacitor.getPlatform() === 'android';
+    const isIos = native && Capacitor.getPlatform() === 'ios';
+    const ok = await askConfirm({
+      title: 'Turn on location to check in',
+      message: isAndroid
+        ? 'Gouru Valuations needs your location to check in.\n\n1. Tap Open Settings\n2. Permissions → Location → Allow\n3. Make sure the phone’s Location is on, then come back.'
+        : isIos
+          ? 'Gouru Valuations needs your location to check in.\n\nOpen the iPhone Settings → Gouru Valuations → Location → While Using the App. Also check Settings → Privacy → Location Services is on.'
+          : 'Your browser has blocked location for this site.\n\nClick the lock icon next to the address bar → Location → Allow, then tap Try again.',
+      confirmText: isAndroid ? 'Open Settings' : 'Try again',
+      cancelText: 'Not now',
+    });
+    if (!ok) return;
+    if (isAndroid && await openMicSettings()) return; // opens this app's permission page
+    acquireLocation(true);
+  };
+
   // 8. Open Scanner Gate
   const handleOpenScanner = (type) => {
     if (isBlocked && type === 'Clock-In') {
@@ -460,9 +489,8 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
     }
     // A real, recent GPS position is required to check in or out
     if (!location || !gpsFixAt || Date.now() - gpsFixAt > 2 * 60 * 1000) {
-      toast.error(locError === 'denied'
-        ? 'Location is off. Turn it on (Settings → App Permissions) to check in or out.'
-        : 'Getting your location… try again in a moment.');
+      if (locError === 'denied') { askLocationOn(); return; }
+      toast('Getting your location… tap Check In again in a moment.', { icon: '📍' });
       acquireLocation(true);
       return;
     }

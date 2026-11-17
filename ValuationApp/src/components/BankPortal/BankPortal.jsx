@@ -1,6 +1,7 @@
 import PullDownReach from '../Shared/PullDownReach';
 import React, { useCallback, useEffect, useState } from 'react';
-import toast, { Toaster } from 'react-hot-toast';
+import toast from 'react-hot-toast';
+import AppToaster from '../Shared/AppToaster';
 import { Plus, FileText, LogOut, Download, Loader2, RefreshCw, KeyRound, CheckCircle2, Building2, Receipt } from 'lucide-react';
 import { API_BASE_URL } from '../../config/api';
 import ReportViewer, { fetchReport } from '../Shared/ReportViewer';
@@ -80,7 +81,7 @@ export default function BankPortal({ currentUser, handleLogout }) {
   return (
     <PullDownReach>
     <div className="bp">
-      <Toaster position="top-center" containerStyle={{ top: 'calc(env(safe-area-inset-top, 0px) + 10px)' }} />
+      <AppToaster />
       <header className="bp-top">
         <div className="bp-brand">
           <img src="/gcr_logo.png" alt="" width="34" height="34" />

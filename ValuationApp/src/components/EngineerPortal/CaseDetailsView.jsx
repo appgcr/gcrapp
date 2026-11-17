@@ -7,6 +7,7 @@ import { API_BASE_URL } from '../../config/api';
 import IconTile from '../Shared/IconTile';
 import ReportViewer, { fetchReport } from '../Shared/ReportViewer';
 import CaseCreationModal from './CaseModalSteps/CaseCreationModal';
+import { ensureCheckedIn } from '../../utils/dutyCheck';
 import TellCustomer from './TellCustomer';
 import { queuedItemFor, subscribeSyncStatus, pendingAttendance } from '../../services/offlineSyncService';
 import './AttendanceView.css';
@@ -27,6 +28,7 @@ export default function CaseDetailsView({ caseId }) {
   const [isTracking, setIsTracking] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [previewDoc, setPreviewDoc] = useState(null);
+  useEffect(() => { if (previewDoc) window.dispatchEvent(new Event('gcr_reach_up')); }, [previewDoc]);
   const [showReport, setShowReport] = useState(false);
   const watchIdRef = useRef(null);
 
@@ -132,23 +134,8 @@ export default function CaseDetailsView({ caseId }) {
 
   // Start Valuation / Make Corrections → straight into the case form (after Check In, like the Cases list)
   const startValuation = async () => {
-    try {
-      const me = JSON.parse(localStorage.getItem('sbi_valuation_current_user_v3') || 'null');
-      const res = await fetch(`${API_BASE_URL}/api/attendance?userId=${encodeURIComponent(me?.id || '')}`);
-      const data = await res.json();
-      const waiting = await pendingAttendance().catch(() => []); // check-ins saved with no signal
-      const duty = [...(Array.isArray(data) ? data : []), ...waiting.filter(w => w.userId === me?.id)].filter(l => l.attendanceType === 'Clock-In' || l.attendanceType === 'Clock-Out')
-        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
-      if (duty?.attendanceType !== 'Clock-In') {
-        toast.error('Please Check In on the Today tab first.', { duration: 4000 });
-        return;
-      }
-      setFormOpen(true);
-    } catch {
-      // No signal and no saved attendance: don't stop field work
-      if (typeof navigator !== 'undefined' && navigator.onLine === false) { setFormOpen(true); return; }
-      toast.error('Could not check your attendance. Please try again.');
-    }
+    const me = JSON.parse(localStorage.getItem('sbi_valuation_current_user_v3') || 'null');
+    if (await ensureCheckedIn(me?.id)) setFormOpen(true);
   };
 
   if (loading) {
@@ -581,22 +568,24 @@ export default function CaseDetailsView({ caseId }) {
 
       {/* Preview Modal in CaseDetailsView */}
       {previewDoc && (
-        <div style={{
+        <div role="dialog" aria-modal="true" aria-label="Document preview" data-no-reach style={{
           position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 10000,
-          display: 'flex', flexDirection: 'column', padding: '16px'
+          display: 'flex', flexDirection: 'column', padding: 'calc(env(safe-area-inset-top, 0px) + 10px) 16px calc(env(safe-area-inset-bottom, 0px) + 16px)'
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#fff', marginBottom: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, color: '#fff', marginBottom: '12px' }}>
             <span style={{ fontWeight: '600', fontSize: '14px', maxWidth: '80%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {previewDoc.name}
             </span>
             <button 
+              type="button"
               onClick={() => setPreviewDoc(null)} 
-              style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', cursor: 'pointer', padding: '6px', borderRadius: '6px' }}
+              aria-label="Close preview"
+              style={{ flex: '0 0 44px', width: 44, height: 44, background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', cursor: 'pointer', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'manipulation' }}
             >
-              <X size={20} />
+              <X size={22} strokeWidth={2.6} />
             </button>
           </div>
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', touchAction: 'pan-x pan-y pinch-zoom' }}>
             {isWordFile(previewDoc) ? (
               <div style={{ color: '#fff', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
                 <FileText size={56} color="#60a5fa" />
@@ -604,8 +593,8 @@ export default function CaseDetailsView({ caseId }) {
                 <a href={resolveDocUrl(previewDoc.url)} target="_blank" rel="noreferrer" style={{ background: '#2563eb', color: '#fff', padding: '10px 18px', borderRadius: '10px', fontWeight: 600, textDecoration: 'none' }}>Open / download</a>
               </div>
             ) : previewDoc.isPdf ? (
-              <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <iframe src={resolveDocUrl(previewDoc.url)} title={previewDoc.name} style={{ flex: 1, width: '100%', border: 'none', borderRadius: '8px', background: '#fff' }} />
+              <div style={{ width: '100%', height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <iframe src={resolveDocUrl(previewDoc.url)} title={previewDoc.name} style={{ flex: 1, minHeight: 0, width: '100%', border: 'none', borderRadius: '8px', background: '#fff' }} />
                 <a href={resolveDocUrl(previewDoc.url)} target="_blank" rel="noreferrer" style={{ alignSelf: 'center', background: '#2563eb', color: '#fff', padding: '8px 16px', borderRadius: '10px', fontWeight: 600, textDecoration: 'none', fontSize: '14px' }}>Open / download PDF</a>
               </div>
             ) : (

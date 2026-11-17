@@ -1,4 +1,6 @@
+import { createElement } from 'react';
 import { pdfjs } from 'react-pdf';
+import { ListMessage } from '../Shared/AppToaster';
 import { API_BASE_URL } from '../../config/api';
 import { reconcileDocuments } from '../../utils/reconciliation';
 import { isStrictlyEmpty, createField, createEmptyCanonicalMetadata } from '../../utils/canonicalSchema';
@@ -1733,21 +1735,21 @@ const applyExtractedMeta = (
     });
   }
 
-  // ─ Staggered toast notifications ─────────────────────────────────────────────
+  // ─ One summary card: what was read and filled from this document ─────────────
   if (toastFn) {
-    notifications.forEach((msg, i) => {
-      setTimeout(() => toastFn.success(msg, { icon: '✅', duration: 4500 }), 300 + i * 600);
-    });
-    // Market value toast — safely parse numeric value only
     const rawMv = meta.marketValue;
-    const mvString = rawMv && typeof rawMv === 'object' && 'value' in rawMv
-      ? String(rawMv.value || '')
-      : String(rawMv || '');
+    const mvString = rawMv && typeof rawMv === 'object' && 'value' in rawMv ? String(rawMv.value || '') : String(rawMv || '');
     const mvNum = Number(mvString.replace(/[^0-9.]/g, ''));
-    if (!isNaN(mvNum) && mvNum > 0) {
-      setTimeout(() => {
-        toastFn.success(`Market Value: ₹${mvNum.toLocaleString('en-IN')}`, { icon: '💰', duration: 4500 });
-      }, 300 + notifications.length * 600);
+    const items = notifications.map((m) => m.replace(/\s*(detected\s*&\s*)?auto-filled( from deed)?!?$/i, '').replace(/^(.+?)\s*→\s*/, '$1: ').trim()).filter(Boolean);
+    if (!isNaN(mvNum) && mvNum > 0) items.push(`Market value ₹${mvNum.toLocaleString('en-IN')}`);
+    if (items.length) {
+      const DOC = { saleDeed: 'Sale deed', propertyTax: 'Property tax', buildingPlan: 'Approved plan', marketValue: 'Guideline certificate', layoutPlan: 'Layout plan' };
+      toastFn.success(createElement(ListMessage, {
+        title: `${items.length} detail${items.length === 1 ? '' : 's'} filled${DOC[docId] ? ` from ${DOC[docId]}` : ''}`,
+        items,
+        tone: 'success',
+        hint: 'Please check them on the next steps.',
+      }), { id: `filled-${docId || 'doc'}`, duration: 5000 });
     }
   }
 };
