@@ -799,10 +799,16 @@ FORMATS = {'house': house, 'apartment': apartment, 'open_site': open_site, 'agri
 
 def engineer_initials(doc):
     """The samples' letterheads carry their own engineers' initials ("VIJAY & AR"): make them the case's."""
-    rx = re.compile(r'\b(?:VIJAY|SMN|SYS|TPT|RPR|YSMN|AR) & (?:VIJAY|SMN|SYS|TPT|RPR|YSMN|AR)\b')
-    for p in doc.paragraphs:  # the first page and any second letterhead (invoice page)
-        for m in rx.findall(p.text):
+    tok = r'(?:VIJAY|SMN|SYS|TPT|RPR|YSMN|AR|SATISH)'
+    pair = re.compile(r'\b' + tok + r' & ' + tok + r'\b')
+    alone = re.compile(r'(?:^|[\t ]{2,})(' + tok + r'(?:\s*&\s*' + tok + r')?)\s*$')  # right-aligned at a line end
+    paras = list(doc.paragraphs) + [p for t in doc.tables for r in t.rows for c in r.cells for p in c.paragraphs]
+    for p in paras:  # the first page and any second letterhead (invoice page)
+        for m in pair.findall(p.text):
             replace_span(p, m, T('engineerInitials'))
+        m = alone.search(p.text)
+        if m:
+            replace_span(p, m.group(1), T('engineerInitials'), p.text[:p.text.rfind(m.group(1))].count(m.group(1)) + 1)
 
 
 def main(args):
