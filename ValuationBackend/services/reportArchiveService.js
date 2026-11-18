@@ -189,7 +189,8 @@ async function archiveCaseReport(caseData, version, submitterInfo = {}) {
     try { fs.unlinkSync(tempJsonPath); } catch (_) {}
 
     if (pyResult.status !== 0 || !fs.existsSync(tempDocxPath)) {
-      throw new Error(`Master DOCX generator failed: ${pyResult.stderr ? pyResult.stderr.toString() : 'Unknown error'}`);
+      const noFormat = require('./reportFormatCheck').fromGeneratorError(pyResult.stderr);
+      throw new Error(noFormat || `Master DOCX generator failed: ${pyResult.stderr ? pyResult.stderr.toString() : 'Unknown error'}`);
     }
 
     // 3. Convert DOCX to PDF via LibreOffice

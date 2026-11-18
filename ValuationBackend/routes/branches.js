@@ -80,6 +80,7 @@ router.put('/:id', authenticateToken, requireRole('SUPER_ADMIN'), async (req, re
     if (!branch) return res.status(404).json({ error: 'Branch not found' });
     const set = {};
     ['name', 'address', 'phone'].forEach((k) => { if (req.body?.[k] !== undefined) set[k] = String(req.body[k]).trim(); });
+    if (req.body?.sheetBypass !== undefined) set.sheetBypass = req.body.sheetBypass === true;
     if (req.body?.status !== undefined) {
       if (!['Active', 'Inactive'].includes(req.body.status)) return res.status(400).json({ error: 'status must be Active or Inactive.' });
       set.status = req.body.status;

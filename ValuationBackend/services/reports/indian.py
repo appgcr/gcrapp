@@ -36,7 +36,7 @@ def build_open_site(case, temps, bank=None):
     deed_yd = bob.sqyd_of(rep.get('extentDeedRaw') or pd.get('netExtent'))
     plan_yd = bob.sqyd_of(rep.get('netExtentPlanRaw')) or deed_yd
     yd = min(x for x in (deed_yd, plan_yd) if x) if (deed_yd or plan_yd) else 0     # Sqyds kept as typed (93.78)
-    rate = num(rep.get('landRatePerSqyd')) or num(pd.get('landRate'))
+    rate = num(rep.get('landRatePerSqyd')) or num(pd.get('landRate')) or round(num(rep.get('marketRatePerCent')) / 48.4)
     guide = num(rep.get('guidelineRatePerSqyd')) or num(pd.get('guidelineRate'))
     land = apgb.money(yd * rate)
     fmv, _, _ = bob.final_values(f, case, rep, 'openSite', land, step=1000, bank=BANK)

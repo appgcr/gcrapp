@@ -13,10 +13,13 @@ const BANK_ALLOWED = [
   /^\/api\/users\/[^/]+\/(push-token|notification-prefs|activity)$/,
 ];
 // Notifications: only reading their own list, marking read, and "opened"
+// Upload only (documents attached to their own valuation request)
+const BANK_UPLOAD = [['POST', /^\/api\/files\/?$/]];
 const BANK_NOTIFICATIONS = [['GET', /^\/api\/notifications\/(?!ADMIN$|stats$)[^/]+$/], ['PUT', /^\/api\/notifications\/[^/]+\/read$/], ['POST', /^\/api\/notifications\/opened$/]];
 function bankMayUse(req) {
   const path = (req.originalUrl || '').split('?')[0];
   if (BANK_NOTIFICATIONS.some(([m, rx]) => req.method === m && rx.test(path))) return true;
+  if (BANK_UPLOAD.some(([m, rx]) => req.method === m && rx.test(path))) return true;
   return BANK_ALLOWED.some((rx) => rx.test(path));
 }
 

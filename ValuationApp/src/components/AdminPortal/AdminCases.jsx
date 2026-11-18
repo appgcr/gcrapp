@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import LiveTrackingMap from './LiveTrackingMap';
 import SuggestedEngineer from './SuggestedEngineer';
 import SendToBank from './SendToBank';
+import CaseFiles from './CaseFiles';
 import ReportViewer, { fetchReport } from '../Shared/ReportViewer';
 import { API_BASE_URL } from '../../config/api';
 import { authHeaders, errorFrom } from '../Shared/authHeaders';
@@ -411,6 +412,16 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
               {superAdmin && scope === 'all' && branchById(c.branchId) && <span className="cs-branch">{branchById(c.branchId).code}</span>}
               <span className="cs-file">{c.fileNumber || `#${c.id}`}</span>{c.bankName ? ` · ${c.bankName}` : ' · Bank not set'}{c.bankBranch ? ` · ${c.bankBranch}` : ''}
             </div>
+            {c.aiReview && c.aiReview.status !== 'skipped' && (
+              <div className="cs-ai-tag" title="Checked by Mahe AI before submit — open Files for the call recording and answers">
+                ✦ Mahe AI verified{c.aiReview.status === 'clear' ? '' : ` · ${(c.aiReview.log || []).filter((e) => e.decision === 'change').length} corrected`}
+              </div>
+            )}
+            {c.propertyDetails?.entryMode === 'sheet' && (
+              <div className="cs-sheet-tag" title="Filled from the office data sheet (no 5 documents)">
+                Office sheet{c.propertyDetails?.dealType ? ` · ${c.propertyDetails.dealType}` : ''}
+              </div>
+            )}
           </div>
           <span className="cs-badge" style={{ '--st': stage?.light }}>
             <span className="cs-dot" aria-hidden="true" />{stage?.label}
@@ -424,8 +435,8 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
               <span>{c.requestedBy.name}{c.requestedBy.designation ? `, ${c.requestedBy.designation}` : ''} · {c.requestedBy.bankBranch || c.requestedBy.bankName}{c.requestedBy.phone ? ` · ${c.requestedBy.phone}` : ''}</span>
             </div>
             <div className="cs-bankreq-body">
-              {[c.propertyDetails?.propertyType, c.requestDetails?.loanPurpose, c.requestDetails?.loanAmount && `Loan ₹${c.requestDetails.loanAmount}`].filter(Boolean).join(' · ')}
-              {c.clientPhone ? ` · Customer ${c.clientPhone}` : ''}
+              {[c.propertyDetails?.propertyType, c.requestDetails?.loanPurpose, c.requestDetails?.loanAmount && `Loan ₹${c.requestDetails.loanAmount}`, c.clientPhone && `Customer ${c.clientPhone}`].filter(Boolean).join(' · ')}
+              {(c.documents?.bankDocs || []).length > 0 && <div>📎 {c.documents.bankDocs.length} document{c.documents.bankDocs.length === 1 ? '' : 's'} from the bank — tap Files to open</div>}
               {c.requestDetails?.propertyAddress && <div>📍 {c.requestDetails.propertyAddress}{c.requestDetails.surveyNo ? ` (Sy. ${c.requestDetails.surveyNo})` : ''}{c.requestDetails.extent ? ` · ${c.requestDetails.extent}` : ''}</div>}
               {c.requestDetails?.contactPerson && <div>Site contact: {c.requestDetails.contactPerson}{c.requestDetails.contactPhone ? ` (${c.requestDetails.contactPhone})` : ''}</div>}
               {c.requestDetails?.notes && <div>“{c.requestDetails.notes}”</div>}
@@ -495,6 +506,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
           {(tab === 'REVIEW' || tab === 'DONE') && (
             <button className="cs-btn cs-ghost" onClick={() => setViewing(c)}><FileText size={15} /> View Report</button>
           )}
+          {(tab !== 'NEW' || (c.documents?.bankDocs || []).length > 0) && <CaseFiles c={c} />}
           {tab === 'DONE' && c.status === 'Approved' && <SendToBank c={c} />}
         </div>
 

@@ -32,13 +32,65 @@ BLANK = '---'
 EMPTY = ' '  # a single space means: leave the cell empty
 
 
+def tidy_place(text):
+    """Address / place lines with an unknown part: 'Ward No : 54, In ---, X Village' → 'Ward No : 54, X Village'.
+    A field that is only '---' (not given) is left alone."""
+    t = str(text)
+    t = re.sub(r'\bIn\s+(Near|Opp\.?|Opposite|Beside|Behind)\b', r'\1', t)   # 'In Near water tank' → 'Near water tank'
+    if '---' not in t or t.strip() == BLANK:
+        return t
+    t = re.sub(r'\b(In|Near|Opp\.?|Opposite)\s+-{3,}\s*,?\s*', '', t)
+    t = re.sub(r'---\s+(Mandal|Village|Village Field|Colony|Nagar)\b(\s+of\b)?\s*,?\s*', '', t)
+    t = re.sub(r'(,\s*)---(\s*,)', r'\2', t)
+    t = re.sub(r'(,\s*)---\s+(?=[A-Za-z])', r'\1', t)
+    t = re.sub(r'\s{2,}', ' ', t)
+    t = re.sub(r'\s+,', ',', t)
+    t = re.sub(r',\s*,', ',', t)
+    return t
+
+
+REL_KEY = re.compile(r'(Rel|Relation|RelLine)$')
+
+
+def tidy_place_runs(paragraph):
+    """'In ---,' / ', ---,' / '---, ' before a place name, wherever the line's pieces of text split:
+    the exact characters are removed and every piece keeps its own formatting."""
+    runs = list(paragraph.runs)
+    text = ''.join(r.text for r in runs)
+    pats = [r'(?<![A-Za-z])(?:In|Near|Opp\.?)\s+-{3,}\s*,\s*',  # "In ---, X"   → "X"
+            r',?\s*(?<![A-Za-z])In\s+-{3,}\s*$',                 # "Ward No : 54, In ---" (end of cell)
+            r',\s*-{3,}\s*,?\s*$',                                # "Ward No : 54, ---," (end of cell)
+            r'(?<=,)\s*-{3,}\s*,(?=\s*\S)',                      # ", ---, X"    → ", X"
+            r'(?<=,)\s*-{3,}\s+(?=[A-Z][a-z])',                    # ", --- At X"  → ", At X"
+            r'\bIn\s+-{3,}\s+(?=of\b)',
+            r'(?<![A-Za-z])In\s+(?=(?:Near|Opp\.?|Opposite|Beside|Behind)\b)']   # "In Near water tank" → "Near …"                            # "is In --- of Y.S.R" → "is of Y.S.R"
+    cut = []
+    for p in pats:
+        for m in re.finditer(p, text):
+            cut.append((m.start(), m.end()))
+    if not cut:
+        return
+    drop, space = set(), set()
+    for a, b in cut:
+        drop.update(range(a, b))
+        if a > 0 and text[a - 1].isalnum() and b < len(text) and text[b].isalnum():
+            space.add(a)                                   # "45In ---, Village" → "45 Village"
+    pos = 0
+    for r in runs:
+        t = r.text
+        keep = ''.join((' ' if (pos + k) in space else '') if (pos + k) in drop else ch for k, ch in enumerate(t))
+        pos += len(t)
+        if keep != t:
+            r.text = keep
+
+
 def value_of(fields, key):
     v = fields.get(key)
     if v == EMPTY:            # deliberately blank (e.g. upper-floor column on a single-floor house)
         return ''
     if v is None or (isinstance(v, str) and not v.strip()):
         return BLANK
-    return str(v)
+    return tidy_place(v) if isinstance(v, str) else str(v)
 
 
 def set_run_text(run, text):
@@ -103,6 +155,13 @@ def drop_rows(container, fields):
 
 def fill_text(paragraph, fields):
     keys = TAG.findall(paragraph.text)
+    # An unknown S/o / W/o next to a name is left out ('Sri X.' rather than 'Sri X, ---.')
+    if any(REL_KEY.search(k) for k in keys):
+        fields = dict(fields)
+        for k in keys:
+            v = fields.get(k)
+            if REL_KEY.search(k) and isinstance(v, str) and v.strip(' .,') in ('', '---', '--', '-', BLANK.strip(' .,')):
+                fields[k] = DROP
     dropped = [k for k in keys if fields.get(k) == DROP]
     # The line goes only when nothing on it has a value (e.g. no 2nd owner). A filled name next to
     # an empty relation ("Sri X, {{rel}}.") keeps the name and loses only the empty part.
@@ -120,7 +179,9 @@ def fill_text(paragraph, fields):
         if '{{' not in run.text or '{{img:' in run.text:
             continue
         new = TAG.sub(lambda m: '' if fields.get(m.group(1)) == DROP else value_of(fields, m.group(1)), run.text)
-        set_run_text(run, new)
+        set_run_text(run, tidy_place(new) if '---' in new else new)
+    if '---' in paragraph.text or re.search(r'\bIn\s+(Near|Opp|Opposite|Beside|Behind)\b', paragraph.text):
+        tidy_place_runs(paragraph)
     if dropped:
         tidy_separators(paragraph)
     if 'fileNo' in keys:

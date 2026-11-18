@@ -148,11 +148,34 @@ router.get('/:id/invoice.pdf', async (req, res) => {
   try {
     const c = await visibleCase(req, res); if (!c) return;
     if (!c.billing || !c.billing.invoiceNo) return res.status(404).json({ error: 'No invoice on this case yet.' });
-    const pdf = await billing.invoicePdf(c);
+    const pdf = await billing.invoicePdf(c, { link: billing.payLink(baseUrlOf(req), c) });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="Invoice_${c.billing.invoiceNo.replace(/[^A-Za-z0-9]+/g, '-')}.pdf"`);
     res.send(pdf);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+const baseUrlOf = (req) => `${req.get('x-forwarded-proto') || req.protocol}://${req.get('host')}`;
+
+// Ready-to-send message for the bank or the customer: amount, file no, payment link (WhatsApp / email)
+router.get('/:id/send', async (req, res) => {
+  try {
+    const c = await visibleCase(req, res); if (!c) return;
+    if (!c.billing || !c.billing.invoiceNo || c.billing.status === 'cancelled') return res.status(400).json({ error: 'No invoice to send.' });
+    const to = req.query.to === 'customer' ? 'customer' : 'bank';
+    const { contactFor, emailReady } = require('../services/reportDelivery');
+    const contact = to === 'bank' ? await contactFor(c) : { email: '', phone: c.clientPhone || '' };
+    res.json({ to, email: contact.email || '', phone: contact.phone || '', canEmail: !!(emailReady() && contact.email), ...billing.invoiceMessage(c, { to, link: billing.payLink(baseUrlOf(req), c) }) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Email the invoice now (PDF attached) — when the firm's email is set up
+router.post('/:id/email', async (req, res) => {
+  try {
+    const c = await visibleCase(req, res); if (!c) return;
+    const r = await billing.emailInvoice(c, { to: String(req.body?.email || ''), link: billing.payLink(baseUrlOf(req), c), by: actor(req) });
+    res.json(r);
+  } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
 module.exports = router;

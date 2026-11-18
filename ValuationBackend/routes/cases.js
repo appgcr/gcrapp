@@ -306,9 +306,25 @@ router.put('/:id', authenticateToken, async (req, res) => {
       // Sending it to the admin: all 5 documents must be on the case (they may be added in any order before that)
       if (updateData.status === 'Reviewing' && existingCase.status !== 'Reviewing') {
         const docs = updateData.documents || existingCase.documents || {};
-        const NEED = [['saleDeed', 'Sale Deed'], ['buildingPlan', 'Approved Building Plan / Permit'], ['propertyTax', 'Property Tax receipt'], ['marketValue', 'Market Value / Guideline certificate'], ['layoutPlan', 'Layout / Approval plan']];
-        const missing = NEED.filter(([k]) => !(Array.isArray(docs[k]) && docs[k].length)).map(([, n]) => n);
-        if (missing.length) return res.status(422).json({ error: `Please upload before submitting: ${missing.join(', ')}.` });
+        const pd = updateData.propertyDetails || existingCase.propertyDetails || {};
+        const has = (k) => Array.isArray(docs[k]) && docs[k].length > 0;
+        {
+          const { bankInfoForReport: prep } = require('../services/banks');
+          const merged = { ...existingCase.toObject(), ...updateData, propertyDetails: { ...(existingCase.propertyDetails?.toObject ? existingCase.propertyDetails.toObject() : existingCase.propertyDetails || {}), ...(updateData.propertyDetails || {}) } };
+          const fc = require('../services/reportFormatCheck').checkFormat(await prep(merged));
+          if (!fc.ok) return res.status(422).json({ error: fc.message, code: 'NO_FORMAT' });
+        }
+        if (pd.entryMode === 'sheet') {
+          // Office sheet route: only when the Super Admin has switched it on for this branch
+          const br = await Branch.findOne({ id: existingCase.branchId }).select('sheetBypass').lean();
+          if (!br || !br.sheetBypass) return res.status(403).json({ error: 'Office sheet upload is not switched on for your branch. Please upload the 5 documents instead.' });
+          if (!has('officeSheet')) return res.status(422).json({ error: 'Please upload the filled office data sheet before submitting.' });
+          if (!(updateData.siteSelfie || existingCase.siteSelfie)) return res.status(422).json({ error: 'Please take your selfie at the site before submitting.' });
+        } else {
+          const NEED = [['saleDeed', 'Sale Deed'], ['buildingPlan', 'Approved Building Plan / Permit'], ['propertyTax', 'Property Tax receipt'], ['marketValue', 'Market Value / Guideline certificate'], ['layoutPlan', 'Layout / Approval plan']];
+          const missing = NEED.filter(([k]) => !has(k)).map(([, n]) => n);
+          if (missing.length) return res.status(422).json({ error: `Please upload before submitting: ${missing.join(', ')}.` });
+        }
       }
       // Once submitted, the figures belong to the admin's review: the engineer edits again only if it is returned
       if (!['Pending', 'Returned'].includes(existingCase.status)) {
@@ -788,6 +804,9 @@ router.get('/:id/report', authenticateToken, async (req, res) => {
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
       return res.send(docxBuffer);
     }
+    // No exact bank format: say so — never build a generic report in its place
+    const noFormat = require('../services/reportFormatCheck').fromGeneratorError(pyResult.stderr);
+    if (noFormat) return res.status(422).json({ error: noFormat, code: 'NO_FORMAT' });
     console.warn('Falling back to imperative docx builder:', pyResult.stderr ? pyResult.stderr.toString() : '');
 
     const {
@@ -1194,6 +1213,15 @@ router.get('/:id/shared-report', async (req, res) => {
     if (!checkLink(req.params.id, v, exp, sig)) return res.status(403).send('This report link is not valid or has expired. Please ask Gouru Valuations for a new link.');
     const c = await ValuationCase.findOne({ id: req.params.id }).select('id status version fileNumber').lean();
     if (!c || c.status !== 'Approved' || String(c.version || 1) !== String(v || '')) return res.status(404).send('This report is no longer available. Please ask Gouru Valuations for the latest report.');
+    if (req.query.part === 'docs') {
+      // Same signed link, the documents annexure instead of the report
+      const full = await ValuationCase.findOne({ id: c.id }).select('id fileNumber clientName borrowerName bankName bankBranch assignedEngineerName inspectionDate documents sitePhotos siteSelfie aiReview').lean();
+      const { annexurePdf } = require('../services/annexure');
+      const an = await annexurePdf(full);
+      res.setHeader('Content-Disposition', `attachment; filename="${an.filename}"`);
+      res.setHeader('Content-Type', 'application/pdf');
+      return res.send(an.pdf);
+    }
     const { reportFile } = require('../services/reportDelivery');
     const want = req.query.format === 'pdf' ? 'pdf' : 'docx';
     let a = await reportFile(c, want);
@@ -1207,6 +1235,61 @@ router.get('/:id/shared-report', async (req, res) => {
   }
 });
 
+// POST /api/cases/ai-review { draft } — Mahe AI review call: the questions for the engineer before submitting
+router.post('/ai-review', authenticateToken, async (req, res) => {
+  try {
+    if (!['ENGINEER', 'ADMIN', 'SUPER_ADMIN'].includes(req.user?.role)) return res.status(403).json({ error: 'Not available for this login.' });
+    const draft = req.body?.draft || {};
+    const { bytesOf } = require('../services/annexure');
+    const { buildReview } = require('../services/aiReview');
+    const questions = await buildReview(draft, { user: req.user, readFile: bytesOf });
+    res.json({ questions });
+  } catch (err) {
+    console.warn('ai-review:', err.message);
+    res.json({ questions: [] }); // never block a submit on a review failure
+  }
+});
+
+// POST /api/cases/ai-review/answer { audio, question } — understand the engineer's spoken answer
+router.post('/ai-review/answer', authenticateToken, async (req, res) => {
+  try {
+    const { audio, question } = req.body || {};
+    if (!/^data:audio\/[a-z0-9.+-]+;base64,/i.test(String(audio || ''))) return res.status(400).json({ error: 'No recording received.' });
+    if (String(audio).length > 6 * 1024 * 1024) return res.status(413).json({ error: 'Answer too long. Keep it under a minute.' });
+    const out = await require('../services/aiReview').understandAnswer(audio, question || {});
+    if (!out) return res.status(503).json({ error: 'Mahe AI could not hear that. Please tap an answer instead.' });
+    res.json(out);
+  } catch (err) {
+    res.status(500).json({ error: 'Could not understand the answer. Please tap an answer instead.' });
+  }
+});
+
+// POST /api/cases/format-check { bankName, propertyType } — is this bank's exact format installed?
+router.post('/format-check', authenticateToken, async (req, res) => {
+  try {
+    const { bankInfoForReport: prep } = require('../services/banks');
+    const c = await prep({ bankName: String(req.body?.bankName || ''), propertyDetails: { propertyType: String(req.body?.propertyType || '') } });
+    res.json(require('../services/reportFormatCheck').checkFormat(c));
+  } catch (err) { res.json({ ok: true }); }
+});
+
+// The documents annexure: every uploaded document page and site photo as one PDF (admins, and the case's engineer)
+router.get('/:id/annexure.pdf', authenticateToken, async (req, res) => {
+  try {
+    if (!['ENGINEER', 'ADMIN', 'SUPER_ADMIN'].includes(req.user?.role)) return res.status(403).json({ error: 'Not available for this login.' });
+    const c = await ValuationCase.findOne({ id: req.params.id }).select('id fileNumber clientName borrowerName bankName bankBranch branchId assignedEngineerId assignedEngineerName inspectionDate documents sitePhotos siteSelfie aiReview').lean();
+    if (!c || !canSeeCase(req.user, c)) return res.status(404).json({ error: 'Case not found.' });
+    const { annexurePdf } = require('../services/annexure');
+    const a = await annexurePdf(c, { internal: true }); // Gouru's own copy: includes the Mahe AI call record
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${a.filename}"`);
+    res.setHeader('X-Annexure-Pages', String(a.pages));
+    res.send(a.pdf);
+  } catch (err) {
+    res.status(500).json({ error: 'Could not put the documents together. ' + err.message });
+  }
+});
+
 // Send / resend the approved report to the bank — returns the link, email and WhatsApp number
 router.post('/:id/deliver', authenticateToken, async (req, res) => {
   try {
@@ -1216,7 +1299,7 @@ router.post('/:id/deliver', authenticateToken, async (req, res) => {
     if (c.status !== 'Approved') return res.status(400).json({ error: 'Only approved reports can be sent.' });
     const { deliverReport, messageFor } = require('../services/reportDelivery');
     const baseUrl = `${req.get('x-forwarded-proto') || req.protocol}://${req.get('host')}`;
-    const d = await deliverReport(c.id, { baseUrl, actor: req.user?.name || 'admin', quiet: true });
+    const d = await deliverReport(c.id, { baseUrl, actor: req.user?.name || 'admin', quiet: true, withDocs: req.body?.withDocs !== false });
     if (!d) return res.status(500).json({ error: 'Could not prepare the report link.' });
     res.json({ ...d, message: messageFor(c, d.link) });
   } catch (err) {
@@ -1319,6 +1402,8 @@ router.post('/:id/report-preview', authenticateToken, async (req, res) => {
     const py = spawnSync('python3', [path.join(__dirname, '../services/masterDocxGenerator.py'), jsonPath, docxPath], { timeout: 120000 });
     try { fs.unlinkSync(jsonPath); } catch (_) {}
     if (py.status !== 0 || !fs.existsSync(docxPath)) {
+      const noFormat = require('../services/reportFormatCheck').fromGeneratorError(py.stderr);
+      if (noFormat) return res.status(422).json({ error: noFormat, code: 'NO_FORMAT' });
       console.error('Report preview failed:', py.stderr ? py.stderr.toString().slice(-800) : '');
       return res.status(500).json({ error: 'Could not prepare the report preview.' });
     }

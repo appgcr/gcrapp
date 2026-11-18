@@ -754,6 +754,22 @@ async function documentFromRequest(req, res) {
 // OCR fallback input: a picture/PDF, or the Word text already read
 const ocrFor = async (doc) => (doc.firstUrl ? ocrWithin(doc.firstUrl, doc.isPdf) : { text: doc.text || '' });
 
+// POST /api/extract/office-sheet — the filled GOURU VALUATION – OFFICE sheet → fields to check
+// body: { file: data URL } or { url: '/api/files/<id>?k=<key>' }, plus { name }
+router.post('/office-sheet', async (req, res) => {
+  try {
+    if (!['ENGINEER', 'ADMIN', 'SUPER_ADMIN'].includes(req.user?.role)) return res.status(403).json({ error: 'Not available for this login.' });
+    const { bytesOf } = require('../services/annexure');
+    const got = await bytesOf(req.body?.file || req.body?.url || '');
+    if (!got || !got.bytes.length) return res.status(400).json({ error: 'Please choose the filled office sheet (Word, PDF or photo).' });
+    const { readOfficeSheet } = require('../services/officeSheet');
+    const r = await readOfficeSheet({ bytes: got.bytes, type: got.type || '', name: String(req.body?.name || got.name || '') });
+    res.json(r);
+  } catch (err) {
+    res.status(422).json({ error: err.message || 'The sheet could not be read.' });
+  }
+});
+
 router.post('/validate-doc', async (req, res) => {
   try {
     const { docId = 'saleDeed', clientText = '' } = req.body;

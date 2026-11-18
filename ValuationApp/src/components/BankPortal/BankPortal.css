@@ -74,3 +74,15 @@
   .bp-step-label { font-size: 10px; }
 }
 .bp-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Simple request form: optional documents */
+.bp-opt { font-size: 12px; font-weight: 600; color: #94a3b8; margin-left: 6px; text-transform: none; letter-spacing: 0; }
+.bp-docs { display: flex; flex-direction: column; gap: 8px; }
+.bp-doc-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.bp-form .bp-doc-btns .bp-btn { cursor: pointer; display: inline-flex; flex-direction: row; align-items: center; gap: 7px; flex: 1; min-width: 140px; justify-content: center; }
+.bp-doc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.bp-doc-list li { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; font-size: 14px; }
+.bp-doc-list li span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bp-doc-list li button { border: 0; background: #e2e8f0; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; cursor: pointer; color: #475569; }
+.bp-doc-list li.up { color: #2563eb; }
+.bp-btn.bp-pay { background: #16a34a; color: #fff; border-color: #16a34a; }

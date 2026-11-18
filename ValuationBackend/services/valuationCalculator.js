@@ -123,8 +123,16 @@ function parseExtentToSqYardsScaled(extentInput) {
   if (extentInput === null || extentInput === undefined) {
     throw new Error('Land extent is required.');
   }
-  const s = String(extentInput).trim().toLowerCase().replace(/,/g, '');
+  let s = String(extentInput).trim().toLowerCase().replace(/,/g, '');
   if (!s) throw new Error('Land extent cannot be empty.');
+  // Two units written together ("364.45 Sq.yds (or) 7.530 Cents"): read each number with its own unit
+  // and use one pair (Sq.yds first, then cents, sq.m, sq.ft) — never the first number with another unit
+  const pairs = [...s.matchAll(/(\d+(?:\.\d+)?)\s*(cents?|sq\.?\s*y(?:ar)?ds?|yards?|yds?|sq\.?\s*m(?:ts|trs|eters?|etres?)?\b|sqm\w*|sq\.?\s*f(?:ee)?t|sqft|sft|acres?)/g)];
+  if (pairs.length > 1) {
+    const rank = (u) => (/y/.test(u) ? 0 : /cent/.test(u) ? 1 : /f/.test(u) ? 3 : /acre/.test(u) ? 4 : 2);
+    const best = pairs.sort((a, b) => rank(a[2]) - rank(b[2]))[0];
+    s = `${best[1]} ${best[2]}`;
+  }
   if (s.startsWith('-')) throw new Error(`Land extent cannot be negative: ${extentInput}`);
 
   const match = s.match(/^([0-9]+(?:\.[0-9]+)?)\s*(.*)$/);
@@ -139,7 +147,7 @@ function parseExtentToSqYardsScaled(extentInput) {
   if (unitStr.includes('cent') || unitStr.includes('సెంట్లు') || unitStr.includes('సెంట్')) {
     // 1 Cent = 48.4 Sq. Yards = 484 / 10
     return (rawScaled * 484n + 5n) / 10n;
-  } else if (unitStr.includes('sq.ft') || unitStr.includes('sq ft') || unitStr.includes('sft') || unitStr.includes('చ.అడుగులు')) {
+  } else if (unitStr.includes('sq.ft') || unitStr.includes('sq ft') || unitStr.includes('sqft') || unitStr.includes('sft') || unitStr.includes('sq.feet') || unitStr.includes('చ.అడుగులు')) {
     // 9 Sq. Ft = 1 Sq. Yard
     return (rawScaled + 4n) / 9n;
   } else if (unitStr.includes('ankanam') || unitStr.includes('అంకణము')) {

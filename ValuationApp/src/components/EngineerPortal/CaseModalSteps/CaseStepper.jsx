@@ -14,6 +14,20 @@ export const CASE_STEPS = [
   { id: 'sign', short: 'Sign', hint: 'Review the values, sign and submit.' },
 ];
 
+/** Office sheet route: the filled sheet replaces Docs, Check and Site */
+export const SHEET_STEPS = [
+  { id: 'setup', short: 'Setup', hint: 'Customer, bank and report type.' },
+  { id: 'sheet', short: 'Sheet', hint: 'Upload the filled office sheet and check what Mahe AI read.' },
+  { id: 'photos', short: 'Photos', hint: 'Geo-tagged site photos and your selfie at the site.' },
+  { id: 'sign', short: 'Sign', hint: 'Review the values, sign and submit.' },
+];
+export function sheetStepIndex(modalStep) {
+  if (modalStep <= 1) return 0;
+  if (modalStep === 8) return 1;
+  if (modalStep === 4) return 2;
+  return 3;
+}
+
 /** Internal form position (modalStep 1–7 + Step 3 phase) → stepper index */
 export function stepIndex(modalStep, step3Phase) {
   if (modalStep <= 1) return 0;
@@ -23,13 +37,14 @@ export function stepIndex(modalStep, step3Phase) {
   return 5; // 5–7: extraction / review / sign
 }
 
-export default function CaseStepper({ current, onGo }) {
-  const pct = (current / (CASE_STEPS.length - 1)) * 100;
+export default function CaseStepper({ current, onGo, steps = CASE_STEPS }) {
+  const CASE_STEPS_ = steps;
+  const pct = (current / (CASE_STEPS_.length - 1)) * 100;
   return (
-    <div className="cst" aria-label={`Step ${current + 1} of ${CASE_STEPS.length}`}>
+    <div className="cst" aria-label={`Step ${current + 1} of ${CASE_STEPS_.length}`}>
       <div className="cst-track">
         <div className="cst-line"><span style={{ width: `${pct}%` }} /></div>
-        {CASE_STEPS.map((s, i) => {
+        {CASE_STEPS_.map((s, i) => {
           const state = i < current ? 'done' : i === current ? 'now' : 'next';
           return (
             <button
@@ -47,11 +62,11 @@ export default function CaseStepper({ current, onGo }) {
           );
         })}
       </div>
-      <div className="cst-hint"><b>Step {current + 1} of {CASE_STEPS.length}</b> · {CASE_STEPS[current].hint}</div>
+      <div className="cst-hint"><b>Step {current + 1} of {CASE_STEPS_.length}</b> · {CASE_STEPS_[current].hint}</div>
       <style>{`
         .cst { flex-shrink: 0; margin: -4px 0 14px; }
-        .cst-track { position: relative; display: grid; grid-template-columns: repeat(${CASE_STEPS.length}, 1fr); }
-        .cst-line { position: absolute; top: 13px; left: calc(100% / ${CASE_STEPS.length * 2}); right: calc(100% / ${CASE_STEPS.length * 2}); height: 3px; border-radius: 3px; background: #e2e8f0; }
+        .cst-track { position: relative; display: grid; grid-template-columns: repeat(${CASE_STEPS_.length}, 1fr); }
+        .cst-line { position: absolute; top: 13px; left: calc(100% / ${CASE_STEPS_.length * 2}); right: calc(100% / ${CASE_STEPS_.length * 2}); height: 3px; border-radius: 3px; background: #e2e8f0; }
         .cst-line span { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #16a34a, #2563eb); transition: width .45s cubic-bezier(.2,.9,.25,1); }
         .cst-step { position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; background: none; border: 0; padding: 0; font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
         .cst-step:disabled { cursor: default; }

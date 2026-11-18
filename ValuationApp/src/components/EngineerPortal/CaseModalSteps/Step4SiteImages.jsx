@@ -15,7 +15,12 @@ export default function Step4SiteImages({
   videoRef,
   setPreviewImage,
   handleRunSecurityExtraction,
-  propertyType = ''
+  propertyType = '',
+  needSelfie = false,
+  siteSelfie = null,
+  onTakeSelfie,
+  onRemoveSelfie,
+  selfieCamera = false,
 }) {
   const { labels, missing, busy: labelling } = usePhotoLabels(siteImages, propertyType);
   return (
@@ -133,12 +138,38 @@ export default function Step4SiteImages({
             .phl-dot { color: #94a3b8; font-weight: 400; }
             .phl-tag { position: absolute; top: 3px; left: 3px; right: 22px; background: rgba(37,99,235,.92); color: #fff; font-size: 8.5px; font-weight: 800; padding: 2px 4px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
           `}</style>
+          {needSelfie && (
+            <div className={`sfy ${siteSelfie ? 'ok' : ''}`}>
+              {siteSelfie ? (
+                <>
+                  <button type="button" className="sfy-img" onClick={() => setPreviewImage && setPreviewImage({ url: siteSelfie.url, name: 'Selfie at the site' })}><img src={siteSelfie.url} alt="Your selfie at the site" /></button>
+                  <div className="sfy-t"><b>Selfie at the site ✓</b><small>Stamped with location and time</small></div>
+                  <button type="button" className="sfy-b ghost" onClick={onRemoveSelfie}>Retake</button>
+                </>
+              ) : (
+                <>
+                  <div className="sfy-t"><b>Your selfie at the site</b><small>Required. Stand at the property; the front camera opens.</small></div>
+                  <button type="button" className="sfy-b" onClick={onTakeSelfie}><Camera size={16} /> Take selfie</button>
+                </>
+              )}
+              <style>{`
+                .sfy { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 12px; border: 1.5px dashed #f59e0b; background: #fffbeb; margin-bottom: 14px; }
+                .sfy.ok { border-style: solid; border-color: #bbf7d0; background: #f0fdf4; }
+                .sfy-img { width: 52px; height: 52px; border-radius: 10px; overflow: hidden; border: 0; padding: 0; flex-shrink: 0; cursor: pointer; }
+                .sfy-img img { width: 100%; height: 100%; object-fit: cover; }
+                .sfy-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+                .sfy-t b { font-size: 14.5px; color: #0f172a; } .sfy-t small { font-size: 12px; color: #64748b; }
+                .sfy-b { display: inline-flex; align-items: center; gap: 6px; border: 0; background: #2563eb; color: #fff; border-radius: 10px; padding: 10px 13px; font-weight: 800; font-size: 13.5px; cursor: pointer; font-family: inherit; flex-shrink: 0; }
+                .sfy-b.ghost { background: #fff; color: #334155; border: 1px solid #cbd5e1; }
+              `}</style>
+            </div>
+          )}
           <button 
             type="button"
             className="btn-primary" 
             onClick={handleRunSecurityExtraction} 
-            disabled={siteImages.length === 0} 
-            style={{ opacity: siteImages.length === 0 ? 0.5 : 1, marginTop: 'auto' }}
+            disabled={siteImages.length === 0 || (needSelfie && !siteSelfie)} 
+            style={{ opacity: siteImages.length === 0 || (needSelfie && !siteSelfie) ? 0.5 : 1, marginTop: 'auto' }}
           >
             <ScanLine size={18} /> Continue to Signature & Submit
           </button>
@@ -147,7 +178,7 @@ export default function Step4SiteImages({
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ textAlign: 'center', marginBottom: '8px' }}>
             <span style={{ fontSize: '15px', fontWeight: '600' }}>
-              Capturing Site Image {siteImages.length + 1}
+              {selfieCamera ? 'Your selfie at the site' : `Capturing Site Image ${siteImages.length + 1}`}
             </span>
           </div>
           <div style={{ position: 'relative', width: '100%', height: '320px', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#000' }}>
@@ -155,7 +186,7 @@ export default function Step4SiteImages({
               ref={videoRef} 
               autoPlay 
               playsInline 
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              style={{ width: '100%', height: '100%', objectFit: 'cover', transform: selfieCamera ? 'scaleX(-1)' : undefined }}
             />
             <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
               <div style={{ backgroundColor: 'rgba(0,0,0,0.6)', padding: '6px 14px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '6px' }}>

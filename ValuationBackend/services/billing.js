@@ -1,7 +1,8 @@
 // Fees and invoices for approved valuations.
 //  • Fee = the bank's fee for the property type (Settings → Banks → Fees), editable per case.
 //  • GST is added only when the firm's GSTIN is saved (Fees → Firm details); CGST + SGST halves.
-//  • Invoice numbers run per Indian financial year: GV/2026-27/0001.
+//  • Invoice numbers run per branch and Indian financial year: GV/KDP/26-27/0001 (one unbroken series each).
+//  • Every invoice carries a UPI QR for the exact amount and a signed payment page link.
 
 const ValuationCase = require('../models/ValuationCase');
 const Bank = require('../models/Bank');
@@ -9,6 +10,10 @@ const AppConfig = require('../models/AppConfig');
 const Counter = require('../models/Counter');
 const { findBank, CATEGORY_SLOT } = require('./banks');
 const { istParts } = require('./istTime');
+const crypto = require('crypto');
+const path = require('path');
+const fs = require('fs');
+const Branch = require('../models/Branch');
 
 const round = (n) => Math.round(Number(n) || 0);
 
@@ -62,9 +67,12 @@ async function createInvoice(caseId, { by = 'system' } = {}) {
   const fee = await defaultFee(c);
   const at = new Date();
   const fy = fyOf(at);
-  const { seq } = await Counter.findOneAndUpdate({ key: `invoice:${fy}` }, { $inc: { seq: 1 } }, { new: true, upsert: true, setDefaultsOnInsert: true });
+  // One series per branch and financial year: GV/KDP/26-27/0001
+  const br = c.branchId ? await Branch.findOne({ id: c.branchId }).select('code').lean() : null;
+  const code = (br && br.code) || 'GV';
+  const { seq } = await Counter.findOneAndUpdate({ key: `invoice:${code}:${fy}` }, { $inc: { seq: 1 } }, { new: true, upsert: true, setDefaultsOnInsert: true });
   const billing = {
-    invoiceNo: `${firm.prefix}/${fy}/${String(seq).padStart(4, '0')}`, invoiceDate: at, fy,
+    invoiceNo: `${firm.prefix}/${code}/${fy.slice(2)}/${String(seq).padStart(4, '0')}`, invoiceDate: at, fy, branchCode: code,
     ...money(fee || 0, firm), feeSet: fee != null,
     status: 'unpaid', received: 0, payments: [], createdBy: by,
   };
@@ -147,7 +155,36 @@ function words(n) {
   return parts.join(' ');
 }
 
-async function invoicePdf(c) {
+// ── Paying the invoice ────────────────────────────────────────────────────────────────
+const PAY_DAYS = 120;
+const PAY_SECRET = () => `invoice-pay:${process.env.JWT_SECRET || require('../config/env').config.JWT_SECRET || 'dev_only_super_secure_jwt_secret_2026'}`;
+const paySig = (id, no, exp) => crypto.createHmac('sha256', PAY_SECRET()).update(`${id}:${no}:${exp}`).digest('hex').slice(0, 32);
+/** Signed page where the bank / customer sees the invoice, the UPI QR and the bank details (no login) */
+function payLink(baseUrl, c) {
+  const exp = Math.floor(Date.now() / 1000) + PAY_DAYS * 86400;
+  return `${String(baseUrl || '').replace(/\/$/, '')}/api/pay/${encodeURIComponent(c.id)}?e=${exp}&s=${paySig(c.id, c.billing.invoiceNo, exp)}`;
+}
+function checkPay(c, e, s) {
+  if (!c || !c.billing || !e || !s || Number(e) * 1000 < Date.now()) return false;
+  const want = paySig(c.id, c.billing.invoiceNo, e);
+  return want.length === String(s).length && crypto.timingSafeEqual(Buffer.from(want), Buffer.from(String(s)));
+}
+const dueOf = (b) => Math.max(0, Math.round((b.total || 0) - (b.received || 0)));
+/** upi://pay link for the amount still due (opens GPay / PhonePe / Paytm…) */
+function upiLink(firm, c) {
+  if (!firm.upi || !c.billing) return '';
+  const q = new URLSearchParams({ pa: firm.upi, pn: firm.accountName || firm.name, am: String(dueOf(c.billing)), cu: 'INR',
+    tn: `${c.billing.invoiceNo} ${c.fileNumber || ''}`.trim().slice(0, 60) });
+  return `upi://pay?${q.toString()}`;
+}
+async function upiQrPng(firm, c) {
+  const link = upiLink(firm, c);
+  if (!link) return null;
+  return require('qrcode').toBuffer(link, { width: 420, margin: 1, errorCorrectionLevel: 'M' });
+}
+const LOGO = path.join(__dirname, '..', 'assets', 'gouru_logo.png');
+
+async function invoicePdf(c, { link = '' } = {}) {
   const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
   const firm = await firmDetails();
   const b = c.billing;
@@ -161,22 +198,35 @@ async function invoicePdf(c) {
   const right = (s, xr, yy, o = {}) => { const f = o.f || font; const size = o.size || 10; text(s, xr - f.widthOfTextAtSize(ascii(s), size), yy, o); };
   const line = (yy) => page.drawLine({ start: { x: 40, y: yy }, end: { x: 555, y: yy }, thickness: 0.7, color: rgb(0.8, 0.83, 0.87) });
 
-  text(firm.name, 40, y, { f: bold, size: 18, color: navy });
+  // Logo + firm name
+  let lx = 40;
+  try {
+    const logo = await doc.embedPng(fs.readFileSync(LOGO));
+    page.drawImage(logo, { x: 40, y: y - 26, width: 46, height: 46 });
+    lx = 96;
+  } catch { /* name only */ }
+  text(firm.name, lx, y, { f: bold, size: 18, color: navy });
   right(firm.gstin ? 'TAX INVOICE' : 'INVOICE', 555, y, { f: bold, size: 14, color: navy });
   y -= 16;
-  ascii(firm.address).split('\n').filter(Boolean).slice(0, 3).forEach((l) => { text(l, 40, y, { size: 9, color: grey }); y -= 12; });
+  ascii(firm.address).split('\n').filter(Boolean).slice(0, 3).forEach((l) => { text(l, lx, y, { size: 9, color: grey }); y -= 12; });
   const contact = [firm.phone && `Ph: ${firm.phone}`, firm.email].filter(Boolean).join('  |  ');
-  if (contact) { text(contact, 40, y, { size: 9, color: grey }); y -= 12; }
+  if (contact) { text(contact, lx, y, { size: 9, color: grey }); y -= 12; }
   const ids = [firm.gstin && `GSTIN: ${firm.gstin}`, firm.pan && `PAN: ${firm.pan}`].filter(Boolean).join('   ');
-  if (ids) { text(ids, 40, y, { size: 9, color: grey }); y -= 12; }
-  let ry = 784;
-  right(`No: ${b.invoiceNo}`, 555, ry, { f: bold }); ry -= 14;
-  right(`Date: ${new Date(b.invoiceDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}`, 555, ry);
-  y = Math.min(y, 735) - 8; line(y); y -= 20;
+  if (ids) { text(ids, lx, y, { size: 9, color: grey }); y -= 12; }
+  y = Math.min(y, 760);
+  let ry = 782;
+  right(`Invoice No: ${b.invoiceNo}`, 555, ry, { f: bold }); ry -= 14;
+  right(`Date: ${new Date(b.invoiceDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}`, 555, ry); ry -= 18;
+  // File number in its own box, so bank and customer can match it to the report
+  const fileNo = `File No: ${c.fileNumber || `#${c.id}`}`;
+  const fw = bold.widthOfTextAtSize(ascii(fileNo), 10.5) + 16;
+  page.drawRectangle({ x: 555 - fw, y: ry - 6, width: fw, height: 20, color: rgb(0.93, 0.95, 0.98), borderColor: rgb(0.75, 0.82, 0.93), borderWidth: 0.8 });
+  right(fileNo, 547, ry, { f: bold, size: 10.5, color: navy });
+  y = Math.min(y, ry - 14, 735) - 8; line(y); y -= 20;
 
   text('Bill to', 40, y, { size: 9, color: grey }); text('Valuation', 320, y, { size: 9, color: grey }); y -= 14;
   text(c.bankName || 'Bank', 40, y, { f: bold, size: 11 });
-  text(`File No: ${c.fileNumber || `#${c.id}`}`, 320, y, { size: 10 }); y -= 13;
+  text(`Report: ${c.fileNumber || `#${c.id}`}`, 320, y, { size: 10 }); y -= 13;
   if (c.bankBranch) text(`${c.bankBranch} Branch`, 40, y);
   text(`Customer: ${c.clientName || '-'}`, 320, y); y -= 13;
   if (c.bankDistrict) text(c.bankDistrict, 40, y);
@@ -202,9 +252,21 @@ async function invoicePdf(c) {
   text(`Amount in words: Rupees ${words(b.total)} Only`, 40, y, { size: 9.5 }); y -= 26;
 
   if (firm.accountNo || firm.upi) {
+    const top = y;
     text('Payment details', 40, y, { f: bold }); y -= 14;
     [firm.accountName && `Account name: ${firm.accountName}`, firm.bankName && `Bank: ${firm.bankName}`, firm.accountNo && `Account no: ${firm.accountNo}`,
       firm.ifsc && `IFSC: ${firm.ifsc}`, firm.upi && `UPI: ${firm.upi}`].filter(Boolean).forEach((l) => { text(l, 40, y, { size: 9.5 }); y -= 13; });
+    // UPI QR for the exact amount due
+    if (firm.upi && b.status !== 'cancelled' && dueOf(b) > 0) {
+      try {
+        const qr = await doc.embedPng(await upiQrPng(firm, c));
+        page.drawImage(qr, { x: 440, y: top - 112, width: 108, height: 108 });
+        right('Scan to pay with any UPI app', 555, top - 122, { size: 8.5, color: grey });
+        right(`Rs. ${dueOf(b).toLocaleString('en-IN')}`, 555, top - 134, { f: bold, size: 9.5 });
+        y = Math.min(y, top - 146);
+      } catch { /* details only */ }
+    }
+    if (link) { text('Pay / download online:', 40, y, { size: 9, color: grey }); y -= 12; text(link.length > 95 ? `${link.slice(0, 95)}…` : link, 40, y, { size: 7.5, color: navy }); y -= 12; }
     y -= 8;
   }
   if (firm.terms) { text(firm.terms, 40, y, { size: 9, color: grey }); y -= 14; }
@@ -247,4 +309,42 @@ function csvOf(items) {
   return '\ufeff' + [head, ...rows].map((r) => r.map(q).join(',')).join('\r\n');
 }
 
-module.exports = { cancelInvoice, csvOf, slotFor, firmDetails, money, fyOf, defaultFee, createInvoice, setFee, addPayment, removeLastPayment, statusOf, invoicePdf, words };
+/** The words for WhatsApp / email (bank or customer) */
+function invoiceMessage(c, { to = 'bank', link = '', reminder = 0 } = {}) {
+  const b = c.billing;
+  const due = dueOf(b);
+  const days = Math.floor((Date.now() - new Date(b.invoiceDate).getTime()) / 86400000);
+  const amount = `Rs. ${due.toLocaleString('en-IN')}`;
+  const subject = `${reminder ? 'Reminder: ' : ''}Invoice ${b.invoiceNo} – ${c.fileNumber || ''} – ${amount}`;
+  const lines = to === 'customer' ? [
+    `Dear ${c.clientName || 'Sir/Madam'},`, '',
+    reminder ? `This is a gentle reminder that the valuation fee of ${amount} is pending (${days} days).` : `The valuation of your property is complete. Please pay the valuation fee of ${amount}.`,
+  ] : [
+    'Dear Sir/Madam,', '',
+    reminder ? `Gentle reminder: the valuation fee of ${amount} for the report below is pending (${days} days since the invoice).` : `Please find our invoice for the valuation report below.`,
+  ];
+  lines.push('', `Invoice: ${b.invoiceNo}`, `File No: ${c.fileNumber || '#' + c.id}`, `Customer: ${c.clientName || ''}`,
+    `Bank: ${[c.bankName, c.bankBranch].filter(Boolean).join(', ')}`, `Amount due: ${amount}`, '',
+    `Pay by UPI or see the invoice & bank details here: ${link}`, '', 'Thank you,', 'Gouru Valuations');
+  return { subject, text: lines.join('\n'), amount: due };
+}
+
+/** Email the invoice with the PDF attached (needs the firm's email login). Returns { sent: true, to } */
+async function emailInvoice(c, { to = '', link = '', reminder = 0 } = {}) {
+  const { contactFor, emailReady } = require('./reportDelivery');
+  if (!emailReady()) throw new Error('Email is not set up yet (Settings → email login). Use WhatsApp or share the link.');
+  const email = to || (await contactFor(c)).email;
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error('No email address for this bank branch. Add it in Settings → Banks.');
+  const { config } = require('../config/env');
+  const env = (k) => config[k] ?? process.env[k];
+  const nodemailer = require('nodemailer');
+  const port = Number(env('SMTP_PORT') || 587);
+  const t = nodemailer.createTransport({ host: env('SMTP_HOST'), port, secure: port === 465, auth: { user: env('SMTP_USERNAME'), pass: env('SMTP_PASSWORD') } });
+  const { subject, text } = invoiceMessage(c, { to: 'bank', link, reminder });
+  await t.sendMail({ from: env('EMAIL_FROM'), to: email, subject, text,
+    attachments: [{ filename: `Invoice_${c.billing.invoiceNo.replace(/[^A-Za-z0-9]+/g, '-')}.pdf`, content: await invoicePdf(c, { link }) }] });
+  await ValuationCase.updateOne({ id: c.id }, { $push: { 'billing.sent': { at: new Date(), via: 'email', to: email, reminder } } });
+  return { sent: true, to: email };
+}
+
+module.exports = { invoiceMessage, emailInvoice, payLink, checkPay, upiLink, upiQrPng, dueOf, cancelInvoice, csvOf, slotFor, firmDetails, money, fyOf, defaultFee, createInvoice, setFee, addPayment, removeLastPayment, statusOf, invoicePdf, words };

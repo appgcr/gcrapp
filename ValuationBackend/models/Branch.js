@@ -27,6 +27,9 @@ const branchSchema = new mongoose.Schema({
     office: { type: String, default: '' },
     address: { type: String, default: '' },
   },
+  // Super Admin switch: this branch's engineers may upload the filled office data sheet
+  // (GOURU VALUATION – OFFICE) instead of the 5 documents + check + site steps
+  sheetBypass: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },
 });
 

@@ -9,6 +9,7 @@ Only the sample values are swapped for tags — the letterhead, tables, fonts, b
 spacing and fixed wording stay byte-for-byte the bank's design.
 """
 import os
+import re
 import sys
 import docx
 from docx.oxml.ns import qn
@@ -796,6 +797,14 @@ def agriculture(doc):
 FORMATS = {'house': house, 'apartment': apartment, 'open_site': open_site, 'agriculture': agriculture}
 
 
+def engineer_initials(doc):
+    """The samples' letterheads carry their own engineers' initials ("VIJAY & AR"): make them the case's."""
+    rx = re.compile(r'\b(?:VIJAY|SMN|SYS|TPT|RPR|YSMN|AR) & (?:VIJAY|SMN|SYS|TPT|RPR|YSMN|AR)\b')
+    for p in doc.paragraphs:  # the first page and any second letterhead (invoice page)
+        for m in rx.findall(p.text):
+            replace_span(p, m, T('engineerInitials'))
+
+
 def main(args):
     """python3 make_templates.py [apgb|bob] [format …]   (default: apgb, all formats)"""
     bank = 'apgb'
@@ -811,6 +820,7 @@ def main(args):
         doc = docx.Document(src)
         formats[name](doc)
         mark_signatures(doc)
+        engineer_initials(doc)
         doc.save(out)
         print('built', out)
 

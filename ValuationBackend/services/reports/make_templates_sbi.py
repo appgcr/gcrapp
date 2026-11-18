@@ -7,6 +7,7 @@ fixed wording stay exactly as the bank's file. (Open site and agriculture sample
 files — they are added once the bank's files are re-saved as .docx.)
 """
 from make_templates import (T, span, span_re, whole, cell, mark_images, replace_all_body)
+from docx_tools import find_para, replace_span
 from make_templates_bob import places
 from make_templates_union import location_map
 from make_templates_karnataka import swap_all, signature_before
@@ -115,6 +116,7 @@ def house(doc):
     from make_templates_pnb import drop_rows
     t = doc.tables
     replace_all_body(doc, '2605071', 'fileNo')
+    # the sample's engineer initials and its "personally inspected on" date (same as its report date)
     span(doc, 'District   :', 'Y S R', 'district')
     span(doc, 'Branch :', 'RACPC BRANCH - KADAPA', 'bankBranchUpper')
     whole(doc, 'Smt. M. Sujatha, W/o', T('ownerLine1'))
@@ -226,6 +228,11 @@ def house(doc):
     location_map(doc, 'LOCATION MAP', 'PHOTO’S', close_up=False)
     mark_images(doc, 'PHOTO’S', 'photo', stop_text='GOOGLE MAP')
     mark_images(doc, 'GOOGLE MAP', 'map')
+    # the sample's engineer initials, and its "personally inspected on" date (it matched its report date)
+    p = find_para(doc, 'Punjab National Bank.')
+    p is not None and replace_span(p, 'SMN & AR', T('engineerInitials'))
+    p = find_para(doc, 'personally inspected')
+    p is not None and replace_span(p, T('reportDate'), T('inspectionDate'))
 
 
 FORMATS = {'apartment': apartment, 'house': house}

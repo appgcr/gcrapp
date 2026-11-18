@@ -37,7 +37,7 @@ def kbl_words(n):
     return w.replace('THOUSAND', 'THOUSANDS')
 
 
-def common(f, case, rep, extent_yd):
+def common(f, case, rep, extent_yd, valued_yd=None):
     pd = case.get('propertyDetails') or {}
     district = f['district']
     lb = rep.get('localBodyName') or 'Grama Panchayat'
@@ -77,13 +77,15 @@ def common(f, case, rep, extent_yd):
                                        + f'{district} Dist.')
     yd = extent_yd
     c = yd / SQYD_PER_CENT
+    vy = valued_yd or yd                      # least of deed and plan (net of road widening)
+    vc = vy / SQYD_PER_CENT
     say = num(f['fmv'])
     f.update({
-        'locationLine': loc, 'addressBlock': addr, 'totalSqyd': f'{yd:.2f}',
+        'locationLine': loc, 'addressBlock': addr, 'totalSqyd': f'{vy:.2f}',
         'localBodyLine': f'{rep.get("mandal") or "---"} of {dotted(district)} (Dt).',
-        'extentDeedLine': f'{cents_txt(c)} Cents (or) {yd:g} Sq. Yds.', 'extentPlanLine': f'{cents_txt(c)} Cents (or) {yd:g} Sq. Yds.',
+        'extentDeedLine': f'{cents_txt(c)} Cents (or) {yd:g} Sq. Yds.', 'extentPlanLine': f'{cents_txt(vc)} Cents (or) {vy:g} Sq. Yds.',
         'dimHead': 'Dimension of the Property (' + ', '.join(str(d[0]) for d in deeds) + ')',
-        'netExtentLine': f'Net Extent = {cents_txt(c)} Cents (or) {yd:g} Sq. Yds.',
+        'netExtentLine': f'Net Extent = {cents_txt(vc)} Cents (or) {vy:g} Sq. Yds.',
         'latitude': f.get('latitude', '---'), 'longitude': f.get('longitude', '---'),
         'bankOfficialBranch': rep.get('bankOfficialBranch') or f'Karnataka Bank, {(case.get("bankBranch") or "---").strip()}.',
         'bankOfficial': rep.get('bankOfficial') or f.get('bankOfficial', '---'),
@@ -106,8 +108,10 @@ def build_house(case, temps, bank=None):
     bob.owners(f, case, rep)
     owner_fields(f, case, rep)
     f['ownerLine1'] = f['ownerLine1'].strip()
-    yd = sum(bob.sqyd_of(x) for x in [rep.get('extentDeedRaw') or pd.get('netExtent'), rep.get('extent2Raw'), rep.get('extent3Raw')] if x)
-    rate = num(rep.get('landRatePerSqyd')) or num(pd.get('landRate'))
+    deed_yd = sum(bob.sqyd_of(x) for x in [rep.get('extentDeedRaw') or pd.get('netExtent'), rep.get('extent2Raw'), rep.get('extent3Raw')] if x)
+    plan_yd = bob.sqyd_of(rep.get('netExtentPlanRaw')) if rep.get('netExtentPlanRaw') else 0
+    yd = min(deed_yd, plan_yd) if plan_yd else deed_yd
+    rate = num(rep.get('landRatePerSqyd')) or num(pd.get('landRate')) or round(num(rep.get('marketRatePerCent')) / 48.4)
     guide = num(rep.get('guidelineRatePerSqyd')) or num(pd.get('guidelineRate'))
     land = apgb.money(yd * rate)
     age = int(num(pd.get('buildingAge')))
@@ -140,7 +144,7 @@ def build_house(case, temps, bank=None):
         'totalCalc1': f'Rs {inr(land)}/- + Rs {inr(cost)}/-', 'totalCalc2': f'=Total Rs {inr(total)}/- ',
         'totalCalc3': f'(or) Say Rs {inr(fmv)}/-',
     })
-    common(f, case, rep, yd)
+    common(f, case, rep, deed_yd, yd)
     f['reportTitle'] = f['reportTitle'].replace('{loc}', f['locationLine'])
     images = apgb.geo_and_photos(case, rep, f, temps, 7)
     f['latitude'], f['longitude'] = f.get('latitude', '---'), f.get('longitude', '---')
@@ -160,7 +164,7 @@ def build_open_site(case, temps, bank=None):
     deed_ac = apgb.acres_of(rep.get('extentDeedRaw') or pd.get('netExtent'))
     net_ac = apgb.acres_of(rep.get('netExtentPlanRaw')) or deed_ac
     yd = trunc2(net_ac * 100 * SQYD_PER_CENT)
-    rate = num(rep.get('landRatePerSqyd')) or num(pd.get('landRate'))
+    rate = num(rep.get('landRatePerSqyd')) or num(pd.get('landRate')) or round(num(rep.get('marketRatePerCent')) / 48.4)
     guide = num(rep.get('guidelineRatePerSqyd')) or num(pd.get('guidelineRate'))
     land = apgb.money(yd * rate)
     fmv, _, _ = bob.final_values(f, case, rep, 'openSite', land, step=1000, bank=BANK)

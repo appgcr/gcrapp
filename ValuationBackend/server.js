@@ -52,6 +52,7 @@ app.use(cors({
 }));
 // Case documents of any size: streamed straight into file storage (before the JSON parser on purpose)
 app.use('/api/files', require('./routes/files'));
+app.use('/api/pay', require('./routes/pay')); // signed public invoice page (UPI / bank details)
 app.use(bodyParser.json({ limit: `${config.MAX_UPLOAD_SIZE_MB || 50}mb` }));
 
 app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));

@@ -123,22 +123,41 @@ def rs(n):
 
 
 # ---------------------------------------------------------------- extents
+UNIT_RE = re.compile(r'(\d[\d,]*(?:\.\d+)?)\s*(cents?|cts?|sq\.?\s*y(?:ar)?ds?|sq\.?\s*yards?|sy|yds?|sq\.?\s*m(?:ts|trs|eters?|etres?)?\b|sqm\w*|sq\.?\s*f(?:ee)?t|sft|sq\.?\s*ft|acres?|ac\b)', re.I)
+
+
+def extent_parts(text):
+    """Every 'number unit' pair written in an extent: '364.45 Sq.yds (or) 7.530 Cents' → {'yd': 364.45, 'cent': 7.53}."""
+    out = {}
+    for m in UNIT_RE.finditer(str(text or '')):
+        v = float(m.group(1).replace(',', ''))
+        u = m.group(2).lower().replace(' ', '').replace('.', '')
+        key = ('cent' if u.startswith('c') else 'acre' if u.startswith('ac') else
+               'yd' if ('y' in u or u == 'sy') else 'ft' if ('f' in u) else 'm')
+        out.setdefault(key, v)
+    return out
+
+
 def extent_in_cents(text):
-    """'2.83 Cents' / '266.66 Sq.Yds' / '124.62 Sqmts' / '1200 sqft' -> cents (float)."""
+    """'2.83 Cents' / '266.66 Sq.Yds' / '124.62 Sqmts' / '1200 sqft' / '364.45 Sq.yds (or) 7.530 Cents' -> cents.
+    Each number is read with the unit written right after it (engineers often give two units)."""
     if not text:
         return 0.0
+    parts = extent_parts(text)
+    if 'cent' in parts:
+        return parts['cent']
+    if 'yd' in parts:
+        return parts['yd'] / SQYD_PER_CENT
+    if 'm' in parts:
+        return parts['m'] / SQM_PER_CENT
+    if 'ft' in parts:
+        return parts['ft'] / SQFT_PER_SQM / SQM_PER_CENT
+    if 'acre' in parts:
+        return parts['acre'] * 100
     t = str(text).lower()
     v = num(t)
     if 'cent' in t:
         return v
-    if 'yd' in t or 'yard' in t:
-        return v / SQYD_PER_CENT
-    if 'sqm' in t or 'sq.m' in t or 'sq m' in t or 'metre' in t or 'meter' in t:
-        return v / SQM_PER_CENT
-    if 'ft' in t or 'feet' in t:
-        return v / SQFT_PER_SQM / SQM_PER_CENT
-    if 'acre' in t:
-        return v * 100
     return v  # bare number: treat as cents
 
 
@@ -465,6 +484,9 @@ def build_house(case, temps):
     sig = local_image(case.get('signatureDataUrl'), temps)
     if sig:
         images['signature'] = sig
+
+    # Road type / width, flooring and structure chosen for this case (not the template's sample wording)
+    site_choices(f, pd)
 
     # Anything typed for this format overrides the computed/default value
     # (raw inputs such as dates and extents were already converted above)

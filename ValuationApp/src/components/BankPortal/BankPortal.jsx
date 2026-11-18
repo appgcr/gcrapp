@@ -2,18 +2,15 @@ import PullDownReach from '../Shared/PullDownReach';
 import React, { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import AppToaster from '../Shared/AppToaster';
-import { Plus, FileText, LogOut, Download, Loader2, RefreshCw, KeyRound, CheckCircle2, Building2, Receipt } from 'lucide-react';
+import { Plus, FileText, LogOut, Download, Loader2, RefreshCw, KeyRound, CheckCircle2, Building2, Receipt, Paperclip, Camera, X } from 'lucide-react';
+import { uploadDocumentFile } from '../../utils/docFiles';
 import { API_BASE_URL } from '../../config/api';
 import ReportViewer, { fetchReport } from '../Shared/ReportViewer';
 import './BankPortal.css';
 import { PdfSheet } from '../AdminPortal/AdminFees';
 
 const STEPS = ['Received by Gouru', 'Engineer assigned', 'Site visit done', 'Under Gouru review', 'Report ready'];
-const EMPTY = {
-  clientName: '', clientFatherName: '', clientPhone: '', clientAddress: '', propertyType: '', propertyAddress: '',
-  surveyNo: '', extent: '', loanPurpose: '', loanAmount: '', bankBranch: '', contactPerson: '', contactPhone: '', notes: '', urgency: 'Normal',
-};
-const PURPOSES = ['Housing Loan', 'Mortgage / LAP', 'Construction Loan', 'Plot Purchase Loan', 'Agriculture Loan', 'Business / Commercial Loan', 'Revaluation', 'Other'];
+const EMPTY = { clientName: '', clientPhone: '', notes: '', bankBranch: '', documents: [] };
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
 
 /** Bank employee's portal: send valuation requests to Gouru and follow them until the report is ready. */
@@ -52,16 +49,30 @@ export default function BankPortal({ currentUser, handleLogout }) {
     const m = [];
     if (form.clientName.trim().length < 3) m.push('Customer name');
     if (!/^[6-9]\d{9}$/.test(form.clientPhone)) m.push('Customer mobile (10 digits)');
-    if (!form.propertyType) m.push('Property type');
-    if (form.propertyAddress.trim().length < 10) m.push('Property address');
-    if (!form.loanPurpose) m.push('Purpose');
     return m;
+  };
+
+  // Optional documents: uploaded straight away, sent with the request
+  const [uploading, setUploading] = useState(0);
+  const addFiles = async (files) => {
+    const list = Array.from(files || []);
+    if (!list.length) return;
+    if (form.documents.length + list.length > 20) { toast.error('Up to 20 documents per request.'); return; }
+    setUploading((n) => n + list.length);
+    for (const file of list) {
+      try {
+        if (file.size > 50 * 1024 * 1024) throw new Error(`${file.name} is over 50 MB.`);
+        const url = await uploadDocumentFile(file);
+        setForm((f) => ({ ...f, documents: [...f.documents, { name: file.name, url, size: file.size }] }));
+      } catch (err) { toast.error(err.message); } finally { setUploading((n) => n - 1); }
+    }
   };
 
   const submit = async (e) => {
     e.preventDefault();
     const m = missing();
     if (m.length) { toast.error(`Please fill: ${m.join(', ')}`); return; }
+    if (uploading) { toast('Please wait — documents are still uploading.'); return; }
     setBusy(true);
     try {
       const r = await fetch(`${API_BASE_URL}/api/bank/requests`, {
@@ -137,7 +148,7 @@ export default function BankPortal({ currentUser, handleLogout }) {
                   <div className="bp-card-head">
                     <div>
                       <div className="bp-card-title">{r.clientName}</div>
-                      <div className="bp-card-sub">{r.fileNumber} · {r.propertyType}{r.requestDetails?.loanPurpose ? ` · ${r.requestDetails.loanPurpose}` : ''}</div>
+                      <div className="bp-card-sub">{[r.fileNumber, r.propertyType, r.requestDetails?.loanPurpose].filter(Boolean).join(' · ')}</div>
                     </div>
                     <span className={`bp-pill bp-${r.stage}`}>{r.stageLabel}</span>
                   </div>
@@ -155,6 +166,16 @@ export default function BankPortal({ currentUser, handleLogout }) {
                       {r.invoice && (
                         <button className="bp-btn" onClick={() => setInvoiceFor(r)}><Receipt size={16} /> Invoice {r.invoice.paid ? '· Paid' : `· ₹${Math.round(r.invoice.total - r.invoice.received).toLocaleString('en-IN')} due`}</button>
                       )}
+                      {r.invoice && !r.invoice.paid && (
+                        <button className="bp-btn bp-pay" onClick={async () => {
+                          try {
+                            const res = await fetch(`${API_BASE_URL}/api/bank/requests/${encodeURIComponent(r.id)}/pay-link`);
+                            const j = await res.json();
+                            if (!res.ok) throw new Error(j.error || 'Could not open the payment page.');
+                            window.open(j.url, '_blank', 'noopener');
+                          } catch (err) { toast.error(err.message); }
+                        }}>Pay ₹{Math.round(r.invoice.total - r.invoice.received).toLocaleString('en-IN')}</button>
+                      )}
                       {r.reportReady && (
                         <button className="bp-btn bp-primary" onClick={() => setViewing(r)} data-testid="download-report"><Download size={16} /> View / download report</button>
                       )}
@@ -169,47 +190,42 @@ export default function BankPortal({ currentUser, handleLogout }) {
         {tab === 'new' && (
           <form className="bp-form" onSubmit={submit} noValidate>
             <fieldset>
-              <legend>Customer (borrower)</legend>
-              <label>Name *<input value={form.clientName} onChange={set('clientName')} placeholder="As on the sale deed" /></label>
-              <label>Father / husband name<input value={form.clientFatherName} onChange={set('clientFatherName')} placeholder="e.g. S/o Venkata Rao" /></label>
+              <legend>Customer</legend>
+              <label>Name *<input value={form.clientName} onChange={set('clientName')} placeholder="Customer name" autoComplete="off" /></label>
               <label>Mobile *<input value={form.clientPhone} onChange={set('clientPhone')} inputMode="numeric" placeholder="10 digits" /></label>
-              <label className="bp-wide">Customer address<input value={form.clientAddress} onChange={set('clientAddress')} placeholder="Present address" /></label>
             </fieldset>
 
             <fieldset>
-              <legend>Property</legend>
-              <label>Property type *
-                <select value={form.propertyType} onChange={set('propertyType')}>
-                  <option value="">Choose…</option>
-                  {(me?.propertyTypes || []).map((t) => <option key={t}>{t}</option>)}
-                </select>
-              </label>
-              <label>Survey no.<input value={form.surveyNo} onChange={set('surveyNo')} placeholder="If known" /></label>
-              <label>Extent<input value={form.extent} onChange={set('extent')} placeholder="e.g. 200 Sq.Yds / 4.5 Cents" /></label>
-              <label className="bp-wide">Property address / location *<textarea rows={2} value={form.propertyAddress} onChange={set('propertyAddress')} placeholder="Door no, street, village / ward, mandal, district" /></label>
+              <legend>Documents <small className="bp-opt">optional</small></legend>
+              <div className="bp-wide bp-docs">
+                <input id="bp-files" type="file" multiple hidden accept=".pdf,.doc,.docx,image/*" onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
+                <input id="bp-cam" type="file" hidden accept="image/*" capture="environment" onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
+                <div className="bp-doc-btns">
+                  <label htmlFor="bp-files" className="bp-btn"><Paperclip size={16} /> Choose files</label>
+                  <label htmlFor="bp-cam" className="bp-btn"><Camera size={16} /> Take photo</label>
+                </div>
+                <p className="bp-muted">Sale deed, plan, tax receipt… whatever you have. The Gouru engineer collects the rest at the site.</p>
+                {(form.documents.length > 0 || uploading > 0) && (
+                  <ul className="bp-doc-list">
+                    {form.documents.map((d, i) => (
+                      <li key={d.url}>
+                        <FileText size={16} /><span>{d.name}</span>
+                        <button type="button" aria-label={`Remove ${d.name}`} onClick={() => setForm((f) => ({ ...f, documents: f.documents.filter((_, k) => k !== i) }))}><X size={15} /></button>
+                      </li>
+                    ))}
+                    {uploading > 0 && <li className="up"><Loader2 size={16} className="spin" /><span>Uploading {uploading}…</span></li>}
+                  </ul>
+                )}
+              </div>
             </fieldset>
 
             <fieldset>
-              <legend>Loan & contact</legend>
-              <label>Purpose *
-                <select value={form.loanPurpose} onChange={set('loanPurpose')}>
-                  <option value="">Choose…</option>
-                  {PURPOSES.map((p) => <option key={p}>{p}</option>)}
-                </select>
-              </label>
-              <label>Loan amount (₹)<input value={form.loanAmount} onChange={set('loanAmount')} placeholder="Optional" inputMode="numeric" /></label>
-              <label>Your bank branch<input value={form.bankBranch} onChange={set('bankBranch')} /></label>
-              <label>Site contact person<input value={form.contactPerson} onChange={set('contactPerson')} placeholder="Who will show the property" /></label>
-              <label>Site contact mobile<input value={form.contactPhone} onChange={set('contactPhone')} inputMode="numeric" placeholder="10 digits" /></label>
-              <label>Priority
-                <select value={form.urgency} onChange={set('urgency')}><option>Normal</option><option>Urgent</option></select>
-              </label>
-              <label className="bp-wide">Notes for Gouru<textarea rows={3} value={form.notes} onChange={set('notes')} placeholder="Anything the engineer should know (timings, documents with the customer…)" /></label>
+              <legend>Notes <small className="bp-opt">optional</small></legend>
+              <label className="bp-wide"><textarea rows={3} value={form.notes} onChange={set('notes')} placeholder="Anything Gouru should know (property location, timings, contact person…)" aria-label="Notes" /></label>
             </fieldset>
 
             <div className="bp-form-foot">
-              <p className="bp-muted">The customer’s documents (sale deed, plan, tax receipt…) are collected and checked by the Gouru engineer at the site.</p>
-              <button type="submit" className="bp-btn bp-primary" disabled={busy} data-testid="send-request">
+              <button type="submit" className="bp-btn bp-primary" disabled={busy || uploading > 0} data-testid="send-request">
                 {busy ? <Loader2 size={16} className="spin" /> : <Plus size={16} />} Send to Gouru
               </button>
             </div>

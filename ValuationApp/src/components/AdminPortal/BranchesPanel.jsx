@@ -175,6 +175,7 @@ function BranchSheet({ branch, onClose, onSaved, onAddAdmin, onOpenPerson }) {
   const [form, setForm] = useState({ name: branch.name, address: branch.address || '', phone: branch.phone || '' });
   const [showLetterhead, setShowLetterhead] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [bypass, setBypass] = useState(!!branch.sheetBypass);
   const dirty = form.name !== branch.name || form.address !== (branch.address || '') || form.phone !== (branch.phone || '');
 
   const save = async (patch) => {
@@ -236,6 +237,20 @@ function BranchSheet({ branch, onClose, onSaved, onAddAdmin, onOpenPerson }) {
             </div>
           </div>, document.body)}
 
+        <div className="fs-section">Engineer workflow</div>
+        <div className="fs-group">
+          <label className="fs-row bd-switch">
+            <span className="bd-sw-text">
+              <b>Office sheet upload</b>
+              <small>{bypass
+                ? 'On: engineers may upload the filled office sheet instead of the 5 documents, then take site photos + a selfie and sign.'
+                : 'Off: engineers upload the 5 documents, check them and fill the site details (normal workflow).'}</small>
+            </span>
+            <input type="checkbox" role="switch" aria-label="Office sheet upload" checked={bypass} disabled={busy}
+              onChange={async (e) => { const on = e.target.checked; setBypass(on); await save({ sheetBypass: on }); }} />
+          </label>
+        </div>
+
         <div className="fs-section">Branch Admins</div>
         <div className="fs-group">
           {branch.admins.map((a) => (
@@ -285,6 +300,15 @@ function BranchSheet({ branch, onClose, onSaved, onAddAdmin, onOpenPerson }) {
           .bd-pname small { font-size: 12px; color: #8e8e93; }
           .bd-save { width: 100%; height: 48px; margin-top: 12px; border: none; border-radius: 12px; background: #007aff; color: #fff; font: inherit; font-size: 17px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; }
           .bd-save:disabled { opacity: .5; }
+          .bd-switch { gap: 12px; align-items: center; cursor: pointer; }
+          .fs-row.bd-switch > .bd-sw-text { flex: 1 1 auto; width: auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; padding: 10px 0; }
+          .bd-sw-text b { font-size: 16px; font-weight: 600; color: #000; }
+          .bd-sw-text small { font-size: 12.5px; color: #8e8e93; line-height: 1.35; }
+          .bd-switch input[role=switch] { appearance: none; -webkit-appearance: none; flex: 0 0 51px; width: 51px; height: 31px; border-radius: 31px; background: #e5e5ea; position: relative; cursor: pointer; transition: background .2s; margin: 0; }
+          .bd-switch input[role=switch]::after { content: ''; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,.2); transition: transform .2s; }
+          .bd-switch input[role=switch]:checked { background: #34c759; }
+          .bd-switch input[role=switch]:checked::after { transform: translateX(20px); }
+          body.dark-theme .bd-sw-text b { color: #fff; }
         `}</style>
       </div>
     </div>,

@@ -67,6 +67,9 @@ def house(doc):
         replace_span(p, old, T(tag))
     p = find_para(doc, 'The property was inspected on')
     replace_span(p, 'Manager, Canara Bank, Mochampeta Branch, Kadapa City, Y.S.R (Dt).', 'Manager, Canara Bank, ' + T('bankBranchLine'))
+    p.text and replace_span(p, T('reportDate'), T('inspectionDate'))  # sample's inspection date matched its report date
+    p = find_para(doc, 'LIC HFL')
+    replace_span(p, 'VIJAY & AR', T('engineerInitials'))  # the sample's engineer initials
     whole(doc, 'Mochampeta Branch, Kadapa City, ', 'The request from The Branch Manager, ' + T('bankBranchLine'))
     whole(doc, '          Y.S.R (Dt).', ' ')
 
@@ -149,6 +152,10 @@ def house(doc):
         cell(g, r, 1, f'b1{key}')
         cell(g, r, 2, f'b2{key}')
     cell(g, 19, 1, 'buildingTotalLine')
+    # labels that carry the case's own depreciation % and floors (sample text said "11%" and "(GF+FF)")
+    from docx_tools import replace_span as _rs
+    _rs(g.rows[17].cells[0].paragraphs[0], '11%', T('depRatePct') + '%')
+    _rs(g.rows[19].cells[0].paragraphs[0], 'GF+FF', T('buildingFloorsShort'))
     k = t[7]
     for ci, key in ((0, 'bd.sno'), (1, 'bd.label'), (2, 'bd.plinthSqft'), (3, 'bd.height'), (4, 'bd.ageLine'),
                     (5, 'bd.rateLine'), (6, 'bd.repl'), (8, 'bd.net')):

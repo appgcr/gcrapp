@@ -32,7 +32,8 @@ const FALLBACK_ROAD_TYPES = [
 const FALLBACK_STRUCTURE_TYPES = [
   'Framed structure',
   'Load bearing',
-  'Steel / Precast'
+  'Steel / Precast',
+  'PEB structure'
 ];
 const FALLBACK_FLOORING_TYPES = [
   'Granite',
@@ -40,7 +41,9 @@ const FALLBACK_FLOORING_TYPES = [
   'Vitrified Tiles',
   'Marble',
   'Cement Flooring',
-  'Mosaic'
+  'Mosaic',
+  'Kadapa slab',
+  'Betham cherla'
 ];
 
 const DEFAULT_BANKS = [

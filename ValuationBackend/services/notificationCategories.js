@@ -17,10 +17,12 @@ const CATEGORIES = [
   { key: 'case_created', role: 'SUPER_ADMIN', required: false, label: 'New case requests', description: 'When a new case is created', types: ['case_created'] },
   { key: 'report_delivery', role: 'SUPER_ADMIN', required: false, label: 'Report sent to bank', description: 'When an approved report still has to be sent, or the email failed', types: ['report_delivery'] },
   { key: 'evening_summary', role: 'SUPER_ADMIN', required: false, label: 'Evening summary', description: "Today's work and stuck cases at 7:30 PM", types: ['evening_summary'] },
+  { key: 'invoice_overdue', role: 'SUPER_ADMIN', required: false, label: 'Unpaid invoices', description: 'A daily list of overdue fees to send reminders', types: ['invoice_overdue'] },
   { key: 'overdue', role: 'SUPER_ADMIN', required: false, label: 'Overdue cases', description: 'Cases waiting too long for a valuer or a review', types: ['overdue_unassigned', 'overdue_review'] },
 
   // ---- Everyone ----
   { key: 'report_ready', role: 'BANK', required: true, label: 'Report ready', description: 'When your valuation report is approved', types: ['report_ready'] },
+  { key: 'invoice_due', role: 'BANK', required: true, label: 'Payment reminders', description: 'When a valuation fee is due or overdue', types: ['invoice_due'] },
   { key: 'morning_digest', role: 'ALL', required: false, label: 'Morning summary', description: 'One summary at the start of your day', types: ['morning_digest'] },
   { key: 'announcement', role: 'ALL', required: true, label: 'Announcements', description: 'Messages from the admin to all staff', types: ['announcement'] },
 ];

@@ -8,6 +8,7 @@ import IconTile from '../Shared/IconTile';
 import ReportViewer, { fetchReport } from '../Shared/ReportViewer';
 import CaseCreationModal from './CaseModalSteps/CaseCreationModal';
 import { ensureCheckedIn } from '../../utils/dutyCheck';
+import PdfPages from '../Shared/PdfPages';
 import TellCustomer from './TellCustomer';
 import { queuedItemFor, subscribeSyncStatus, pendingAttendance } from '../../services/offlineSyncService';
 import './AttendanceView.css';
@@ -457,6 +458,17 @@ export default function CaseDetailsView({ caseId }) {
       </div>
 
       <div style={{ marginBottom: '24px' }}>
+        {(documents?.bankDocs || []).length > 0 && (
+          <div style={{ marginBottom: 14, padding: '10px 12px', border: '1px solid #bfdbfe', background: '#eff6ff', borderRadius: 10 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#1e3a8a', marginBottom: 6 }}>Documents from the bank ({documents.bankDocs.length})</div>
+            {documents.bankDocs.map((d, i) => (
+              <button key={i} type="button" onClick={() => setPreviewDoc(d)} style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 8, padding: '8px 10px', marginTop: 4, border: '1px solid #dbeafe', background: '#fff', borderRadius: 8, cursor: 'pointer', textAlign: 'left', fontSize: 13.5 }}>
+                <FileText size={16} color="#2563eb" /><span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span><Eye size={15} color="#64748b" />
+              </button>
+            ))}
+            {caseData.requestDetails?.notes && <div style={{ marginTop: 8, fontSize: 13, color: '#334155' }}>Bank note: “{caseData.requestDetails.notes}”</div>}
+          </div>
+        )}
         <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px' }}>Scanned Documents (5 Required)</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {REQUIRED_DOCS.map(reqDoc => {
@@ -569,7 +581,7 @@ export default function CaseDetailsView({ caseId }) {
       {/* Preview Modal in CaseDetailsView */}
       {previewDoc && (
         <div role="dialog" aria-modal="true" aria-label="Document preview" data-no-reach style={{
-          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 10000,
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.95)', zIndex: 10000,
           display: 'flex', flexDirection: 'column', padding: 'calc(env(safe-area-inset-top, 0px) + 10px) 16px calc(env(safe-area-inset-bottom, 0px) + 16px)'
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, color: '#fff', marginBottom: '12px' }}>
@@ -594,7 +606,7 @@ export default function CaseDetailsView({ caseId }) {
               </div>
             ) : previewDoc.isPdf ? (
               <div style={{ width: '100%', height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <iframe src={resolveDocUrl(previewDoc.url)} title={previewDoc.name} style={{ flex: 1, minHeight: 0, width: '100%', border: 'none', borderRadius: '8px', background: '#fff' }} />
+                <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', touchAction: 'pan-x pan-y pinch-zoom', borderRadius: '8px' }}><PdfPages url={resolveDocUrl(previewDoc.url)} /></div>
                 <a href={resolveDocUrl(previewDoc.url)} target="_blank" rel="noreferrer" style={{ alignSelf: 'center', background: '#2563eb', color: '#fff', padding: '8px 16px', borderRadius: '10px', fontWeight: 600, textDecoration: 'none', fontSize: '14px' }}>Open / download PDF</a>
               </div>
             ) : (

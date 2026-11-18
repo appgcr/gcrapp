@@ -26,7 +26,9 @@ import Step2LegalDocs from './Step2LegalDocs';
 import { landRateMissing } from './LandRateCard';
 import Step3PropertyDetails from './Step3PropertyDetails';
 import Step3CheckDetails, { missingDocDetails } from './Step3CheckDetails';
-import CaseStepper, { stepIndex } from './CaseStepper';
+import CaseStepper, { stepIndex, SHEET_STEPS, sheetStepIndex } from './CaseStepper';
+import OfficeSheetStep, { EMPTY_SHEET, sheetToCase } from './OfficeSheetStep';
+import AiReviewCall from './AiReviewCall';
 import Step4SiteImages from './Step4SiteImages';
 import Step5ExtractedDataReview from './Step5ExtractedDataReview';
 import Step6FinalReviewSignature from './Step6FinalReviewSignature';
@@ -166,6 +168,7 @@ export default function CaseCreationModal({
         setLocationData(draft.locationData || 'Fetching location...');
         setUploadedDocs(draft.uploadedDocs || { saleDeed: [], buildingPlan: [], propertyTax: [], marketValue: [], layoutPlan: [] });
         setSiteImages(draft.siteImages || []);
+        setSiteSelfie(draft.siteSelfie || null);
 
         // Restore duplicate-check hashes
         const allHashes = new Set(
@@ -221,6 +224,7 @@ export default function CaseCreationModal({
     setLocationData(draft.locationData || 'Fetching location...');
     setUploadedDocs(draft.uploadedDocs || { saleDeed: [], buildingPlan: [], propertyTax: [], marketValue: [], layoutPlan: [] });
     setSiteImages(draft.siteImages || []);
+    setSiteSelfie(draft.siteSelfie || null);
     // Restore upload hashes so the duplicate check still works
     const allHashes = new Set(
       Object.values(draft.uploadedDocs || {}).flat().map(p => p.id).filter(Boolean)
@@ -243,6 +247,7 @@ export default function CaseCreationModal({
     setPropertyDetails({ boundariesDoc: { north: '', south: '', east: '', west: '' }, boundariesActual: { north: '', south: '', east: '', west: '' }, buildingAge: '', flooringType: '', structureType: '', roadWidth: '', propertyType: '', roadType: '', plotType: '', deedNo: '', deedYear: '', netExtent: '', surveyNo: '', plotNo: '', khathaNo: '', assessmentNo: '', doorNo: '', approvalPlanNo: '', approvalPlanDate: '', builderName: '', managingPartner: '', flatNo: '', floorNo: '', additionsWork: [], siteValue: { plinthArea: '', floors: [{ id: 'gf', label: 'Ground Floor (GF)', value: '' }] }, vendors: [], aadharNumbers: [], stampPapers: [], witnesses: [], documentPreparedBy: '', correctionDetails: '' });
     setUploadedDocs({ saleDeed: [], buildingPlan: [], propertyTax: [], marketValue: [], layoutPlan: [] });
     setSiteImages([]);
+    setSiteSelfie(null);
     setEditingCaseId(null);
     setModalStep(1);
   };
@@ -275,6 +280,15 @@ export default function CaseCreationModal({
       }));
       setLocationData(fullCase.locationData || 'Fetching location...');
       
+      // Documents already saved on the case (incl. the office sheet) and the site selfie
+      if (fullCase.documents && typeof fullCase.documents === 'object') {
+        const docs = {};
+        Object.entries(fullCase.documents).forEach(([k, pages]) => {
+          if (Array.isArray(pages)) docs[k] = pages.map((pg, i) => ({ ...pg, id: pg.hash || pg.id || `${k}_${i}` }));
+        });
+        setUploadedDocs(prev => ({ ...prev, ...docs }));
+      }
+      setSiteSelfie(fullCase.siteSelfie ? { url: fullCase.siteSelfie } : null);
       // If there are already site photos or docs, load them
       if (fullCase.sitePhotos) {
         setSiteImages(fullCase.sitePhotos.map((url, idx) => ({ id: `site_${idx}`, url, name: `Site Image ${idx + 1}` })));
@@ -287,6 +301,21 @@ export default function CaseCreationModal({
     }
   };
 
+  // Office sheet route (Super Admin switches it on per branch): sheet → photos + selfie → sign
+  const [bypassAllowed, setBypassAllowed] = useState(false);
+  const [siteSelfie, setSiteSelfie] = useState(null); // { url, lat, lng, takenAt }
+  // Mahe AI review call before the case goes to the admin
+  const aiReviewRef = useRef(null);
+  const [reviewQuestions, setReviewQuestions] = useState(null);
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [submitAfterReview, setSubmitAfterReview] = useState(false);
+  useEffect(() => {
+    if (!isOpen && modalStep === 0) return;
+    fetch(`${API_BASE_URL}/api/branches`).then((r) => (r.ok ? r.json() : [])).then((list) => {
+      const mine = Array.isArray(list) ? (list.find((b) => b.id === currentUser?.branchId) || list[0]) : null;
+      setBypassAllowed(!!(mine && mine.sheetBypass));
+    }).catch(() => {});
+  }, [isOpen, modalStep === 0]);
   const [propertyDetails, setPropertyDetails] = useState({
     boundariesDoc: { north: '', south: '', east: '', west: '' },
     boundariesActual: { north: '', south: '', east: '', west: '' },
@@ -433,11 +462,12 @@ export default function CaseCreationModal({
         propertyDetails, locationData, modalStep,
         uploadedDocs, // already contains data URLs — no conversion needed
         siteImages,
+        siteSelfie,
         forCase: caseStampRef.current,
       };
       localforage.setItem(draftKey, draft).catch(err => console.error('Auto-save failed', err));
     }
-  }, [draftReady, clientName, clientFatherName, bankName, bankBranch, bankDistrict, propertyDetails, locationData, uploadedDocs, siteImages, modalStep]);
+  }, [draftReady, clientName, clientFatherName, bankName, bankBranch, bankDistrict, propertyDetails, locationData, uploadedDocs, siteImages, siteSelfie, modalStep]);
 
   const stopCamera = () => {
     if (streamRef.current) {
@@ -467,8 +497,10 @@ export default function CaseCreationModal({
         if (Array.isArray(cfg.propertyTypes) && cfg.propertyTypes.length > 0) setPropertyTypes(cfg.propertyTypes);
         if (Array.isArray(cfg.plotTypes) && cfg.plotTypes.length > 0) setPlotTypes(cfg.plotTypes);
         if (Array.isArray(cfg.roadTypes) && cfg.roadTypes.length > 0) setRoadTypes(cfg.roadTypes);
-        if (Array.isArray(cfg.structureTypes) && cfg.structureTypes.length > 0) setStructureTypes(cfg.structureTypes);
-        if (Array.isArray(cfg.flooringTypes) && cfg.flooringTypes.length > 0) setFlooringTypes(cfg.flooringTypes);
+        // The office sheet's own choices are always offered, whatever list is saved in settings
+        const withSheet = (list, extra) => [...list, ...extra.filter((x) => !list.some((y) => y.toLowerCase() === x.toLowerCase()))];
+        if (Array.isArray(cfg.structureTypes) && cfg.structureTypes.length > 0) setStructureTypes(withSheet(cfg.structureTypes, ['PEB structure']));
+        if (Array.isArray(cfg.flooringTypes) && cfg.flooringTypes.length > 0) setFlooringTypes(withSheet(cfg.flooringTypes, ['Kadapa slab', 'Betham cherla']));
         if (Array.isArray(cfg.districts) && cfg.districts.length > 0) {
           setAvailableDistricts(prev => Array.from(new Set([...prev, ...cfg.districts])));
         }
@@ -582,7 +614,24 @@ export default function CaseCreationModal({
     };
   };
 
-  const handleNextToUpload = () => {
+  // Office sheet route — only while the branch has it switched on
+  const sheetMode = bypassAllowed && propertyDetails.entryMode === 'sheet';
+  const sheet = propertyDetails.sheet || EMPTY_SHEET;
+  const setSheet = (fn) => setPropertyDetails(prev => ({ ...prev, sheet: typeof fn === 'function' ? fn(prev.sheet || EMPTY_SHEET) : fn }));
+  const sheetFile = (uploadedDocs.officeSheet || [])[0] || null;
+  const setSheetFile = (f) => setUploadedDocs(prev => ({ ...prev, officeSheet: f ? [f] : [] }));
+  const setEntryMode = (mode) => setPropertyDetails(prev => ({ ...prev, entryMode: mode }));
+  const finishSheet = (s) => {
+    setPropertyDetails(prev => sheetToCase(s, prev));
+    // The case is in the applicant's name (Purchase) or the owner's (Mortgage)
+    const name = s.dealType === 'Purchase' ? s.applicantName : s.ownerName;
+    if (name && !lockedFields.clientName) setClientName(name);
+    const rel = s.dealType === 'Purchase' ? s.applicantRelation : s.ownerRelation;
+    if (rel && !clientFatherName) setClientFatherName(rel);
+    setModalStep(4);
+  };
+
+  const handleNextToUpload = async () => {
     if (clientName.trim() === '' || bankName.trim() === '') {
       toast.error("Please enter both the client's name and the bank name.");
       return;
@@ -606,7 +655,15 @@ export default function CaseCreationModal({
         return updated;
       });
     }
-    setModalStep(2);
+    // The bank's own report format must exist for this property type (checked before the site visit)
+    if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+      try {
+        const r = await fetch(`${API_BASE_URL}/api/cases/format-check`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bankName: bankName.trim(), propertyType: propertyDetails.propertyType }) });
+        const fc = r.ok ? await r.json() : { ok: true };
+        if (fc && fc.ok === false) { showValidationError(`⚠️ REPORT FORMAT NOT AVAILABLE\n${fc.message}\n\nPlease tell your admin.`); return; }
+      } catch { /* no signal: checked again when the case is submitted */ }
+    }
+    setModalStep(sheetMode ? 8 : 2);
   };
 
   const showValidationError = (msg) => {
@@ -1001,7 +1058,7 @@ export default function CaseCreationModal({
     setIsCameraActive(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' } 
+        video: { facingMode: docId === 'SITE_SELFIE' ? 'user' : 'environment' } 
       });
       streamRef.current = stream;
       if (videoRef.current) {
@@ -1024,6 +1081,22 @@ export default function CaseCreationModal({
       const ctx = canvas.getContext('2d');
       ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
 
+      if (docId === 'SITE_SELFIE') {
+        // Selfie at the property: real GPS fix, stamped like the site photos
+        let pos;
+        try { pos = await currentPosition(); } catch (err) {
+          stopCamera(); setActiveDocUpload(null);
+          showValidationError(`⚠️ LOCATION REQUIRED\n${err.message}`);
+          return;
+        }
+        stopCamera(); setActiveDocUpload(null);
+        const address = await addressFor(pos.lat, pos.lng);
+        drawStamp(canvas, { ...pos, address, caseLabel: [clientName, bankName].filter(Boolean).join(' · '),
+                            engineer: currentUser?.name || currentUser?.username || '' });
+        setSiteSelfie({ url: canvas.toDataURL('image/jpeg', 0.85), lat: pos.lat, lng: pos.lng, takenAt: pos.time.toISOString() });
+        toast.success('Selfie saved with location and time.');
+        return;
+      }
       if (docId === 'SITE_IMAGES') {
         if (siteImages.length >= MAX_SITE_PHOTOS) {
           stopCamera(); setActiveDocUpload(null);
@@ -1250,7 +1323,39 @@ export default function CaseCreationModal({
   };
 
   // All 5 documents must be on the case before it goes to the admin (they may be added in any order)
-  const missingRequiredDocs = REQUIRED_DOCS.filter(d => !(uploadedDocs[d.id]?.length > 0));
+  const missingRequiredDocs = sheetMode
+    ? (sheetFile ? [] : [{ id: 'officeSheet', label: 'Office data sheet' }])
+    : REQUIRED_DOCS.filter(d => !(uploadedDocs[d.id]?.length > 0));
+  // A field corrected during the review call
+  const applyReview = (field, value) => {
+    if (field === 'clientName') { if (!lockedFields.clientName) setClientName(value); return; }
+    if (field === 'clientFatherName') { setClientFatherName(value); return; }
+    if (!field.startsWith('propertyDetails.')) return;
+    const keys = field.split('.').slice(1);
+    setPropertyDetails((prev) => {
+      const next = JSON.parse(JSON.stringify(prev || {}));
+      let o = next;
+      keys.slice(0, -1).forEach((k) => { o[k] = o[k] && typeof o[k] === 'object' ? o[k] : {}; o = o[k]; });
+      o[keys[keys.length - 1]] = value;
+      return next;
+    });
+  };
+  const finishReview = async ({ log, blob, mime, seconds }) => {
+    let recordingDoc = null;
+    if (blob && blob.size > 0) {
+      try {
+        const type = (mime || 'audio/webm').split(';')[0];
+        const ext = /mp4|aac|m4a/.test(type) ? 'm4a' : /ogg/.test(type) ? 'ogg' : 'webm';
+        const f = new File([blob], `Mahe AI review call.${ext}`, { type });
+        const url = await uploadDocumentFile(f);
+        recordingDoc = { name: f.name, url, isAudio: true, mime: type, size: blob.size, extension: ext.toUpperCase(), uploadedAt: new Date().toLocaleString('en-IN') };
+      } catch { toast.error('The call recording could not be uploaded — your answers are saved.'); }
+    }
+    aiReviewRef.current = { status: 'verified', at: new Date().toISOString(), seconds, questions: (reviewQuestions || []).length, log, recording: recordingDoc?.url || '', recordingDoc };
+    setReviewQuestions(null);
+    setSubmitAfterReview(true);   // submit once the corrected fields are in place
+  };
+
   const handleCreateCase = async () => {
     if (missingRequiredDocs.length) {
       showValidationError(`⚠️ DOCUMENTS MISSING\nPlease upload before submitting:\n${missingRequiredDocs.map(d => `• ${d.label.replace(/^\d+\.\s*/, '')}`).join('\n')}`);
@@ -1297,7 +1402,28 @@ export default function CaseCreationModal({
       }
     }
 
+    // Mahe AI review call: anything doubtful is asked to the engineer before the case goes to the admin
+    const offlineNow = typeof navigator !== 'undefined' && navigator.onLine === false;
+    if (!aiReviewRef.current && !offlineNow) {
+      setReviewBusy(true);
+      let qs = [];
+      try {
+        const r = await fetch(`${API_BASE_URL}/api/cases/ai-review`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ draft: { caseId: editingCaseId, clientName, clientFatherName, bankName, propertyDetails, documents: payloadDocs, siteImages: siteImages.length } }) });
+        const j = r.ok ? await r.json() : { questions: [] };
+        qs = Array.isArray(j.questions) ? j.questions : [];
+      } catch { /* review unavailable: submit as usual */ }
+      setReviewBusy(false);
+      if (qs.length) { setReviewQuestions(qs); return; }
+      aiReviewRef.current = { status: 'clear', at: new Date().toISOString(), questions: 0, log: [] };
+    }
+    if (aiReviewRef.current?.recordingDoc) payloadDocs.aiReviewCall = [aiReviewRef.current.recordingDoc];
+    const aiReview = aiReviewRef.current
+      ? (({ recordingDoc, ...rest }) => rest)(aiReviewRef.current)
+      : { status: 'skipped', reason: offlineNow ? 'no signal' : 'not run', at: new Date().toISOString() };
+
     const payload = {
+      aiReview,
       clientName: clientName || 'Unknown Client',
       clientFatherName: clientFatherName,
       bankName: bankName || '',
@@ -1309,6 +1435,7 @@ export default function CaseCreationModal({
       photoHashes: siteImages.map(img => img.hash).filter(Boolean),
       documents: payloadDocs,
       signatureDataUrl: signatureDataUrl || signatureUploadUrl || '',
+      siteSelfie: siteSelfie?.url || '',
       status: editingCaseId ? 'Reviewing' : 'Pending',
       assignedEngineerId: currentUser?.id || 'UNASSIGNED',
       assignedEngineerName: currentUser?.name || currentUser?.username || 'Unknown Engineer'
@@ -1418,8 +1545,11 @@ export default function CaseCreationModal({
     }
   };
 
+  useEffect(() => { if (submitAfterReview) { setSubmitAfterReview(false); handleCreateCase(); } }, [submitAfterReview]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const closeModal = () => {
     stopCamera();
+    aiReviewRef.current = null;
     Object.values(uploadedDocs).flat().forEach(page => {
       if (page.url && page.url.startsWith('blob:')) URL.revokeObjectURL(page.url);
     });
@@ -1444,6 +1574,7 @@ export default function CaseCreationModal({
     });
     setScanningDocs({});
     setActiveDocUpload(null);
+    setSiteSelfie(null);
     setSignatureDataUrl(null);
     setSignatureUploadUrl(null);
     setActiveSignatureTab('draw');
@@ -1513,7 +1644,11 @@ export default function CaseCreationModal({
 
   // Step 4 → final step. Documents were already checked/extracted when uploaded in Step 2.
   const handleRunSecurityExtraction = () => {
-    if (uploadedDocs.saleDeed.length === 0) {
+    if (sheetMode && !siteSelfie) {
+      toast.error('Please take your selfie at the site (Take selfie).');
+      return;
+    }
+    if (!sheetMode && uploadedDocs.saleDeed.length === 0) {
       toast.error("The Sale Deed is required. Please upload it in Step 2.", { duration: 5000 });
       setModalStep(2);
       return;
@@ -1533,6 +1668,21 @@ export default function CaseCreationModal({
 
   return (
     <>
+      {reviewBusy && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 11000, background: 'rgba(11,21,51,.88)', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, textAlign: 'center', padding: 24 }} data-no-reach>
+          <Loader2 size={34} className="spin" />
+          <div style={{ fontSize: 18, fontWeight: 800 }}>Mahe AI is checking your case…</div>
+          <div style={{ fontSize: 14, color: '#c7d2fe', maxWidth: 320 }}>Comparing your entries with the documents and the valuer checks. If anything needs your answer, Mahe AI will call you.</div>
+        </div>
+      )}
+      {reviewQuestions && (
+        <AiReviewCall
+          questions={reviewQuestions}
+          onApply={applyReview}
+          onFinish={finishReview}
+          onCancel={() => { setReviewQuestions(null); toast('Not submitted. Submit again when you are ready for the Mahe AI call.', { icon: '📞' }); }}
+        />
+      )}
       {showDraftPrompt && (
           <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', animation: 'fadeIn 0.2s ease-out' }}>
             <div className="native-card" style={{ width: '100%', maxWidth: '400px' }}>
@@ -1640,7 +1790,7 @@ export default function CaseCreationModal({
             {/* Back button — left side */}
             {modalStep > 1 ? (
               <button
-                onClick={() => { if (modalStep === 3 && step3Phase === 'site') { setStep3Phase('check'); return; } setModalStep(prev => (prev === 7 ? 4 : prev - 1)); }}
+                onClick={() => { if (modalStep === 3 && step3Phase === 'site') { setStep3Phase('check'); return; } setModalStep(prev => (prev === 8 ? 1 : prev === 4 && sheetMode ? 8 : prev === 7 ? 4 : prev - 1)); }}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
                   display: 'flex', alignItems: 'center', gap: '2px',
@@ -1661,6 +1811,7 @@ export default function CaseCreationModal({
             <h2 style={{ fontSize: 'clamp(14px, 4vw, 18px)', fontWeight: '700', margin: 0, textAlign: 'center', flex: 1, minWidth: 0, lineHeight: 1.3, color: 'var(--text-primary)' }}>
               {modalStep === 1 && (editingCaseId ? "Case Setup" : "New Case Setup")}
               {modalStep === 2 && "Official Legal Documents"}
+              {modalStep === 8 && "Office Data Sheet"}
               {modalStep === 3 && (step3Phase === 'check' ? "Check Document Details" : "Site Details")}
               {modalStep === 4 && "Site Images"}
               {modalStep === 5 && "Document Extraction"}
@@ -1677,14 +1828,54 @@ export default function CaseCreationModal({
             {/* Step-by-step progress */}
             {modalStep >= 1 && (
               <CaseStepper
-                current={stepIndex(modalStep, step3Phase)}
+                steps={sheetMode ? SHEET_STEPS : undefined}
+                current={sheetMode ? sheetStepIndex(modalStep) : stepIndex(modalStep, step3Phase)}
                 onGo={(i) => {
+                  if (sheetMode) { setModalStep([1, 8, 4][i] || 1); return; }
                   // Only finished steps can be tapped: go back to them
                   if (i <= 1) { setModalStep(i + 1); return; }
                   if (i === 2) { setModalStep(3); setStep3Phase('check'); return; }
                   if (i === 3) { setModalStep(3); setTimeout(() => setStep3Phase('site'), 0); return; }
                   if (i === 4) setModalStep(4);
                 }}
+              />
+            )}
+
+            {/* Office sheet route: offered when the Super Admin has switched it on for this branch */}
+            {modalStep === 1 && bypassAllowed && (
+              <div className="ems">
+                <div className="ems-t">How will you fill this case?</div>
+                <div className="ems-row">
+                  <button type="button" className={!sheetMode ? 'on' : ''} onClick={() => setEntryMode('docs')}>
+                    <b>Upload documents</b><small>5 documents, check, site details</small>
+                  </button>
+                  <button type="button" className={sheetMode ? 'on' : ''} onClick={() => setEntryMode('sheet')}>
+                    <b>Office sheet</b><small>Upload the filled sheet, photos + selfie</small>
+                  </button>
+                </div>
+                <style>{`
+                  .ems { margin: -4px 0 14px; }
+                  .ems-t { font-size: 13px; font-weight: 800; color: #475569; margin-bottom: 7px; }
+                  .ems-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+                  .ems-row button { text-align: left; border: 1.5px solid #cbd5e1; background: #fff; border-radius: 12px; padding: 10px 12px; cursor: pointer; font-family: inherit; display: flex; flex-direction: column; gap: 2px; }
+                  .ems-row button b { font-size: 14.5px; color: #0f172a; }
+                  .ems-row button small { font-size: 12px; color: #64748b; line-height: 1.3; }
+                  .ems-row button.on { border-color: #2563eb; background: #eff6ff; box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+                  .ems-row button.on b { color: #1d4ed8; }
+                  body.dark-theme .ems-row button { background: #1c1c1e; border-color: #3a3a3c; } body.dark-theme .ems-row button b { color: #fff; }
+                `}</style>
+              </div>
+            )}
+
+            {modalStep === 8 && (
+              <OfficeSheetStep
+                sheet={sheet}
+                setSheet={setSheet}
+                sheetFile={sheetFile}
+                setSheetFile={setSheetFile}
+                locked={lockedFields}
+                onNext={finishSheet}
+                onPreview={(f) => setPreviewImage(f)}
               />
             )}
 
@@ -1792,6 +1983,11 @@ export default function CaseCreationModal({
                 setPreviewImage={setPreviewImage}
                 handleRunSecurityExtraction={handleRunSecurityExtraction}
                 propertyType={propertyDetails.propertyType}
+                needSelfie={sheetMode}
+                siteSelfie={siteSelfie}
+                onTakeSelfie={() => startCamera('SITE_SELFIE')}
+                onRemoveSelfie={() => setSiteSelfie(null)}
+                selfieCamera={activeDocUpload === 'SITE_SELFIE'}
               />
             )}
 
@@ -1815,10 +2011,11 @@ export default function CaseCreationModal({
                 preChecks={preChecks}
                 onFixCheck={(step) => {
                   if (step === 'photos') { setModalStep(4); return; }
+                  if (sheetMode) { setModalStep(8); return; }
                   setStep3Phase(step === 'check' ? 'check' : 'site');
                   setModalStep(3);
                 }}
-                onGoToDocs={() => setModalStep(2)}
+                onGoToDocs={() => setModalStep(sheetMode ? 8 : 2)}
                 clientName={clientName}
                 bankName={bankName}
                 propertyDetails={propertyDetails}

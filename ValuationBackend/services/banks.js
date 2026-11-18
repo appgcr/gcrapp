@@ -174,6 +174,23 @@ async function bankInfoForReport(caseObj) {
   if (!bank) return caseObj;
   const fmt = await reportFormatFor(bank.name);
   const out = { ...caseObj, reportFormat: fmt, bankPolicy: bank.policies || {} };
+  // Office sheet, Purchase: the property still belongs to the seller — the report's owner is the seller
+  // and the buyer (the case's client) is printed as the Applicant
+  {
+    const pdS = out.propertyDetails || {};
+    const sh = pdS.sheet || {};
+    // The owner's own address from the sheet (the property's address is printed in the property part)
+    if (pdS.entryMode === 'sheet' && String(sh.ownerAddress || '').trim()) out.address = String(sh.ownerAddress).trim();
+    if (pdS.entryMode === 'sheet' && pdS.dealType !== 'Purchase' && !String(out.clientFatherName || '').trim() && String(sh.ownerRelation || '').trim()) out.clientFatherName = String(sh.ownerRelation).trim();
+    if (pdS.entryMode === 'sheet' && pdS.dealType === 'Purchase' && String(sh.ownerName || '').trim()) {
+      const rep = { ...(pdS.report || {}) };
+      if (!rep.applicantName) { rep.applicantName = sh.applicantName || out.clientName || ''; rep.applicantAddr = sh.applicantAddress || ''; }
+      if (!rep.applicantRel && sh.applicantRelation) rep.applicantRel = sh.applicantRelation;
+      out.clientName = String(sh.ownerName).trim();
+      out.clientFatherName = String(sh.ownerRelation || '').trim();
+      out.propertyDetails = { ...pdS, report: rep };
+    }
+  }
   // Building rate per sq.ft: always worked out from the details being reported, never a rate left over
   // from an earlier save (the engineer's preview and the submitted report must show the same money)
   {

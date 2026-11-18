@@ -54,11 +54,11 @@ const appConfigSchema = new mongoose.Schema({
   },
   structureTypes: {
     type: [String],
-    default: ["Framed structure", "Load bearing", "Steel / Precast"]
+    default: ["Framed structure", "Load bearing", "Steel / Precast", "PEB structure"]
   },
   flooringTypes: {
     type: [String],
-    default: ["Granite", "Tiles", "Vitrified Tiles", "Marble", "Mosaic", "Cement Flooring"]
+    default: ["Granite", "Tiles", "Vitrified Tiles", "Marble", "Mosaic", "Cement Flooring", "Kadapa slab", "Betham cherla"]
   },
   floorLabels: {
     type: [String],

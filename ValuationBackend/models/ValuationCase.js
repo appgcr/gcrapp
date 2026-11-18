@@ -84,6 +84,12 @@ const valuationCaseSchema = new mongoose.Schema({
       floors: [{ id: String, label: String, value: String }]
     },
     deedDate: String,
+    // 'docs' (5 documents + check + site) or 'sheet' (the filled office data sheet, when the branch allows it)
+    entryMode: String,
+    dealType: String, // 'Mortgage' | 'Purchase'
+    // Everything read from the office data sheet (applicant / owner, engineers, extents, road affected,
+    // tax amount & name, rates, comments, extras …) — the main values are also copied to the fields above
+    sheet: { type: mongoose.Schema.Types.Mixed, default: null },
     landRate: String,
     guidelineRate: String,
     // Bank-format details typed by the engineer/admin (ward, village, rates, extras…), keyed by
@@ -91,6 +97,8 @@ const valuationCaseSchema = new mongoose.Schema({
     report: { type: mongoose.Schema.Types.Mixed, default: {} }
   },
 
+  // Mahe AI review call before submit: questions, the engineer's answers, changes made and the call recording
+  aiReview: { type: mongoose.Schema.Types.Mixed, default: null },
   // Checks run before submit (services/preCheck.js): shown to the engineer and the reviewing admin
   preCheck: { type: mongoose.Schema.Types.Mixed, default: null },
   // Report sent to the bank automatically after approval (services/reportDelivery.js)
@@ -114,6 +122,8 @@ const valuationCaseSchema = new mongoose.Schema({
   
   documents: { type: mongoose.Schema.Types.Mixed, default: {} },
   sitePhotos: [{ type: String }],
+  // Engineer's selfie at the property (GPS-stamped) — required with the office sheet
+  siteSelfie: { type: String, default: '' },
   // Content fingerprints of every uploaded document page and site photo (stops the same file being reused)
   documentHashes: { type: [String], default: [], index: true },
   

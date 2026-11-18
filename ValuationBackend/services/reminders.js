@@ -427,6 +427,61 @@ async function ruleEveningSummary(ctx) {
   return count;
 }
 
+// Unpaid invoices: reminders 7 days after the invoice, on the due date (15), then every 7 days (until 90).
+// Bank users get a notification (bank portal + phone), the bank branch an email with the invoice when
+// email is set up, and each admin one daily list with one-tap WhatsApp messages in Fees.
+const INVOICE_AT = 10 * 60 + 30; // 10:30 AM IST
+const INVOICE_DAYS = [7, 15, 22, 29, 36, 43, 50, 57, 64, 71, 78, 85];
+async function ruleInvoiceReminders(ctx) {
+  const { ist, now, admins } = ctx;
+  if (!isDue(ist.minutes, INVOICE_AT)) return 0;
+  const billing = require('./billing');
+  const { emailReady, contactFor } = require('./reportDelivery');
+  const base = process.env.PUBLIC_API_URL || process.env.RENDER_EXTERNAL_URL || 'https://gcrapp-api.onrender.com';
+  const open = await ValuationCase.find({ 'billing.invoiceNo': { $exists: true }, 'billing.status': { $ne: 'cancelled' }, 'billing.total': { $gt: 0 } })
+    .select('id fileNumber clientName clientPhone bankName bankBranch bankId branchId requestedBy billing approvedAt propertyDetails.propertyType').lean();
+  const unpaid = open.filter((c) => billing.dueOf(c.billing) > 0);
+  let count = 0;
+  const overdueByBranch = new Map();
+  for (const c of unpaid) {
+    // Calendar days in India time (an evening invoice is 'day 7' on the 7th morning after)
+    const days = Math.round((Date.parse(ist.ymd) - Date.parse(istParts(new Date(c.billing.invoiceDate)).ymd)) / 86400000);
+    if (days >= 15) { const list = overdueByBranch.get(c.branchId) || []; list.push(c); overdueByBranch.set(c.branchId, list); }
+    if (!INVOICE_DAYS.includes(days)) continue;
+    const key = `invoice:${c.id}:${c.billing.invoiceNo}:d${days}`;
+    if (!(await claim(key, 'invoiceReminder', 'bank'))) continue;
+    const amount = `Rs. ${billing.dueOf(c.billing).toLocaleString('en-IN')}`;
+    // Bank employees: the one who asked for it, and the bank's users at that branch
+    const bankUsers = await User.find({ role: 'BANK', status: { $ne: 'Inactive' }, $or: [
+      ...(c.requestedBy && c.requestedBy.id ? [{ id: c.requestedBy.id }] : []),
+      { bankName: c.bankName, bankBranch: c.bankBranch, branchId: c.branchId },
+    ] }).select('id').lean();
+    for (const u of bankUsers) {
+      await notify({ to: u.id, type: 'invoice_due', caseId: c.id, priority: days >= 15 ? 'high' : 'normal', now,
+        title: days >= 15 ? `Payment overdue: ${amount}` : `Payment reminder: ${amount}`,
+        message: `Invoice ${c.billing.invoiceNo} · ${c.fileNumber} · ${c.clientName}. Open the app to pay by UPI or see bank details.` }).catch(() => {});
+    }
+    // Email to the bank branch with the invoice attached
+    if (emailReady()) {
+      try { const ct = await contactFor(c); if (ct.email) await billing.emailInvoice(c, { to: ct.email, link: billing.payLink(base, c), reminder: days }); } catch (err) { console.warn('invoice reminder email:', err.message); }
+    }
+    await ValuationCase.updateOne({ id: c.id }, { $push: { 'billing.reminders': { at: now, day: days, bankUsers: bankUsers.length, email: emailReady() } } });
+    count += 1;
+  }
+  // Admins: one list a day of overdue invoices, each one tap to send on WhatsApp from Fees
+  for (const a of admins) {
+    const mine = a.role === 'SUPER_ADMIN' ? [...overdueByBranch.values()].flat() : (overdueByBranch.get(a.branchId) || []);
+    if (!mine.length) continue;
+    const total = mine.reduce((n, c) => n + billing.dueOf(c.billing), 0);
+    await send(`invoiceOverdue:${a.id}:${ist.ymd}`, 'invoiceOverdue', {
+      to: a.id, type: 'invoice_overdue', priority: 'normal', now,
+      title: `${mine.length} unpaid invoice${mine.length === 1 ? '' : 's'} · Rs. ${total.toLocaleString('en-IN')}`,
+      message: `${mine.slice(0, 3).map((c) => c.billing.invoiceNo).join(', ')}${mine.length > 3 ? '…' : ''} — open Fees → Unpaid to send WhatsApp reminders.`,
+    });
+  }
+  return count;
+}
+
 // ---------- runner ----------
 
 /**
@@ -474,6 +529,7 @@ async function runReminders(now = new Date()) {
     summary.sent.checkOut = await ruleCheckOut(ctx);
     summary.sent.visitNudge = await ruleVisitNudge(ctx);
     summary.sent.eveningSummary = await ruleEveningSummary(ctx);
+    try { summary.sent.invoiceReminders = await ruleInvoiceReminders(ctx); } catch (err) { console.warn('invoice reminders:', err.message); }
   }
   return summary;
 }
@@ -508,6 +564,7 @@ function stopReminderScheduler() {
 }
 
 module.exports = {
+  ruleInvoiceReminders,
   startReminderScheduler, stopReminderScheduler, runReminders, getSettings,
   // exported for tests
   _internal: { istParts, parseInspection, toMinutes, isDue, usualStartMinutes },

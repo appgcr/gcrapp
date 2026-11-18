@@ -265,8 +265,10 @@ ORDINAL_SHORT = {'Ground': 'G', 'First': '1st', 'Second': '2nd', 'Third': '3rd',
 
 
 def sqyd_of(raw):
-    t = str(raw or '').lower()
-    return num(t) if ('yd' in t or 'yard' in t) else extent_in_cents(raw) * SQYD_PER_CENT
+    parts = apgb.extent_parts(raw)
+    if 'yd' in parts:
+        return parts['yd']
+    return extent_in_cents(raw) * SQYD_PER_CENT
 
 
 def build_apartment(case, temps, bank=None):

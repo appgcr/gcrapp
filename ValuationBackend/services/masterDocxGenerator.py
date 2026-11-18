@@ -108,6 +108,13 @@ def generate_master_docx(case_data, output_path, base_dir):
     exact = _exact_bank_format(case_data, output_path)
     if exact:
         return exact
+    # No exact format for this bank + property type: the old reference templates below still hold
+    # another case's figures, so a report is never made from them (a wrong valuation must not go out).
+    if os.environ.get("GCR_ALLOW_STANDARD_REPORT") != "1":
+        bank = (case_data.get("bankName") or "this bank").strip()
+        ptype = ((case_data.get("propertyDetails") or {}).get("propertyType") or "this property type").strip()
+        print(f"NO_FORMAT|{bank}|{ptype}", file=sys.stderr)
+        sys.exit(3)
     p_details = case_data.get("propertyDetails", {}) or {}
     valuation = case_data.get("valuation", {}) or {}
     category = (p_details.get("propertyType") or case_data.get("propertyType") or "Independent House").strip()
@@ -393,6 +400,11 @@ def _exact_bank_format(case_data, output_path):
     except NotImplementedError as err:
         print(f"Note: {err}; using the standard generator", file=sys.stderr)
         return None
+    # Letterhead initials of the engineers on this case (the bank samples printed their own, e.g. "VIJAY & AR")
+    fields = job.setdefault("fields", {})
+    if not str(fields.get("engineerInitials") or "").strip():
+        rep = ((case_data.get("propertyDetails") or {}).get("report") or {})
+        fields["engineerInitials"] = rep.get("engineerInitials") or case_data.get("assignedEngineerName") or " "
     job_path = output_path + ".job.json"
     branch = _branch_for_job(case_data, output_path)
     if branch:

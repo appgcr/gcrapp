@@ -54,7 +54,8 @@ function messageFor(c, link) {
     `Please find the approved valuation report for ${c.clientName || 'the customer'} (${c.fileNumber || `#${c.id}`}).`,
     c.valuation?.fairMarketValue ? `Fair market value: Rs. ${Math.round(c.valuation.fairMarketValue).toLocaleString('en-IN')}` : '',
     ``,
-    `Download: ${link}`,
+    `Report: ${link}`,
+    `Documents (deed, plan, tax receipt, site photos): ${link}&part=docs`,
     `(The link works for ${DAYS} days.)`,
     ``,
     `Regards,`,
@@ -63,7 +64,9 @@ function messageFor(c, link) {
   return { subject, text };
 }
 
-async function sendEmail(to, c, link, attachment) {
+const ANNEX_EMAIL_MAX = 8 * 1024 * 1024; // larger annexures stay in the app (most mail servers refuse big mails)
+
+async function sendEmail(to, c, link, attachment, { withDocs = true } = {}) {
   const nodemailer = require('nodemailer');
   const port = Number(env('SMTP_PORT') || 587);
   const t = nodemailer.createTransport({
@@ -77,6 +80,14 @@ async function sendEmail(to, c, link, attachment) {
       const { invoicePdf } = require('./billing');
       attachments.push({ filename: `Invoice_${c.billing.invoiceNo.replace(/[^A-Za-z0-9]+/g, '-')}.pdf`, content: await invoicePdf(c) });
     } catch (err) { console.warn('invoice attach:', err.message); }
+  }
+  if (withDocs) {
+    try {
+      const { annexurePdf } = require('./annexure');
+      const full = await ValuationCase.findOne({ id: c.id }).select('id fileNumber clientName borrowerName bankName bankBranch assignedEngineerName inspectionDate documents sitePhotos siteSelfie aiReview').lean();
+      const a = await annexurePdf(full || c);
+      if (a.pdf.length <= ANNEX_EMAIL_MAX) attachments.push({ filename: a.filename, content: a.pdf });
+    } catch (err) { console.warn('documents annexure attach:', err.message); }
   }
   await t.sendMail({ from: env('EMAIL_FROM'), to, subject, text, attachments });
 }
@@ -124,7 +135,7 @@ async function reportFile(c, format = 'docx') {
   }
 }
 
-async function deliverReport(caseId, { baseUrl, actor = 'auto', quiet = false } = {}) {
+async function deliverReport(caseId, { baseUrl, actor = 'auto', quiet = false, withDocs = true } = {}) {
   try {
     const c = await ValuationCase.findOne({ id: caseId }).lean();
     if (!c || c.status !== 'Approved') return null;
@@ -138,7 +149,7 @@ async function deliverReport(caseId, { baseUrl, actor = 'auto', quiet = false } 
         let attachment = null;
         const a = await reportFile(c, 'docx');
         if (a) attachment = { filename: a.filename || `Valuation_${c.fileNumber || c.id}.docx`, content: a.buffer };
-        await sendEmail(contact.email, c, link, attachment);
+        await sendEmail(contact.email, c, link, attachment, { withDocs });
         delivery.status = 'emailed';
       } catch (err) {
         delivery.status = 'failed'; delivery.error = String(err.message || err).slice(0, 200);

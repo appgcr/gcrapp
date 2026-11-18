@@ -33,6 +33,14 @@ def ext_line(c):
     return f'{trunc2(c * SQYD_PER_CENT):.2f} Sqyds (or) {trunc2(c * SQM_PER_CENT):.2f} Sqmts (or) {c:.2f} Cents'
 
 
+def plan_line(raw, cents):
+    """Plan extent as the plan writes it: when the plan gives Sq.mts, keep that figure (not one worked back from cents)."""
+    sqm = apgb.extent_parts(raw or '').get('m') or 0
+    if not sqm:
+        return ext_line(cents)
+    return f'{trunc2(sqm * 1.19599):.2f} Sqyds (or) {sqm:.2f} Sqmts (or) {cents:.2f} Cents'
+
+
 def rs(v, dash='Rs ----'):
     return f'Rs {inr(v)}/-' if v else dash
 
@@ -59,6 +67,10 @@ HOUSE_DEFAULTS = {
 }
 
 
+FLOOR_SHORT = {'gf': 'GF', 'ff': 'FF', 'sf': 'SF', 'tf': 'TF', 'cellar': 'Cellar', 'stilt': 'Stilt'}
+FLOOR_NAME = {'GF': 'Ground Floor', 'FF': 'First Floor', 'SF': 'Second Floor', 'TF': 'Third Floor'}
+
+
 def build_house(case, temps):
     pd = case.get('propertyDetails') or {}
     rep = pd.get('report') or {}
@@ -71,7 +83,7 @@ def build_house(case, temps):
     district = f['district']
     lb = rep.get('localBodyName') or HOUSE_DEFAULTS['localBodyName']
     local_body = rep.get('localBody') or f'{lb} Of  {district}. (Dt).'
-    branch = re.sub(r',?\s*kadapa.*$', '', case.get('bankBranch') or 'Branch', flags=re.I)
+    branch = re.sub(r',?\s*kadapa.*$', '', case.get('bankBranch') or 'Branch', flags=re.I).strip(' ,') or (case.get('bankBranch') or 'Branch')
     postal = f'At In Site Survey No : {survey}, Door No’s : {door}, Ward No : {ward}, {loc}, {village} Village Filed At {local_body}'
     two = bool(rep.get('deed2No'))
     plan2 = rep.get('plan2No')
@@ -98,23 +110,25 @@ def build_house(case, temps):
         'planNo': f['planNo'] or 'NA', 'planDate': f['planDate'] or '---',
         'deedCountWord': 'Two' if two else 'One', 'deedDatesLine': f'{dd1} & {dd2}' if two else dd1,
         'deedNosLine': f'{deed1}, {deed2}' if two else deed1,
-        'deed1Header': f'A (As per Deed {deed1}) ', 'deed2Header': f'A (As per Deed {deed2})' if two else ' ',
-        'deed1ExtentLine': ext_line(d1), 'deed2ExtentLine': ext_line(d2) if two else ' ',
+        # one deed: the right-hand column is what the engineer found at the site
+        'deed1Header': f'A (As per Deed {deed1}) ', 'deed2Header': f'A (As per Deed {deed2})' if two else 'B (As per Actual)',
+        'deed1ExtentLine': ext_line(d1), 'deed2ExtentLine': ext_line(d2) if two else ext_line(d1),
         'totalExtentSummary': (f'Total Extent : Deed {deed1.split("/")[0]} + Deed {deed2.split("/")[0]} = {ext_line(total_c)}'
                                if two else f'Total Extent : {ext_line(total_c)}'),
-        'netExtentPlan': ext_line(plan_c), 'extentConsidered': ext_line(considered),
+        'netExtentPlan': plan_line(rep.get('netExtentPlanRaw'), plan_c), 'extentConsidered': ext_line(considered),
         'consideredCents': f'{considered:.2f}', 'consideredYd': f'{trunc2(considered * SQYD_PER_CENT):.2f}',
         'surveyLine': f'Survey No :- {survey}, ', 'doorLine': f'Door No’s :- {door},', 'villageLine': f'{village} Village Field,',
         'wardLine': f'Ward No: {ward}, {loc},', 'localBodyComma': f'{lb}, {district} (Dt).',
         'assessmentNo': pd.get('assessmentNo') or '---',
         'taxAmountLine': f"Rs {inr(num(rep.get('taxAmount')))}/-" if rep.get('taxAmount') else '---',
         'taxPaidName': f'{f["owner1Name"]}, ',
+        'engineerInitials': rep.get('engineerInitials') or case.get('assignedEngineerName') or ' ',
         'briefDescription': rep.get('briefDescription') or f'The Residential Building With R.C.C. Roof, R.C.C. Framed Structure {postal}',
     })
     for side in ('North', 'South', 'East', 'West'):
         f[f'dimDeed{side}'] = rep.get(f'dimDeed{side}') or '---'
-        f[f'bd2{side}'] = rep.get(f'bd2{side}') or ('---' if two else ' ')
-        f[f'dim2{side}'] = rep.get(f'dim2{side}') or ('---' if two else ' ')
+        f[f'bd2{side}'] = rep.get(f'bd2{side}') or ('---' if two else f.get(f'bdActual{side}') or f.get(f'bdDeed{side}') or '---')
+        f[f'dim2{side}'] = rep.get(f'dim2{side}') or ('---' if two else rep.get(f'dimActual{side}') or f[f'dimDeed{side}'])
 
     # Land: adopted market rate per cent; guideline value per Sqyd
     rate = num(rep.get('marketRatePerCent')) or num(pd.get('landRate')) * SQYD_PER_CENT
@@ -133,14 +147,21 @@ def build_house(case, temps):
     # Buildings (each phase valued separately; 1% depreciation per year of age)
     year_now = dt.date.today().year
     blds = [b for b in (rep.get('buildings') or []) if b]
+    per_floor = False  # one building, several floors of the same age and rate: a row per floor, one summary column
     if not blds:
-        floors = (pd.get('siteValue') or {}).get('floors') or []
-        area = sum(num(x.get('value')) for x in floors)
+        floors = [x for x in ((pd.get('siteValue') or {}).get('floors') or []) if num(x.get('value'))]
         age0 = int(num(pd.get('buildingAge')))
-        blds = [{'label': rep.get('buildingLabel') or 'GF', 'area': area, 'year': rep.get('yearOfConstruction') or year_now - age0,
-                 'rate': rep.get('constructionRate') or 2000}]
+        year0 = rep.get('yearOfConstruction') or year_now - age0
+        rate0 = rep.get('constructionRate') or 2000
+        if len(floors) > 1 and not rep.get('buildingLabel'):
+            per_floor = True
+            blds = [{'label': FLOOR_SHORT.get(str(x.get('id') or '').lower(), x.get('label') or 'GF'), 'area': num(x.get('value')),
+                     'year': year0, 'rate': rate0} for x in floors]
+        else:
+            blds = [{'label': rep.get('buildingLabel') or 'GF', 'area': sum(num(x.get('value')) for x in floors), 'year': year0,
+                     'rate': rate0}]
     rows, total_net, ages, lefts = [], 0, [], []
-    for i, b in enumerate(blds[:3], start=1):
+    for i, b in enumerate(blds[:3] if not per_floor else blds[:6], start=1):
         area, rate_b = num(b.get('area')), num(b.get('rate')) or 2000
         year = int(num(b.get('year'))) or year_now
         age = max(year_now - year, 0)
@@ -156,10 +177,47 @@ def build_house(case, temps):
                      'plinth': f'{area:.2f}\nSqft', 'cantilever': '-', 'plinthSqft': f'{area:.2f}\nSqft',
                      'height': b.get('height') or '10 Ft', 'ageLine': f'{age} Years', 'rateLine': f'Rs {int(rate_b)}/- Sqft',
                      'repl': f'Rs {inr(repl)}/-', 'depPct': f'(-{pct:g}%)', 'dep': f'Rs {inr(dep)}/-', 'net': f'Rs {inr(net)}/-'})
+        if per_floor:
+            continue
         f.update({f'b{i}Plinth': f'{area:.2f} Sqft', f'b{i}Year': str(year), f'b{i}DepPct': f'-{pct:g}%',
                   f'b{i}RateLine': f'{label} = Rs {int(rate_b)}/- Per Sqft', f'b{i}Repl': f'Rs {inr(repl)}/-',
                   f'b{i}Dep': f'(-{pct:g}%) Rs {inr(dep)}/-', f'b{i}Net': f'Rs {inr(net)}/-'})
-    for i in range(len(rows) + 1, 4):
+    labels = [r['label'] for r in rows]
+    short = '+'.join(labels) or 'GF'
+    if per_floor:  # summary column: the whole building at one age and rate
+        area_t = sum(num(b.get('area')) for b in blds)
+        year = int(num(blds[0].get('year'))) or year_now
+        age = max(year_now - year, 0)
+        pct = min(age * 1.0, 70.0)
+        rate_b = num(blds[0].get('rate')) or 2000
+        repl = money(area_t * rate_b)
+        dep = money(repl * pct / 100)
+        total_net = repl - dep
+        ages, lefts = [f'{age} Years'], [f'{max(60 - age, 0)} Years']
+        f.update({'b1Plinth': f'{area_t:.2f} Sqft ({short})', 'b1Year': str(year), 'b1DepPct': f'-{pct:g}%',
+                  'b1RateLine': f'{short} = Rs {int(rate_b)}/- Per Sqft', 'b1Repl': f'Rs {inr(repl)}/-',
+                  'b1Dep': f'(-{pct:g}%) Rs {inr(dep)}/-', 'b1Net': f'Rs {inr(total_net)}/-'})
+        start = 2
+    else:
+        start = len(rows) + 1
+    pcts = sorted({num(r['depPct'].strip('(-%)')) for r in rows})
+    f['depRatePct'] = ' & '.join(f'{p:g}' for p in pcts) if pcts else '0'
+    f['buildingFloorsShort'] = short
+    names = [FLOOR_NAME.get(l, l) for l in labels]
+    if not rep.get('floorsLine') and names:
+        f['floorsLine'] = names[0] if len(names) == 1 else ', '.join(names[:-1]) + ' & ' + names[-1]
+    if not rep.get('buildingDesc'):
+        f['buildingDesc'] = f'Residential Building ({short})'
+    finish = pd.get('flooringType') or rep.get('flooringType')
+    struct = 'R.C.C Framed Structure' if re.search(r'frame', str(pd.get('structureType') or 'frame'), re.I) else (pd.get('structureType') or 'Load Bearing Structure')
+    for fl in ('GF', 'FF', 'SF'):
+        on = fl in labels or (fl == 'GF' and not labels)
+        for k, v in (('foundation', struct), ('floorFinish', finish or 'Marble'), ('superstructure', 'Brick masonry C.M (1:4)'),
+                     ('roof', 'R.C.C Roof'), ('doors', 'Provided'), ('windows', 'Provided'), ('weathering', 'Yes')):
+            key = f'spec{fl}_{k}'
+            if not rep.get(key):
+                f[key] = v if on else '--'
+    for i in range(start, 4):
         for k in ('Plinth', 'Year', 'DepPct', 'RateLine', 'Repl', 'Dep', 'Net'):
             f[f'b{i}{k}'] = '--' if k in ('Plinth', 'Year') else ' '
     plinth_lines = '\n'.join(f"{r['label']}= {num(r['plinth']):.2f} Sqft" for r in rows)
@@ -236,7 +294,7 @@ def build_apartment(case, temps):
     lb = rep.get('localBodyName') or APT_DEFAULTS['localBodyName']
     local_body = rep.get('localBody') or f'{lb} of  {district} (Dt).'
     apt = rep.get('aptName') or pd.get('apartmentName') or '---'
-    branch = re.sub(r',?\s*kadapa.*$', '', case.get('bankBranch') or 'Branch', flags=re.I)
+    branch = re.sub(r',?\s*kadapa.*$', '', case.get('bankBranch') or 'Branch', flags=re.I).strip(' ,') or (case.get('bankBranch') or 'Branch')
     site = f'Site Survey No : {survey}, Ward No : {ward}, {loc}, {village} Village Field At {local_body}'
     two = bool(rep.get('deed2No') or rep.get('plot2Label'))
     f.update({
@@ -388,7 +446,7 @@ def build_open_site(case, temps):
     district = f['district']
     lb = rep.get('localBodyName') or SITE_DEFAULTS['localBodyName']
     local_body = rep.get('localBody') or f'{lb} Of {district}. (Dt).'
-    branch = re.sub(r',?\s*kadapa.*$', '', case.get('bankBranch') or 'Branch', flags=re.I)
+    branch = re.sub(r',?\s*kadapa.*$', '', case.get('bankBranch') or 'Branch', flags=re.I).strip(' ,') or (case.get('bankBranch') or 'Branch')
     postal = f'In Site Survey No’s : {survey}, Plot No : {plot}, Ward No : {ward}, In {loc}, {village} Village Field At {local_body}'
     deed_c = extent_in_cents(rep.get('extentDeedRaw') or pd.get('netExtent'))
     plan_c = extent_in_cents(rep.get('netExtentPlanRaw')) or deed_c
@@ -460,7 +518,7 @@ def build_agriculture(case, temps):
     mandal = rep.get('mandal') or '---'
     loc = rep.get('locationText') or f"{rep.get('village') or '---'} Village Field "
     local_body = rep.get('localBody') or f'{mandal} Mandal of {district}. (Dt).'
-    branch = re.sub(r',?\s*kadapa.*$', '', case.get('bankBranch') or 'Branch', flags=re.I)
+    branch = re.sub(r',?\s*kadapa.*$', '', case.get('bankBranch') or 'Branch', flags=re.I).strip(' ,') or (case.get('bankBranch') or 'Branch')
     acres = apgb.acres_of(rep.get('extentDeedRaw') or pd.get('netExtent'))
     rate = num(rep.get('ratePerAcre')) or num(rep.get('marketRatePerCent')) * 100
     guide = num(rep.get('guidelineRatePerAcre'))

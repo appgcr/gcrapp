@@ -110,4 +110,20 @@ Reply with ONLY: {"photos": [{"index": 0, "kind": "front", "note": "3 words max"
   }
 });
 
+// POST /api/assist/speak { text, voice: 'male' | 'female' } — Mahe AI's natural voice (WAV)
+router.post('/speak', async (req, res) => {
+  try {
+    const { speak, VOICES } = require('../services/voice');
+    const text = String(req.body?.text || '').slice(0, 900);
+    if (!text.trim()) return res.status(400).json({ error: 'Nothing to say.' });
+    const wav = await speak(text, { voice: VOICES[req.body?.voice] || undefined });
+    if (!wav) return res.status(503).json({ error: 'Voice not available right now.' });
+    res.setHeader('Content-Type', 'audio/wav');
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+    res.send(wav);
+  } catch (err) {
+    res.status(500).json({ error: 'Voice not available right now.' });
+  }
+});
+
 module.exports = router;

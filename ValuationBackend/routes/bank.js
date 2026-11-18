@@ -63,24 +63,35 @@ router.post('/requests', onlyBank, async (req, res) => {
     const bank = await findBank(u.bankName);
     if (!bank) return res.status(400).json({ error: 'Your bank is not set up with Gouru Valuations yet. Please contact Gouru Valuations.' });
 
+    // Only the customer's name and mobile are needed; documents and notes are optional
     const clientName = clean(b.clientName, 120);
     const clientPhone = clean(b.clientPhone, 15).replace(/\D/g, '');
-    const propertyType = clean(b.propertyType, 60);
+    const propertyType = PROPERTY_TYPES.includes(clean(b.propertyType, 60)) ? clean(b.propertyType, 60) : '';
     const propertyAddress = clean(b.propertyAddress, 400);
     const errors = [];
-    if (clientName.length < 3) errors.push('customer (borrower) name');
+    if (clientName.length < 3) errors.push('customer name');
     if (!PHONE.test(clientPhone)) errors.push('customer’s 10-digit mobile number');
-    if (!PROPERTY_TYPES.includes(propertyType)) errors.push('property type');
-    if (propertyAddress.length < 10) errors.push('property address / location');
-    if (!clean(b.loanPurpose, 80)) errors.push('purpose of valuation');
     if (errors.length) return res.status(400).json({ error: `Please fill: ${errors.join(', ')}.` });
 
-    // The same customer + property already open from this bank → probably a double submit
+    // Documents the bank attached: only files this bank user uploaded (max 20)
+    const fileStore = require('../services/fileStore');
+    const bankDocs = [];
+    for (const d of (Array.isArray(b.documents) ? b.documents : []).slice(0, 20)) {
+      const ref = fileStore.parseFileUrl(d && d.url);
+      if (!ref) continue;
+      const meta = await fileStore.findFile(ref.id, ref.key).catch(() => null);
+      if (!meta || (meta.metadata && meta.metadata.uploadedBy && meta.metadata.uploadedBy !== u.id)) continue;
+      const name = clean(d.name || meta.filename || 'document', 160);
+      bankDocs.push({ name, url: `/api/files/${ref.id}?k=${ref.key}`, isPdf: /pdf/i.test(meta.contentType || '') || /\.pdf$/i.test(name),
+        size: meta.length, extension: (name.split('.').pop() || '').toUpperCase(), uploadedAt: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }), fromBank: true });
+    }
+
+    // The same customer already open from this bank → probably a double submit
     const open = await ValuationCase.findOne({
-      'requestedBy.id': u.id, clientPhone, 'requestDetails.propertyAddress': propertyAddress,
+      'requestedBy.id': u.id, clientPhone, ...(propertyAddress ? { 'requestDetails.propertyAddress': propertyAddress } : {}),
       status: { $nin: ['Approved', 'Rejected'] },
     }).select('fileNumber').lean();
-    if (open) return res.status(409).json({ error: `This request is already open as ${open.fileNumber}. Track it in "My requests".` });
+    if (open) return res.status(409).json({ error: `A request for this customer is already open as ${open.fileNumber}. Track it in "My requests".` });
 
     const today = new Date();
     const newId = await require('../services/fileNumber').nextCaseId(today);
@@ -99,7 +110,8 @@ router.post('/requests', onlyBank, async (req, res) => {
       bankName: bank.name, bankId: bank.id, bankStatus: 'Assigned',
       bankBranch: clean(b.bankBranch, 120) || u.bankBranch,
       reportFormat: await reportFormatFor(bank.name),
-      propertyDetails: { propertyType: typeForReport },
+      propertyDetails: { propertyType: typeForReport || '' },
+      documents: bankDocs.length ? { bankDocs } : {},
       requestedAt: today,
       requestedBy: { id: u.id, name: u.name, phone: u.phone, email: u.email, bankName: bank.name, bankBranch: u.bankBranch, designation: u.designation },
       requestDetails: {
@@ -113,7 +125,7 @@ router.post('/requests', onlyBank, async (req, res) => {
       to: 'ADMIN', branchId: saved.branchId, type: 'case_created', caseId: saved.id,
       priority: saved.requestDetails.urgency === 'Urgent' ? 'urgent' : 'normal',
       title: `New request from ${bank.name}`,
-      message: `${saved.fileNumber} · ${clientName} (${propertyType}) from ${u.name}, ${u.bankBranch || bank.name}. Assign an engineer.`,
+      message: `${saved.fileNumber} · ${clientName}${propertyType ? ` (${propertyType})` : ''}${bankDocs.length ? ` · ${bankDocs.length} document${bankDocs.length === 1 ? '' : 's'}` : ''} from ${u.name}, ${u.bankBranch || bank.name}. Assign an engineer.`,
     });
     res.status(201).json(view(saved));
   } catch (err) {
@@ -146,10 +158,22 @@ router.get('/requests/:id/invoice.pdf', onlyBank, async (req, res) => {
   try {
     const c = await ValuationCase.findOne({ id: req.params.id, 'requestedBy.id': req.user.id }).lean();
     if (!c || !c.billing || !c.billing.invoiceNo || c.billing.status === 'cancelled' || !c.billing.feeSet) return res.status(404).json({ error: 'No invoice for this request yet.' });
-    const pdf = await require('../services/billing').invoicePdf(c);
+    const billing = require('../services/billing');
+    const base = `${req.get('x-forwarded-proto') || req.protocol}://${req.get('host')}`;
+    const pdf = await billing.invoicePdf(c, { link: billing.payLink(base, c) });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="Invoice_${c.billing.invoiceNo.replace(/[^A-Za-z0-9]+/g, '-')}.pdf"`);
     res.send(pdf);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// The signed payment page for this request's invoice (Pay with UPI / bank details)
+router.get('/requests/:id/pay-link', onlyBank, async (req, res) => {
+  try {
+    const c = await ValuationCase.findOne({ id: req.params.id, 'requestedBy.id': req.user.id }).select('id billing').lean();
+    if (!c || !c.billing || !c.billing.invoiceNo || c.billing.status === 'cancelled') return res.status(404).json({ error: 'No invoice for this request.' });
+    const base = `${req.get('x-forwarded-proto') || req.protocol}://${req.get('host')}`;
+    res.json({ url: require('../services/billing').payLink(base, c) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

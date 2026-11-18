@@ -1,4 +1,5 @@
 import askConfirm from '../Shared/askConfirm';
+import SendInvoice from './SendInvoice';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Document, Page, pdfjs } from 'react-pdf';
@@ -152,6 +153,7 @@ export default function AdminFees({ currentUser }) {
                 {c.status === 'cancelled' && <span className="fee-cxl">{c.billing.invoiceNo} cancelled{c.billing.cancelled?.reason ? `: ${c.billing.cancelled.reason}` : ''}</span>}
                 {!b && <button type="button" disabled={busyId === c.id} onClick={() => call(c.id, `/api/billing/${c.id}/invoice`, { method: 'POST' }, 'Invoice created')}><Plus size={14} /> {c.status === 'cancelled' ? 'New invoice' : 'Create invoice'}</button>}
                 {b && <button type="button" onClick={() => setPdfFor(c)}><FileText size={14} /> Invoice</button>}
+                {b && due > 0 && b.feeSet && <SendInvoice c={c} label={(b.reminders || []).length || (Date.now() - new Date(b.invoiceDate).getTime()) > 7 * 86400000 ? 'Remind' : 'Send'} />}
                 {b && due > 0 && b.feeSet && <button type="button" className="pri" onClick={() => setPay({ ...c, due })}>Mark paid</button>}
                 {b && !(b.received > 0) && <button type="button" onClick={() => setCancelFor(c)}><Ban size={14} /> Cancel</button>}
                 {b && (b.payments || []).length > 0 && <button type="button" disabled={busyId === c.id} onClick={async () => { if (await askConfirm({ title: 'Undo last payment?', message: 'The last payment entry is removed from this invoice.', confirmText: 'Undo', tone: 'danger' })) call(c.id, `/api/billing/${c.id}/payment`, { method: 'DELETE' }, 'Payment removed'); }}><Undo2 size={14} /> Undo</button>}
