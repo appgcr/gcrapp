@@ -105,6 +105,7 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
   const [activeView, setActiveView] = useState('MARK');
   const [logTab, setLogTab] = useState('TODAY'); // 'TODAY' | 'ALL'
   const [logsLoading, setLogsLoading] = useState(false);
+  const [logsFailed, setLogsFailed] = useState(false); // attendance could not be loaded (no internet / server down)
 
   // Live 12-hour Digital Clock
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -210,10 +211,11 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
         const myCases = casesArr.filter(c => {
           const assignId = String(c.assignedEngineerId || '').toLowerCase();
           const assignName = String(c.assignedEngineerName || '').toLowerCase();
-          return assignId === uid || assignName.includes(uname) || assignId === 'unassigned';
+          return assignId === uid || (!assignId && assignName === uname); // unassigned cases are not this engineer's
         });
 
-        const pending = myCases.filter(c => c.status !== 'Approved' && c.status !== 'Completed');
+        // Site visit still to do: in the field or sent back (not with the admin, not finished)
+        const pending = myCases.filter(c => !c.status || c.status === 'Pending' || c.status === 'Returned');
         const completed = myCases.filter(c => c.status === 'Approved' || c.status === 'Completed');
         const active = pending.length > 0 ? pending[0] : (myCases.length > 0 ? myCases[0] : null);
 
@@ -222,12 +224,15 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
           pendingInspection: pending.length,
           completed: completed.length,
           activeCase: active,
-          loading: false
+          loading: false,
+          failed: false
         });
+      } else {
+        setCaseStats(prev => ({ ...prev, loading: false, failed: true }));
       }
     } catch (err) {
       console.warn('Failed to load case summaries:', err);
-      setCaseStats(prev => ({ ...prev, loading: false }));
+      setCaseStats(prev => ({ ...prev, loading: false, failed: true }));
     }
   };
 
@@ -241,6 +246,7 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
     try {
       const uid = currentUser?.id || currentUser?.userId || 'ENG-001';
       const res = await fetch(`${API_BASE_URL}/api/attendance?userId=${uid}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
 
       if (Array.isArray(data)) {
@@ -258,9 +264,11 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
                  d.getDate() === now.getDate();
         });
         setTodayLogs(filtered);
-      }
+        setLogsFailed(false);
+      } else setLogsFailed(true);
     } catch (err) {
       console.error('Error fetching today logs:', err);
+      setLogsFailed(true);
     } finally {
       setLogsLoading(false);
     }
@@ -701,7 +709,9 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
                   <div className="td-date">{currentTime.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
                   <div className="td-clock">{timeParts[0]}<small>{(timeParts[1] || '').toUpperCase()}</small></div>
                 </div>
-                <span className={`td-pill ${isOnDuty ? 'on' : 'off'}`}><i />{isOnDuty ? 'On duty' : 'Off duty'}</span>
+                {logsFailed && !allLogs.length
+                  ? <span className="td-pill off"><i />Not loaded</span>
+                  : <span className={`td-pill ${isOnDuty ? 'on' : 'off'}`}><i />{isOnDuty ? 'On duty' : 'Off duty'}</span>}
               </div>
               <div className="td-progress" aria-label={`${progressPercent}% of an 8 hour day`}>
                 <div style={{ width: `${progressPercent}%` }} />
@@ -722,6 +732,12 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
               <button className="td-action in" onClick={() => handleOpenScanner('Clock-In')} disabled={!canClockIn || isBlocked || isSubmitting}>
                 {isSubmitting ? <Loader2 size={20} className="animate-spin" /> : <LogIn size={20} />} Check In
               </button>
+            )}
+            {logsFailed && (
+              <p className="td-hint" style={{ color: '#b45309' }}>
+                Couldn’t load today’s attendance — check the internet.{' '}
+                <button type="button" onClick={fetchTodayLogs} style={{ border: 0, background: 'none', color: '#2563eb', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', padding: 0 }}>Try again</button>
+              </p>
             )}
             <p className="td-hint">
               {isBlocked && !isOnDuty
@@ -768,12 +784,12 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
               <div className="td-row">
                 <IconTile icon={Clock} color="orange" size={30} />
                 <div className="td-main"><div className="td-title">Site visits pending</div></div>
-                <span className="td-value">{caseStats.pendingInspection}</span>
+                <span className="td-value">{caseStats.failed || caseStats.loading ? '—' : caseStats.pendingInspection}</span>
               </div>
               <div className="td-row">
                 <IconTile icon={CheckCircle2} color="green" size={30} />
                 <div className="td-main"><div className="td-title">Completed</div></div>
-                <span className="td-value">{caseStats.completed}</span>
+                <span className="td-value">{caseStats.failed || caseStats.loading ? '—' : caseStats.completed}</span>
               </div>
             </div>
 

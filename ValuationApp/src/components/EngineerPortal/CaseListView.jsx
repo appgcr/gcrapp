@@ -18,6 +18,7 @@ export default function CaseListView({ onOpenCase, currentUser }) {
   const [canSelfCase, setCanSelfCase] = useState(!!currentUser?.canSelfCase);
   const [newOpen, setNewOpen] = useState(false);
   const [reload, setReload] = useState(0);
+  const [loadState, setLoadState] = useState('loading'); // loading | ok | error
   useEffect(() => {
     if (!currentUser?.id) return;
     fetch(`${API_BASE_URL}/api/users/${encodeURIComponent(currentUser.id)}`)
@@ -27,8 +28,9 @@ export default function CaseListView({ onOpenCase, currentUser }) {
   }, [currentUser?.id]);
 
   useEffect(() => {
+    setLoadState((st) => (st === 'ok' ? 'ok' : 'loading'));
     fetch(`${API_BASE_URL}/api/cases`)
-      .then(res => res.json())
+      .then(async (res) => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
       .then(data => {
         const casesArr = Array.isArray(data) ? data : (data.cases || []);
         // Only show cases assigned to this engineer OR created by this engineer
@@ -50,8 +52,10 @@ export default function CaseListView({ onOpenCase, currentUser }) {
           selfFiled: !!c.selfFiled
         }));
         setCasesList(formatted);
+        setLoadState('ok');
       })
-      .catch(err => console.error("Failed to fetch cases:", err));
+      // Keep the cases already shown; say clearly that the list could not be refreshed
+      .catch(err => { console.error("Failed to fetch cases:", err); setLoadState('error'); });
   }, [currentUser, reload]);
 
   const filteredCases = casesList.filter(c => 
@@ -81,7 +85,14 @@ export default function CaseListView({ onOpenCase, currentUser }) {
         <input type="search" placeholder="Search client or file number" value={search} onChange={e => setSearch(e.target.value)} />
       </label>
 
-      {casesList.length === 0 && <div className="td-group"><div className="td-empty">No cases assigned to you yet.</div></div>}
+      {loadState === 'error' && (
+        <div className="td-group"><div className="td-empty" style={{ color: '#b45309' }}>
+          Couldn’t load your cases — check the internet connection.{' '}
+          <button type="button" onClick={() => setReload((n) => n + 1)} style={{ border: 0, background: 'none', color: '#2563eb', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', padding: 0 }}>Try again</button>
+        </div></div>
+      )}
+      {loadState === 'loading' && casesList.length === 0 && <div className="td-group"><div className="td-empty"><Loader2 size={16} className="spin" style={{ verticalAlign: '-3px' }} /> Loading your cases…</div></div>}
+      {loadState === 'ok' && casesList.length === 0 && <div className="td-group"><div className="td-empty">No cases assigned to you yet.</div></div>}
       {casesList.length > 0 && filteredCases.length === 0 && <div className="td-group"><div className="td-empty">No cases match “{search}”.</div></div>}
 
       {[
