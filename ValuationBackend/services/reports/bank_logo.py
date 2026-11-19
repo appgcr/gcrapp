@@ -8,7 +8,7 @@ from docx.shared import Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-LOGOS = {'apgb': 'apgb.png', 'canara': 'canara.png', 'union': 'union.png', 'cbi': 'cbi.png', 'uco': 'uco.png', 'bom': 'bom.png'}
+LOGOS = {'apgb': 'apgb.png', 'canara': 'canara.png', 'union': 'union.png', 'cbi': 'cbi.png', 'uco': 'uco.png', 'bom': 'bom.png', 'indian': 'indian.png'}
 TITLE = re.compile(r'VALUATION REPORT|VALUATION OF PROPERTY|REPORT ON VALUATION', re.I)
 MARK = 'gcr-bank-logo'
 
