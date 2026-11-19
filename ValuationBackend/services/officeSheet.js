@@ -349,4 +349,52 @@ async function readOfficeSheet({ bytes, type = '', name = '' }) {
   return { fields, source: 'ai', filled: filledCount(fields) };
 }
 
-module.exports = { readOfficeSheet, fromWordRows, FIELDS, classify, amount, deedNumber, splitRelation };
+/** Several pages / files of one sheet (photos, PDF, Word) → one set of fields.
+ *  Word files are read exactly; photos and PDFs go to Mahe AI together, so a sheet on two pages reads as one. */
+async function readOfficeSheetFiles(files) {
+  const list = (files || []).filter((f) => f && f.bytes && f.bytes.length);
+  if (!list.length) throw new Error('Please choose the filled office sheet (Word, PDF or photo).');
+  if (list.length === 1) return readOfficeSheet(list[0]);
+  const isWord = (f) => /wordprocessingml/.test(f.type || '') || /\.docx$/i.test(f.name || '') || (f.bytes[0] === 0x50 && f.bytes[1] === 0x4b);
+  const words = list.filter(isWord);
+  const others = list.filter((f) => !isWord(f));
+  const old = others.find((f) => /\.(doc|odt|rtf)$/i.test(f.name || ''));
+  if (old) throw new Error(`${old.name}: please save it as .docx (Word) or upload a PDF / photo of it.`);
+  let fields = null;
+  let source = '';
+  for (const w of words) {
+    try {
+      const r = await readOfficeSheet(w);
+      fields = fields ? merge(fields, r.fields) : r.fields;
+      source = 'word';
+    } catch (err) { if (!others.length && words.length === 1) throw err; }
+  }
+  if (others.length) {
+    const total = others.reduce((n, f) => n + f.bytes.length, 0);
+    if (total > 18 * 1024 * 1024) throw new Error('These pages are too large together (over 18 MB). Please upload smaller photos or a smaller PDF.');
+    const urls = others.map((f) => {
+      const mime = /pdf/.test(f.type || '') || f.bytes.slice(0, 4).toString() === '%PDF' ? 'application/pdf' : ((f.type || '').startsWith('image/') ? f.type : 'image/jpeg');
+      return `data:${mime};base64,${f.bytes.toString('base64')}`;
+    });
+    const { askJson } = require('./aiJson');
+    const prompt = `${PROMPT}\n\nThe sheet is given as ${others.length} pages/files, in order. Read them together as ONE sheet.`;
+    const ai = await askJson(prompt, urls, { timeoutMs: 120000 });
+    if (!ai && !fields) throw new Error('Mahe AI could not read the sheet right now. Type the details below, or tap Read again in a minute.');
+    if (ai) { const f = clean(ai); fields = fields ? merge(fields, f) : f; source = source ? 'word+ai' : 'ai'; }
+  }
+  if (!fields) throw new Error('This is not the GOURU VALUATION – OFFICE sheet. Please upload the filled office sheet.');
+  return { fields, source, filled: filledCount(fields), pages: list.length };
+}
+
+// Keep what is already read; fill only the blanks from the next file
+function merge(a, b) {
+  const out = { ...a };
+  for (const [k, v] of Object.entries(b || {})) {
+    if (v && typeof v === 'object' && !Array.isArray(v)) out[k] = merge(a[k] || {}, v);
+    else if (Array.isArray(v)) out[k] = [...new Set([...(a[k] || []), ...v])];
+    else if (!String(a[k] || '').trim() && v) out[k] = v;
+  }
+  return out;
+}
+
+module.exports = { readOfficeSheet, readOfficeSheetFiles, fromWordRows, FIELDS, classify, amount, deedNumber, splitRelation };

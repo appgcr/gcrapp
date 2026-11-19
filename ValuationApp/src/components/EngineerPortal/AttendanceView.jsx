@@ -445,10 +445,15 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
     if (l.workDurationHours) totalCompletedHours += l.workDurationHours;
   });
 
+  // A check-in left open from an earlier day counts only from today's midnight ("worked today"),
+  // and the card shows the day it started so the engineer sees the missed check-out.
+  const startOfToday = new Date(currentTime); startOfToday.setHours(0, 0, 0, 0);
+  const openSince = isOnDuty && lastLog ? new Date(lastLog.timestamp) : null;
+  const openFromEarlierDay = !!openSince && openSince < startOfToday;
   let activeElapsedHours = 0;
-  if (isOnDuty && lastLog) {
-    const elapsedMs = Math.max(0, currentTime.getTime() - new Date(lastLog.timestamp).getTime());
-    activeElapsedHours = elapsedMs / (1000 * 60 * 60);
+  if (openSince) {
+    const from = Math.max(openSince.getTime(), startOfToday.getTime());
+    activeElapsedHours = Math.max(0, currentTime.getTime() - from) / (1000 * 60 * 60);
   }
 
   const netDayHours = totalCompletedHours + activeElapsedHours;
@@ -703,7 +708,7 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
               </div>
               <div className="td-stats">
                 <div><b>{formatDurationText(netDayHours)}</b><span>Worked today</span></div>
-                <div><b>{shortTime(firstClockIn?.timestamp)}</b><span>Checked in</span></div>
+                <div><b>{openFromEarlierDay ? openSince.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : shortTime(firstClockIn?.timestamp)}</b><span>{openFromEarlierDay ? 'Checked in (not checked out)' : 'Checked in'}</span></div>
                 <div><b>{isOnDuty ? '—' : shortTime(lastClockOut?.timestamp)}</b><span>Checked out</span></div>
               </div>
             </section>

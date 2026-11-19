@@ -4,6 +4,10 @@
 const { config } = require('../config/env');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Models to try, in order. When Google reports one busy (503) or it hangs, the next one is tried.
+// (gemini-flash-latest now points at a retired model for this key, so it is not used.)
+const GEMINI_MODELS = () => [...new Set([config.GEMINI_MODEL, 'gemini-3.5-flash', 'gemini-3-flash-preview', 'gemini-3.8-flash', 'gemini-3.5-flash-lite'].filter(Boolean))];
 const aiOn = () => Boolean(config.GEMINI_ENABLED && (config.GEMINI_API_KEY || process.env.GEMINI_API_KEY));
 
 /** parts: [{ text }] or data URLs ("data:audio/wav;base64,…") → parsed JSON, or null when the AI is unavailable */
@@ -16,7 +20,8 @@ async function askJson(prompt, dataUrls = [], { timeoutMs = 60000 } = {}) {
     contents: [{ parts: [{ text: prompt }, ...files] }],
     generationConfig: { responseMimeType: 'application/json', temperature: 0 },
   });
-  const models = [...new Set([config.GEMINI_MODEL, 'gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-flash-latest'].filter(Boolean))];
+  const models = GEMINI_MODELS();
+  const perTry = Math.max(20000, Math.round(timeoutMs / 3)); // one slow model must not use the whole wait
   const deadline = Date.now() + timeoutMs;
   for (let round = 0; round < 2; round++) {
     for (const model of models) {
@@ -24,7 +29,7 @@ async function askJson(prompt, dataUrls = [], { timeoutMs = 60000 } = {}) {
       if (left < 3000) return null;
       try {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: AbortSignal.timeout(Math.min(45000, left)),
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: AbortSignal.timeout(Math.min(perTry, left)),
         });
         if (!res.ok) {
           console.warn(`AI (${model}) HTTP ${res.status}: ${(await res.text()).replace(/\s+/g, ' ').slice(0, 160)}`);
@@ -44,4 +49,4 @@ async function askJson(prompt, dataUrls = [], { timeoutMs = 60000 } = {}) {
   return null;
 }
 
-module.exports = { askJson, aiOn };
+module.exports = { askJson, aiOn, GEMINI_MODELS };

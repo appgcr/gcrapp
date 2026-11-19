@@ -3,6 +3,7 @@ import React from 'react';
 import { User, Building, ChevronDown, ChevronRight, Lock } from 'lucide-react';
 
 export default function Step1CaseSetup({
+  top = null, // route choice + "Tell customer": scrolls with the form instead of staying pinned
   clientName,
   setClientName,
   clientFatherName,
@@ -39,6 +40,7 @@ export default function Step1CaseSetup({
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+      {top}
       <div style={{ marginBottom: '16px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '8px' }}>
           Client Name

@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import toast from 'react-hot-toast';
-import { FileUp, Camera, Loader2, FileText, CheckCircle2, RefreshCw, ArrowRight, Eye } from 'lucide-react';
+import { FileUp, Camera, Loader2, FileText, CheckCircle2, RefreshCw, ArrowRight, Eye, Plus, Trash2 } from 'lucide-react';
 import { API_BASE_URL } from '../../../config/api';
 import { authHeaders } from '../../Shared/authHeaders';
 import { uploadDocumentFile, resolveDocUrl, formatMB } from '../../../utils/docFiles';
@@ -49,7 +49,7 @@ export function sheetMissing(s) {
   return m;
 }
 
-export default function OfficeSheetStep({ sheet, setSheet, sheetFile, setSheetFile, locked = {}, onNext, onPreview }) {
+export default function OfficeSheetStep({ sheet, setSheet, sheetFiles = [], setSheetFiles, locked = {}, onNext, onPreview }) {
   const fileRef = useRef(null);
   const camRef = useRef(null);
   const [busy, setBusy] = useState('');
@@ -57,18 +57,20 @@ export default function OfficeSheetStep({ sheet, setSheet, sheetFile, setSheetFi
   const set = (k, v) => setSheet((prev) => ({ ...EMPTY_SHEET, ...prev, [k]: v }));
   const setSide = (group, side, v) => setSheet((prev) => ({ ...EMPTY_SHEET, ...prev, [group]: { ...EMPTY_SHEET[group], ...(prev?.[group] || {}), [side]: v } }));
 
-  const read = async (file) => {
-    if (!file) return;
-    if (file.size > 25 * 1024 * 1024) { toast.error('This file is over 25 MB. Please upload a smaller copy.'); return; }
-    setBusy('Uploading the sheet…');
+  // One or more pages of the sheet (photos, PDF, Word): uploaded, then read together as one sheet
+  const meta = (file, url) => {
+    const isPdf = /pdf/i.test(file.type) || /\.pdf$/i.test(file.name);
+    const isWord = /\.docx?$/i.test(file.name) || /word/i.test(file.type);
+    return { id: `sheet_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, name: file.name, url, isPdf, isWord, size: file.size,
+      sizeFormatted: file.size < 1024 * 1024 ? `${Math.max(1, Math.round(file.size / 1024))} KB` : formatMB(file.size),
+      extension: (file.name.split('.').pop() || '').toUpperCase(), uploadedAt: new Date().toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }) };
+  };
+  const readAll = async (list) => {
+    if (!list.length) return;
+    setBusy(list.length > 1 ? `Mahe AI is reading the ${list.length} pages…` : 'Mahe AI is reading the sheet…');
     try {
-      const url = await uploadDocumentFile(file);
-      const isPdf = /pdf/i.test(file.type) || /\.pdf$/i.test(file.name);
-      const isWord = /\.docx?$/i.test(file.name) || /word/i.test(file.type);
-      setSheetFile({ id: `sheet_${Date.now()}`, name: file.name, url, isPdf, isWord, size: file.size, sizeFormatted: file.size < 1024 * 1024 ? `${Math.max(1, Math.round(file.size / 1024))} KB` : formatMB(file.size),
-        extension: (file.name.split('.').pop() || '').toUpperCase(), uploadedAt: new Date().toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }) });
-      setBusy('Mahe AI is reading the sheet…');
-      const r = await fetch(`${API_BASE_URL}/api/extract/office-sheet`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ url, name: file.name }) });
+      const r = await fetch(`${API_BASE_URL}/api/extract/office-sheet`, { method: 'POST', headers: authHeaders(),
+        body: JSON.stringify({ files: list.map((f) => ({ url: f.url, name: f.name })) }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || 'The sheet could not be read. Type the details below.');
       // Keep anything the engineer already typed; fill the rest from the sheet
@@ -88,9 +90,27 @@ export default function OfficeSheetStep({ sheet, setSheet, sheetFile, setSheetFi
       toast.error(err.message, { duration: 6000 });
     } finally { setBusy(''); }
   };
+  const add = async (fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    const big = files.find((f) => f.size > 25 * 1024 * 1024);
+    if (big) { toast.error(`${big.name} is over 25 MB. Please upload a smaller copy.`); return; }
+    if (sheetFiles.length + files.length > 10) { toast.error('Up to 10 pages for one sheet.'); return; }
+    setBusy(files.length > 1 ? `Uploading ${files.length} files…` : 'Uploading the sheet…');
+    let added = [];
+    try {
+      added = await Promise.all(files.map(async (f) => meta(f, await uploadDocumentFile(f))));
+    } catch (err) {
+      setBusy(''); toast.error(err.message || 'Upload failed. Please try again.'); return;
+    }
+    const list = [...sheetFiles, ...added];
+    setSheetFiles(list);
+    await readAll(list);
+  };
+  const remove = (id) => setSheetFiles(sheetFiles.filter((f) => f.id !== id));
 
   const next = () => {
-    if (!sheetFile) { toast.error('Please upload the filled office sheet first.'); return; }
+    if (!sheetFiles.length) { toast.error('Please upload the filled office sheet first.'); return; }
     const missing = sheetMissing(s);
     if (missing.length) {
       toast.error(<ListMessage title={`Fill ${missing.length === 1 ? 'this' : `these ${missing.length}`} to continue`} items={missing} />, { id: 'sheet-missing', duration: 7000 });
@@ -104,25 +124,34 @@ export default function OfficeSheetStep({ sheet, setSheet, sheetFile, setSheetFi
 
   return (
     <div className="os">
-      <input ref={fileRef} type="file" hidden accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; read(f); }} />
-      <input ref={camRef} type="file" hidden accept="image/*" capture="environment" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; read(f); }} />
+      <input ref={fileRef} type="file" hidden multiple accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*" onChange={(e) => { const fs = Array.from(e.target.files || []); e.target.value = ''; add(fs); }} />
+      <input ref={camRef} type="file" hidden accept="image/*" capture="environment" onChange={(e) => { const fs = Array.from(e.target.files || []); e.target.value = ''; add(fs); }} />
 
-      <div className={`os-up ${sheetFile ? 'done' : ''}`}>
+      <div className={`os-up ${sheetFiles.length ? 'done' : ''}`}>
         {busy ? (
           <div className="os-busy"><Loader2 size={20} className="spin" /> {busy}</div>
-        ) : sheetFile ? (
-          <div className="os-file">
-            <span className="os-ico">{sheetFile.isPdf || sheetFile.isWord ? <FileText size={20} /> : <CheckCircle2 size={20} />}</span>
-            <span className="os-fn"><b>{sheetFile.name}</b><small>{[sheetFile.extension, sheetFile.sizeFormatted].filter(Boolean).join(' · ')} · uploaded</small></span>
-            {!sheetFile.isWord && <button type="button" className="os-mini" onClick={() => onPreview && onPreview({ ...sheetFile, url: resolveDocUrl(sheetFile.url) })} aria-label="View sheet"><Eye size={16} /></button>}
-            <button type="button" className="os-mini" onClick={() => fileRef.current?.click()} aria-label="Upload again"><RefreshCw size={16} /></button>
-          </div>
+        ) : sheetFiles.length ? (
+          <>
+            {sheetFiles.map((f, i) => (
+              <div className="os-file" key={f.id || i}>
+                <span className="os-ico">{f.isPdf || f.isWord ? <FileText size={20} /> : <CheckCircle2 size={20} />}</span>
+                <span className="os-fn"><b>{sheetFiles.length > 1 ? `Page ${i + 1} · ` : ''}{f.name}</b><small>{[f.extension, f.sizeFormatted].filter(Boolean).join(' · ')} · uploaded</small></span>
+                {!f.isWord && <button type="button" className="os-mini" onClick={() => onPreview && onPreview({ ...f, url: resolveDocUrl(f.url) })} aria-label={`View ${f.name}`}><Eye size={16} /></button>}
+                <button type="button" className="os-mini" onClick={() => remove(f.id)} aria-label={`Remove ${f.name}`}><Trash2 size={16} /></button>
+              </div>
+            ))}
+            <div className="os-more">
+              <button type="button" onClick={() => fileRef.current?.click()}><Plus size={15} /> Add page / file</button>
+              <button type="button" onClick={() => camRef.current?.click()}><Camera size={15} /> Photo</button>
+              <button type="button" onClick={() => readAll(sheetFiles)}><RefreshCw size={15} /> Read again</button>
+            </div>
+          </>
         ) : (
           <>
             <div className="os-up-t">Upload the filled office sheet</div>
-            <div className="os-up-s">GOURU VALUATION – OFFICE sheet: Word (.docx), PDF or a clear photo. Mahe AI fills the details below.</div>
+            <div className="os-up-s">GOURU VALUATION – OFFICE sheet: Word (.docx), PDF or clear photos — choose all the pages together. Mahe AI fills the details below.</div>
             <div className="os-up-b">
-              <button type="button" onClick={() => fileRef.current?.click()}><FileUp size={17} /> Choose file</button>
+              <button type="button" onClick={() => fileRef.current?.click()}><FileUp size={17} /> Choose files</button>
               <button type="button" onClick={() => camRef.current?.click()}><Camera size={17} /> Take photo</button>
             </div>
           </>
@@ -232,6 +261,10 @@ export default function OfficeSheetStep({ sheet, setSheet, sheetFile, setSheetFi
         .os-up-b { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
         .os-up-b button { flex: 1; min-width: 130px; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 11px; border-radius: 11px; border: 0; background: #2563eb; color: #fff; font-weight: 800; font-size: 14px; cursor: pointer; font-family: inherit; }
         .os-up-b button + button { background: #fff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+        .os-up.done .os-file + .os-file { margin-top: 8px; padding-top: 8px; border-top: 1px solid #dcfce7; }
+        .os-more { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+        .os-more button { flex: 1; min-width: 96px; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 9px 8px; border-radius: 10px; border: 1px solid #bbf7d0; background: #fff; color: #15803d; font-weight: 700; font-size: 13px; cursor: pointer; font-family: inherit; }
+        body.dark-theme .os-more button { background: #1c1c1e; border-color: #2f4f3a; color: #4ade80; }
         .os-busy { display: flex; align-items: center; gap: 10px; font-weight: 700; color: #1d4ed8; padding: 6px 2px; }
         .os-file { display: flex; align-items: center; gap: 10px; }
         .os-ico { width: 38px; height: 38px; border-radius: 10px; background: #dcfce7; color: #16a34a; display: grid; place-items: center; flex-shrink: 0; }

@@ -312,7 +312,7 @@ export default function CaseCreationModal({
   useEffect(() => {
     if (!isOpen && modalStep === 0) return;
     fetch(`${API_BASE_URL}/api/branches`).then((r) => (r.ok ? r.json() : [])).then((list) => {
-      const mine = Array.isArray(list) ? (list.find((b) => b.id === currentUser?.branchId) || list[0]) : null;
+      const mine = Array.isArray(list) ? list.find((b) => b.id === currentUser?.branchId) : null; // only this engineer's branch
       setBypassAllowed(!!(mine && mine.sheetBypass));
     }).catch(() => {});
   }, [isOpen, modalStep === 0]);
@@ -618,8 +618,9 @@ export default function CaseCreationModal({
   const sheetMode = bypassAllowed && propertyDetails.entryMode === 'sheet';
   const sheet = propertyDetails.sheet || EMPTY_SHEET;
   const setSheet = (fn) => setPropertyDetails(prev => ({ ...prev, sheet: typeof fn === 'function' ? fn(prev.sheet || EMPTY_SHEET) : fn }));
-  const sheetFile = (uploadedDocs.officeSheet || [])[0] || null;
-  const setSheetFile = (f) => setUploadedDocs(prev => ({ ...prev, officeSheet: f ? [f] : [] }));
+  const sheetFiles = uploadedDocs.officeSheet || []; // every page / file of the office sheet
+  const sheetFile = sheetFiles[0] || null;
+  const setSheetFiles = (list) => setUploadedDocs(prev => ({ ...prev, officeSheet: Array.isArray(list) ? list : [] }));
   const setEntryMode = (mode) => setPropertyDetails(prev => ({ ...prev, entryMode: mode }));
   const finishSheet = (s) => {
     setPropertyDetails(prev => sheetToCase(s, prev));
@@ -1841,8 +1842,24 @@ export default function CaseCreationModal({
               />
             )}
 
-            {/* Office sheet route: offered when the Super Admin has switched it on for this branch */}
-            {modalStep === 1 && bypassAllowed && (
+            {modalStep === 8 && (
+              <OfficeSheetStep
+                sheet={sheet}
+                setSheet={setSheet}
+                sheetFiles={sheetFiles}
+                setSheetFiles={setSheetFiles}
+                locked={lockedFields}
+                onNext={finishSheet}
+                onPreview={(f) => setPreviewImage(f)}
+              />
+            )}
+
+            {/* STEP 1: Case Setup */}
+            {modalStep === 1 && (
+              <Step1CaseSetup
+                top={<>
+                  {/* Office sheet route: offered when the Super Admin has switched it on for this branch */}
+                  {bypassAllowed && (
               <div className="ems">
                 <div className="ems-t">How will you fill this case?</div>
                 <div className="ems-row">
@@ -1865,24 +1882,9 @@ export default function CaseCreationModal({
                   body.dark-theme .ems-row button { background: #1c1c1e; border-color: #3a3a3c; } body.dark-theme .ems-row button b { color: #fff; }
                 `}</style>
               </div>
-            )}
-
-            {modalStep === 8 && (
-              <OfficeSheetStep
-                sheet={sheet}
-                setSheet={setSheet}
-                sheetFile={sheetFile}
-                setSheetFile={setSheetFile}
-                locked={lockedFields}
-                onNext={finishSheet}
-                onPreview={(f) => setPreviewImage(f)}
-              />
-            )}
-
-            {/* STEP 1: Case Setup */}
-            {modalStep === 1 && editingCaseId && <div style={{ marginTop: -6, marginBottom: 10 }}><TellCustomer caseId={editingCaseId} /></div>}
-            {modalStep === 1 && (
-              <Step1CaseSetup
+                  )}
+                  {editingCaseId && <div style={{ marginBottom: 12 }}><TellCustomer caseId={editingCaseId} /></div>}
+                </>}
                 propertyTypes={propertyTypes}
                 propertyType={propertyDetails.propertyType || ''}
                 setPropertyType={(v) => setPropertyDetails(prev => ({ ...prev, propertyType: v }))}

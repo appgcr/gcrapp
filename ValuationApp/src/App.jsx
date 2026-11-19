@@ -132,6 +132,14 @@ export default function App() {
     fetch(`${API_BASE_URL}/api/users/${encodeURIComponent(currentUser.id)}/activity`, { method: 'POST', headers }).catch(() => {});
   }, [currentUser?.id]);
 
+  // A new sign-in (or a different person) starts on the home tab, not the last person's tab
+  const lastUserRef = useRef(currentUser?.id || null);
+  useEffect(() => {
+    const id = currentUser?.id || null;
+    if (id && lastUserRef.current !== id) { setActiveTab('forms'); setSelectedCaseId(null); }
+    lastUserRef.current = id;
+  }, [currentUser?.id]);
+
   // Tapping a push notification opens the related case (engineer app)
   useEffect(() => {
     const open = (e) => {

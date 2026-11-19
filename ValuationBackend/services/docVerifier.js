@@ -162,7 +162,7 @@ async function readWithAI(dataUrlOrList, expectedName) {
     .map((u) => /^data:([^;]+);base64,(.*)$/s.exec(String(u || ''))).filter(Boolean);
   if (!items.length) return null;
   // Main model first, then newer / lighter ones when Google reports it is busy
-  const models = [...new Set([config.GEMINI_MODEL, 'gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-flash-latest'].filter(Boolean))];
+  const models = require('./aiJson').GEMINI_MODELS();
   const bytes = items.reduce((n, m) => n + Math.round(m[2].length * 0.75), 0);
   const timeout = Math.max(config.GEMINI_TIMEOUT_MS || 60000, bytes > 1e6 ? 150000 : 90000); // big scanned deeds need longer
   let fileParts;
@@ -185,7 +185,7 @@ async function readWithAI(dataUrlOrList, expectedName) {
       if (left < 5000) return null;
       try {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: AbortSignal.timeout(Math.min(timeout, left)),
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: AbortSignal.timeout(Math.min(timeout, left, bytes > 1e6 ? 70000 : 45000)), // a busy model hands over to the next
         });
         if (!res.ok) {
           console.warn(`Document AI (${model}) HTTP ${res.status}: ${(await res.text()).replace(/\s+/g, ' ').slice(0, 160)}`);

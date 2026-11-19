@@ -760,11 +760,17 @@ router.post('/office-sheet', async (req, res) => {
   try {
     if (!['ENGINEER', 'ADMIN', 'SUPER_ADMIN'].includes(req.user?.role)) return res.status(403).json({ error: 'Not available for this login.' });
     const { bytesOf } = require('../services/annexure');
-    const got = await bytesOf(req.body?.file || req.body?.url || '');
-    if (!got || !got.bytes.length) return res.status(400).json({ error: 'Please choose the filled office sheet (Word, PDF or photo).' });
-    const { readOfficeSheet } = require('../services/officeSheet');
-    const r = await readOfficeSheet({ bytes: got.bytes, type: got.type || '', name: String(req.body?.name || got.name || '') });
-    res.json(r);
+    // { files: [{ url | file, name }] } for several pages, or the older single { file | url, name }
+    const items = Array.isArray(req.body?.files) && req.body.files.length
+      ? req.body.files.slice(0, 10) : [{ url: req.body?.file || req.body?.url || '', name: req.body?.name }];
+    const files = [];
+    for (const it of items) {
+      const got = await bytesOf(it?.file || it?.url || '');
+      if (got && got.bytes.length) files.push({ bytes: got.bytes, type: got.type || '', name: String(it?.name || got.name || '') });
+    }
+    if (!files.length) return res.status(400).json({ error: 'Please choose the filled office sheet (Word, PDF or photo).' });
+    const { readOfficeSheetFiles } = require('../services/officeSheet');
+    res.json(await readOfficeSheetFiles(files));
   } catch (err) {
     res.status(422).json({ error: err.message || 'The sheet could not be read.' });
   }
@@ -1069,7 +1075,7 @@ async function inspectWithGeminiVision(base64Data, mimeType = 'image/jpeg', docT
   if (!config.GEMINI_ENABLED) return null;
   const apiKey = config.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
-  const models = [...new Set([config.GEMINI_MODEL, 'gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-flash-latest'].filter(Boolean))];
+  const models = require('../services/aiJson').GEMINI_MODELS();
 
   const prompt = `You are an expert Indian civil engineering panel valuer inspecting legal documents for SBI property valuation.
 Analyze this ${docType} document and extract key valuation metadata.
