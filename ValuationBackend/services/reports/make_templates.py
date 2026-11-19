@@ -827,6 +827,8 @@ def main(args):
         formats[name](doc)
         mark_signatures(doc)
         engineer_initials(doc)
+        from bank_logo import add_logo
+        add_logo(doc, bank)  # banks whose sample had no logo (APGB, Canara, Union, CBI, UCO, BoM)
         doc.save(out)
         print('built', out)
 
