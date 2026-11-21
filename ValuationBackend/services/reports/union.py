@@ -245,7 +245,7 @@ def build_apartment(case, temps, bank=None):
         'localBodyLine': f'{lb}, {dotted(district)} Dist.',
         'declBackground': (f'{cents_txt(uds)} Cents of freehold land belonging to the client. The land bearing At Residential '
                            f'Flat In “{apt}” Residential  Apartments ' + (f'({status}), ' if status else '') + loc),
-        'declBuilding': f'Residential Flat on the said land. Built up area : {num(re.sub(r"[^\d.]", "", f["plinthLine"])):.2f} Sqft ',
+        'declBuilding': 'Residential Flat on the said land. Built up area : ' + f'{num(re.sub(r"[^0-9.]", "", f["plinthLine"])):.2f}' + ' Sqft ',
         'declPurpose': f'For collateral security. Manager, UNION BANK OF INDIA, {f["bankBranchUpper"]}, {dotted(district)}. (DT).',
         'declDates1': f'Date of appointment: {f["inspectionDate"]}, ',
         'declDates2': f'Valuation date: {f["reportDate"]} ', 'declDates3': f'Date of report: {f["reportDate"]}.',
