@@ -1417,8 +1417,9 @@ router.post('/:id/report-preview', authenticateToken, async (req, res) => {
     if (py.status !== 0 || !fs.existsSync(docxPath)) {
       const noFormat = require('../services/reportFormatCheck').fromGeneratorError(py.stderr);
       if (noFormat) return res.status(422).json({ error: noFormat, code: 'NO_FORMAT' });
-      console.error('Report preview failed:', py.stderr ? py.stderr.toString().slice(-800) : '');
-      return res.status(500).json({ error: 'Could not prepare the report preview.' });
+      const errDetail = (py.stderr ? py.stderr.toString() : '') || (py.error ? py.error.message : '') || `Process exited with status ${py.status}`;
+      console.error('Report preview failed:', errDetail.slice(-800));
+      return res.status(500).json({ error: 'Could not prepare the report preview.', detail: errDetail.slice(-800) });
     }
     const buf = fs.readFileSync(docxPath);
     try { fs.unlinkSync(docxPath); } catch (_) {}

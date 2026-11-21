@@ -41,21 +41,37 @@ export default function LoginScreen({ onLogin }) {
     if (!username.trim() || !password || busy) return;
     setError('');
     setBusy('password');
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username.trim(), password }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (response.ok && data.success) return finish(data);
-      fail(response.status === 429 ? 'Too many attempts. Please wait a minute and try again.' : (data.error || 'Incorrect username or password.'));
-      setPassword('');
-      passwordRef.current?.focus();
-    } catch {
-      fail('Can’t reach the server. Check your internet connection and try again.');
-    } finally {
-      setBusy(null);
+
+    const MAX_TRIES = 3;
+    for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
+      if (attempt === 2) setError('Server is waking up — please wait a moment…');
+      if (attempt === 3) setError('Still connecting to server…');
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: username.trim(), password }),
+          signal: AbortSignal.timeout(60000),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (response.ok && data.success) {
+          setError('');
+          setBusy(null);
+          return finish(data);
+        }
+        setBusy(null);
+        fail(response.status === 429 ? 'Too many attempts. Please wait a minute and try again.' : (data.error || 'Incorrect username or password.'));
+        setPassword('');
+        passwordRef.current?.focus();
+        return;
+      } catch (err) {
+        if (attempt === MAX_TRIES) {
+          setBusy(null);
+          fail('Can’t reach the server. Check your internet connection and try again.');
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 2000));
+      }
     }
   };
 
