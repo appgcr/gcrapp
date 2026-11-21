@@ -102,6 +102,19 @@ router.get('/', authenticateToken, async (req, res) => {
         { assignedEngineerName: req.query.engineerId }
       ] });
     }
+    // ?view=summary: just what a list needs (engineer phones on weak signal), not every full case
+    if (req.query.view === 'summary') {
+      const rows = await ValuationCase.find({ $and: parts }).sort({ createdAt: -1 })
+        .select('id fileNumber clientName bankName bankBranch branchId status assignedEngineerId assignedEngineerName createdAt updatedAt approvedAt selfFiled propertyDetails.propertyType')
+        .lean();
+      return res.json(rows);
+    }
+    // ?view=list: everything except the heavy images (photos / selfie / signature); a case opened
+    // on its own still loads them
+    if (req.query.view === 'list') {
+      const rows = await ValuationCase.find({ $and: parts }).sort({ createdAt: -1 }).select('-sitePhotos -siteSelfie -signatureDataUrl');
+      return res.json(rows);
+    }
     const cases = await ValuationCase.find({ $and: parts }).sort({ createdAt: -1 });
     res.json(cases);
   } catch (err) {

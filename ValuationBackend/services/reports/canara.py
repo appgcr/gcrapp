@@ -122,7 +122,7 @@ def build_house(case, temps):
         'assessmentNo': pd.get('assessmentNo') or '---',
         'taxAmountLine': f"Rs {inr(num(rep.get('taxAmount')))}/-" if rep.get('taxAmount') else '---',
         'taxPaidName': f'{f["owner1Name"]}, ',
-        'engineerInitials': rep.get('engineerInitials') or case.get('assignedEngineerName') or ' ',
+        'engineerInitials': apgb.engineer_initials(case),
         'briefDescription': rep.get('briefDescription') or f'The Residential Building With R.C.C. Roof, R.C.C. Framed Structure {postal}',
     })
     for side in ('North', 'South', 'East', 'West'):

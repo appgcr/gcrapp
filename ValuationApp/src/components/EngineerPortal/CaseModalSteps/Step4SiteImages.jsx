@@ -188,32 +188,10 @@ export default function Step4SiteImages({
               playsInline 
               style={{ width: '100%', height: '100%', objectFit: 'cover', transform: selfieCamera ? 'scaleX(-1)' : undefined }}
             />
-            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-              <div style={{ backgroundColor: 'rgba(0,0,0,0.6)', padding: '6px 14px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Camera size={16} color="#fff" />
-                <span style={{ color: '#fff', fontSize: '13px', fontWeight: '600' }}>Live Camera View</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => siteImageFileInputRef.current?.click()}
-                style={{
-                  backgroundColor: '#ffffff',
-                  color: '#0052cc',
-                  border: 'none',
-                  padding: '8px 18px',
-                  borderRadius: '24px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  fontSize: '13px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.35)'
-                }}
-              >
-                <UploadCloud size={16} color="#0052cc" />
-                <span>Or Upload From Device</span>
-              </button>
+            {/* Small label in the corner so nothing covers what the camera is pointing at */}
+            <div style={{ position: 'absolute', top: 10, left: 10, backgroundColor: 'rgba(0,0,0,0.55)', padding: '5px 12px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Camera size={14} color="#fff" />
+              <span style={{ color: '#fff', fontSize: '12px', fontWeight: '600' }}>{selfieCamera ? 'Front camera · live' : 'Live camera'}</span>
             </div>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: 'auto' }}>
@@ -223,11 +201,12 @@ export default function Step4SiteImages({
               onClick={captureDocument}
               style={{ width: '100%', padding: '14px', fontSize: '15px' }}
             >
-              <Camera size={20} /> Capture Photo {siteImages.length + 1}
+              <Camera size={20} /> {selfieCamera ? 'Take selfie' : `Capture Photo ${siteImages.length + 1}`}
             </button>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button type="button" className="btn-secondary" style={{ flex: 1, padding: '10px' }} onClick={stopCamera}>Cancel</button>
-              <button
+              {/* The selfie proves the engineer is at the site: live camera only, no upload */}
+              {!selfieCamera && <button
                 type="button"
                 className="btn-secondary"
                 onClick={() => siteImageFileInputRef.current?.click()}
@@ -245,7 +224,7 @@ export default function Step4SiteImages({
                 }}
               >
                 <UploadCloud size={16} /> Upload Photo(s)
-              </button>
+              </button>}
             </div>
           </div>
         </div>

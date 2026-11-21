@@ -341,7 +341,9 @@ export function sheetToCase(s, prev = {}) {
   // Village / area for the report's address line: the first part of the detail address that isn't a number
   const addrParts = String(s.address || '').split(/,|\n/).map((x) => x.trim()).filter(Boolean);
   const placeParts = addrParts.filter((x) => !/^(d\.?\s*no|door|h\.?\s*no|plot|flat|sy|s\.?\s*no)\b/i.test(x) && !/^\d[\d\s/-]*$/.test(x));
-  const village = (placeParts[0] || '').replace(/\s*\d{6}$/, '').trim();
+  // "…, Akkayapalli Village Field At …" → Akkayapalli: the word(s) written before "Village"
+  const named = /([A-Za-z][A-Za-z.\s]{1,40}?)\s+village\b/i.exec(String(s.address || ''));
+  const village = (named ? named[1].split(',').pop() : (placeParts[0] || '')).replace(/\s*\d{6}$/, '').trim();
   return {
     ...prev,
     entryMode: 'sheet',

@@ -153,6 +153,12 @@ function parseExtentToSqYardsScaled(extentInput) {
   } else if (unitStr.includes('ankanam') || unitStr.includes('అంకణము')) {
     // 1 Ankanam = 8 Sq. Yards
     return rawScaled * 8n;
+  } else if (/sq\.?\s*m|sqm|square\s*met|\bm2\b|చ\.మీ/.test(unitStr)) {
+    // 1 Sq. Metre = 1.19599 Sq. Yards
+    return (rawScaled * 119599n + 50000n) / 100000n;
+  } else if (/acre|ఎకరా/.test(unitStr)) {
+    // 1 Acre = 4840 Sq. Yards
+    return rawScaled * 4840n;
   }
   return rawScaled;
 }

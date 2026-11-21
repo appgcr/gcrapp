@@ -109,7 +109,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
 
   const fetchData = () => {
     Promise.all([
-      fetch(`${API_BASE_URL}/api/cases`).then(res => res.json()),
+      fetch(`${API_BASE_URL}/api/cases?view=list`).then(res => res.json()), // no photos in the list
       fetch(`${API_BASE_URL}/api/users`).then(res => res.json()),
       fetch(`${API_BASE_URL}/api/config`).then(res => res.json()).catch(() => null)
     ]).then(([casesData, usersData, configData]) => {

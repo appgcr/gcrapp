@@ -106,6 +106,7 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
   const [logTab, setLogTab] = useState('TODAY'); // 'TODAY' | 'ALL'
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsFailed, setLogsFailed] = useState(false); // attendance could not be loaded (no internet / server down)
+  const [statusKnown, setStatusKnown] = useState(false); // first attendance answer arrived (or failed)
 
   // Live 12-hour Digital Clock
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -199,7 +200,7 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
   const fetchCaseSummaries = async () => {
     try {
       setCaseStats(prev => ({ ...prev, loading: true }));
-      const res = await fetch(`${API_BASE_URL}/api/cases`);
+      const res = await fetch(`${API_BASE_URL}/api/cases?view=summary`);
       if (res.ok) {
         const data = await res.json();
         const casesArr = Array.isArray(data) ? data : (data.cases || []);
@@ -271,6 +272,7 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
       setLogsFailed(true);
     } finally {
       setLogsLoading(false);
+      setStatusKnown(true);
     }
   };
 
@@ -709,7 +711,9 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
                   <div className="td-date">{currentTime.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
                   <div className="td-clock">{timeParts[0]}<small>{(timeParts[1] || '').toUpperCase()}</small></div>
                 </div>
-                {logsFailed && !allLogs.length
+                {!statusKnown
+                  ? <span className="td-pill off"><i />Checking…</span>
+                  : logsFailed && !allLogs.length
                   ? <span className="td-pill off"><i />Not loaded</span>
                   : <span className={`td-pill ${isOnDuty ? 'on' : 'off'}`}><i />{isOnDuty ? 'On duty' : 'Off duty'}</span>}
               </div>
@@ -723,8 +727,10 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
               </div>
             </section>
 
-            {/* One clear action */}
-            {isOnDuty ? (
+            {/* One clear action (not offered until today's status is known, so nobody checks in twice) */}
+            {!statusKnown ? (
+              <button className="td-action in" disabled><Loader2 size={20} className="animate-spin" /> Checking your status…</button>
+            ) : isOnDuty ? (
               <button className="td-action out" onClick={() => handleOpenScanner('Clock-Out')} disabled={!canClockOut || isSubmitting}>
                 {isSubmitting ? <Loader2 size={20} className="animate-spin" /> : <LogOut size={20} />} Check Out
               </button>

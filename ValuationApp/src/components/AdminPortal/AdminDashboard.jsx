@@ -125,7 +125,7 @@ export default function AdminDashboard({ onNavigate }) {
     const fetchDashboardData = async () => {
       try {
         const [casesRes, usersRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/cases`),
+          fetch(`${API_BASE_URL}/api/cases?view=summary`), // counts and the latest list only
           fetch(`${API_BASE_URL}/api/users`)
         ]);
         const cases = await casesRes.json();

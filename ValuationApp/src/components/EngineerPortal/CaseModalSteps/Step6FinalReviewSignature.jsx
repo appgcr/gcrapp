@@ -385,11 +385,12 @@ export default function Step6FinalReviewSignature({
           if (missingDocs.length) { toast.error('Upload the missing documents first.'); return; }
           if (!savedSignature) { toast.error('Sign in the box above first.'); return; }
           if (!applySignature) { toast.error('Tick “Apply my digital signature” to sign this report.'); return; }
+          if (!termsAccepted) { toast.error('Tick the declaration (“I have thoroughly reviewed…”) to continue.'); return; }
           setSignatureDataUrl(savedSignature);
           // Preview the finished bank report with the signature; submit from the preview
           if (onReviewReport) onReviewReport(savedSignature); else setShowSubmitModal(true);
         }} 
-        disabled={missingDocs.length > 0 || !termsAccepted || !savedSignature || !applySignature}
+        aria-disabled={missingDocs.length > 0 || !termsAccepted || !savedSignature || !applySignature}
         style={{ opacity: (missingDocs.length > 0 || !termsAccepted || !savedSignature || !applySignature) ? 0.5 : 1, marginTop: 'auto' }}
         data-testid="preview-submit"
       >

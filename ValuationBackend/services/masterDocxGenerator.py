@@ -403,8 +403,8 @@ def _exact_bank_format(case_data, output_path):
     # Letterhead initials of the engineers on this case (the bank samples printed their own, e.g. "VIJAY & AR")
     fields = job.setdefault("fields", {})
     if not str(fields.get("engineerInitials") or "").strip():
-        rep = ((case_data.get("propertyDetails") or {}).get("report") or {})
-        fields["engineerInitials"] = rep.get("engineerInitials") or case_data.get("assignedEngineerName") or " "
+        from apgb import engineer_initials
+        fields["engineerInitials"] = engineer_initials(case_data)
     job_path = output_path + ".job.json"
     branch = _branch_for_job(case_data, output_path)
     if branch:

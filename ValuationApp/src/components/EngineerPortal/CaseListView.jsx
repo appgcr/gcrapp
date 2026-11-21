@@ -29,7 +29,7 @@ export default function CaseListView({ onOpenCase, currentUser }) {
 
   useEffect(() => {
     setLoadState((st) => (st === 'ok' ? 'ok' : 'loading'));
-    fetch(`${API_BASE_URL}/api/cases`)
+    fetch(`${API_BASE_URL}/api/cases?view=summary`)
       .then(async (res) => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
       .then(data => {
         const casesArr = Array.isArray(data) ? data : (data.cases || []);

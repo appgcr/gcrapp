@@ -995,6 +995,14 @@ BUILDERS = {'house': build_house, 'apartment': build_apartment, 'open_site': bui
 TEMPLATES = {name: f'apgb_{name}.docx' for name in BUILDERS}
 
 
+def engineer_initials(case):
+    """Letterhead initials: what the office sheet says ("SMN & SYS"), else the report field, else the engineer."""
+    pd = case.get('propertyDetails') or {}
+    rep = pd.get('report') or {}
+    sheet = pd.get('sheet') or {}
+    return (rep.get('engineerInitials') or sheet.get('engineerNames') or case.get('assignedEngineerName') or ' ').strip() or ' '
+
+
 def format_for(case):
     t = ((case.get('propertyDetails') or {}).get('propertyType') or '').lower()
     if 'apartment' in t or 'flat' in t:
