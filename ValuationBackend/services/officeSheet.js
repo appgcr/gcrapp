@@ -262,7 +262,8 @@ const PROMPT = `This is a filled "GOURU VALUATION - OFFICE" property valuation d
 Read it and answer ONLY with JSON with these keys (use "" when not written; copy numbers and names exactly as written):
 The writing may have spelling mistakes: read what was meant (e.g. "Hose" = House, "granit" = Granite, "Mortage" = Mortgage), but copy names, numbers and boundaries exactly as written.
 {"dealType": "Mortgage" or "Purchase" (Purchase when an Applicant (buyer) and a separate owner are written, or Purchase is ticked),
- "ownerName","ownerAddress","applicantName","applicantAddress","bank","engineerNames","inspectionDate","deedNo","deedDate","surveyNo","doorNo","wardNo","plotNo","address",
+ "ownerName","ownerRelation" (the S/o, W/o or D/o written with the owner's name, e.g. "W/o Sri A. Vishwanath Reddy" — never leave it out),"ownerAddress",
+ "applicantName","applicantRelation" (S/o, W/o or D/o of the applicant),"applicantAddress","bank","engineerNames","inspectionDate","deedNo","deedDate","surveyNo","doorNo","wardNo","plotNo","address",
  "extentDocument","extentPlan","measurements":{"east","west","north","south"},"boundaries":{"east","west","north","south"},"netExtentPlan","roadAffectedArea",
  "baNumber","baDate","floorsArea","guidelineRate" (unit rate per sq.yd),"assessmentNo","taxAmount","taxName",
  "propertyType": one of "Independent House","Open Site","Apartment","Open Agriculture Land","Industrial Unit" (the ticked / circled one),

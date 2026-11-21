@@ -21,7 +21,7 @@ async function askJson(prompt, dataUrls = [], { timeoutMs = 60000 } = {}) {
     generationConfig: { responseMimeType: 'application/json', temperature: 0 },
   });
   const models = GEMINI_MODELS();
-  const perTry = Math.max(20000, Math.round(timeoutMs / 3)); // one slow model must not use the whole wait
+  const perTry = Math.max(50000, Math.round(timeoutMs * 0.6)); // plenty of time for multimodal PDF/image parsing
   const deadline = Date.now() + timeoutMs;
   for (let round = 0; round < 2; round++) {
     for (const model of models) {
@@ -33,7 +33,7 @@ async function askJson(prompt, dataUrls = [], { timeoutMs = 60000 } = {}) {
         });
         if (!res.ok) {
           console.warn(`AI (${model}) HTTP ${res.status}: ${(await res.text()).replace(/\s+/g, ' ').slice(0, 160)}`);
-          if (res.status === 400 || res.status === 401 || res.status === 403) return null;
+          if (res.status === 401 || res.status === 403) return null;
           continue;
         }
         const data = await res.json();
