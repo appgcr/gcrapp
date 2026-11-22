@@ -24,7 +24,7 @@ export default function Step4SiteImages({
 }) {
   const { labels, missing, busy: labelling } = usePhotoLabels(siteImages, propertyType);
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', overscrollBehavior: 'contain' }}>
       <input
         ref={siteImageFileInputRef}
         type="file"

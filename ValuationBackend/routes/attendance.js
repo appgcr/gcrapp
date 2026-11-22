@@ -16,8 +16,9 @@ async function visibleUserIds(req) {
   if (req.user.role === 'ENGINEER') return [req.user.id];
   const b = branchScope(req);
   if (!b && isSuper(req.user)) return null; // no limit
-  const people = await User.find({ branchId: b }).select('id').lean();
-  return people.map((p) => p.id);
+  const people = await User.find({ branchId: b }).select('id username').lean();
+  // Older check-ins may be filed under the login name; include it so they still show
+  return people.flatMap((p) => [p.id, p.username].filter(Boolean));
 }
 
 // Helper: Format date into 12-hour AM/PM format
@@ -103,22 +104,22 @@ router.get('/week-summary', authenticateToken, async (req, res) => {
     // Days present = days with at least one check-in
     const presentDays = new Set(rows.filter((r) => r.attendanceType === 'Clock-In').map((r) => istParts(new Date(r.timestamp)).ymd));
 
-    // Hours = finished sessions this week + the session still running (counted from the start of the week)
+    // Hours = sessions that started this week (finished, plus the one still running), so hours
+    // always match "days present". A shift begun last week counts in last week.
     let hours = rows.filter((r) => r.attendanceType === 'Clock-Out').reduce((sum, r) => sum + (r.workDurationHours || 0), 0);
     const lastDuty = await Attendance.findOne({ userId, attendanceType: { $in: ['Clock-In', 'Clock-Out'] } }).sort({ timestamp: -1 }).lean();
     if (lastDuty?.attendanceType === 'Clock-In') {
       // A check-in never checked out counts at most one long shift (16 h), not every hour since
       const start = new Date(lastDuty.timestamp).getTime();
-      const from = Math.max(start, weekStart.getTime());
       const until = Math.min(now.getTime(), start + OPEN_SHIFT_CAP_MS);
-      hours += Math.max(0, until - from) / 3600000;
+      if (start >= weekStart.getTime()) hours += Math.max(0, until - start) / 3600000;
     }
-    // A Clock-Out this week whose Clock-In was last week: count only this week's part
+    // A Clock-Out this week whose Clock-In was last week belongs to last week
     const firstOut = rows.find((r) => r.attendanceType === 'Clock-Out');
     if (firstOut && !rows.some((r) => r.attendanceType === 'Clock-In' && r.timestamp < firstOut.timestamp)) {
-      const thisWeekPart = (new Date(firstOut.timestamp).getTime() - weekStart.getTime()) / 3600000;
-      hours -= Math.max(0, (firstOut.workDurationHours || 0) - thisWeekPart);
+      hours -= firstOut.workDurationHours || 0;
     }
+    hours = Math.max(0, hours);
 
     // Reports: every submission this week; site visits = first-time submissions (version 1)
     const subs = await ValuationCaseVersion.find({ submittedBy: userId, submittedAt: { $gte: weekStart } }).select('version').lean();
@@ -223,7 +224,8 @@ router.post('/', authenticateToken, async (req, res) => {
     if (payload.userId && payload.userId !== req.user.id && payload.userId !== req.user.username && !isSuper(req.user)) {
       return res.status(403).json({ error: 'You can only record your own attendance.' });
     }
-    if (!payload.userId) payload.userId = req.user.id;
+    // Always file it under the person's code (ENG-004), never the login name, so admins see it
+    if (!payload.userId || !isSuper(req.user) || payload.userId === req.user.username) payload.userId = req.user.id;
     let now = new Date(); // Server-side authoritative timestamp
     // Check-in / check-out made with no signal: the phone's time is kept if it is recent (≤ 12 h) and not in the future
     delete payload.offline;

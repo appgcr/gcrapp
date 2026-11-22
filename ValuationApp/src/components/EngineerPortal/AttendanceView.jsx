@@ -98,7 +98,9 @@ function resolveImageUrl(url) {
 export default function AttendanceView({ currentUser: initialUser, onOpenCase }) {
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('sbi_valuation_current_user_v3');
-    return saved ? JSON.parse(saved) : (initialUser || { id: 'ENG-001', name: 'Gouru Field Engineer' });
+    // The signed-in person from the app comes first; the saved copy is only a fallback
+    if (initialUser?.id) return initialUser;
+    try { return saved ? JSON.parse(saved) : (initialUser || {}); } catch { return initialUser || {}; }
   });
 
   // Top View Mode: 'MARK' | 'CALENDAR' | 'LOGS'
@@ -617,7 +619,7 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
 
     const newRecord = {
       id: 'ATT-' + Math.random().toString(36).substr(2, 9),
-      userId: currentUser?.id || 'ENG-001',
+      userId: currentUser?.id, // the server files it under the signed-in person
       name: currentUser?.name || 'Gouru Field Engineer',
       timestamp: now.toISOString(),
       formattedTime: formattedTime12,

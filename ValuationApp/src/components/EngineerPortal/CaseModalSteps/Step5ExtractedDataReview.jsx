@@ -49,7 +49,7 @@ export default function Step5ExtractedDataReview({
 
   // modalStep === 6: Extracted Data Review
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', overscrollBehavior: 'contain' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px', backgroundColor: 'var(--success-bg)', borderRadius: '8px', marginBottom: '24px', border: '1px solid #6ee7b7' }}>
         <CheckCircle2 size={20} color="#065f46" />
         <span style={{ fontSize: '14px', fontWeight: '600', color: '#065f46' }}>Data extracted successfully</span>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle2, AlertCircle, Pencil, ChevronRight, FileText, Receipt, IndianRupee, Compass, Building2, Sparkles } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Pencil, ChevronRight, FileText, Receipt, IndianRupee, Compass, Building2 } from 'lucide-react';
 import { toFieldValue, isBuiltProperty } from './caseModalHelpers';
 
 /**
@@ -116,7 +116,7 @@ export default function Step3CheckDetails({ propertyDetails = {}, setPropertyDet
             <text x="32" y="37" textAnchor="middle" fontSize="15" fontWeight="800" fill="currentColor">{found}/{rows.length}</text>
           </svg>
           <div className="c3-hero-text">
-            <span className="c3-kicker"><Sparkles size={13} /> Read by Mahe AI</span>
+            <span className="c3-kicker">Read by Mahe AI</span>
             <b>{missingRequired ? `${missingRequired} required detail${missingRequired > 1 ? 's' : ''} missing` : found === rows.length ? 'All details found' : 'Required details found'}</b>
             <span>{missingRequired ? 'Add them below — the rest is ready.' : 'Check them. Tap any detail to correct it.'}</span>
           </div>
@@ -152,7 +152,7 @@ export default function Step3CheckDetails({ propertyDetails = {}, setPropertyDet
 
       <style>{`
         .c3 { --c3-card: var(--bg-card, #fff); --c3-line: var(--border-color, #e7ebf1); --c3-text: #0f172a; --c3-sub: #64748b; --c3-ok: #16a34a; --c3-warn: #ea580c; --c3-accent: #2563eb; }
-        .c3-scroll { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 12px; display: flex; flex-direction: column; gap: 12px; }
+        .c3-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 12px; display: flex; flex-direction: column; gap: 12px; }
         .c3-scroll > * { flex-shrink: 0; }
         .c3-hero { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 18px; color: var(--c3-accent);
           background: linear-gradient(135deg, #eef4ff 0%, #f3fbf6 100%); border: 1px solid #dfe8f7; }
@@ -195,6 +195,17 @@ export default function Step3CheckDetails({ propertyDetails = {}, setPropertyDet
         .c3-foot { flex: none; padding: 10px 0 calc(env(safe-area-inset-bottom, 0px) + 4px); background: linear-gradient(to top, var(--bg-app, #f8fafc) 70%, transparent); }
         .c3-next { width: 100%; height: 52px; border: 0; border-radius: 14px; background: linear-gradient(135deg, #1e40af, #2563eb); color: #fff; font: inherit; font-size: 16px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; box-shadow: 0 6px 16px rgba(37,99,235,.28); }
         .c3-next:active { transform: scale(.99); }
+        body.dark-theme .c3 { --c3-text: #f1f5f9; --c3-sub: #94a3b8; --c3-accent: #64b5ff; --c3-ok: #34d399; --c3-warn: #fb923c; }
+        body.dark-theme .c3-hero { background: linear-gradient(135deg, rgba(37,99,235,.16), rgba(22,163,74,.12)); border-color: rgba(100,181,255,.25); }
+        body.dark-theme .c3-hero.warn { background: linear-gradient(135deg, rgba(234,88,12,.16), rgba(245,158,11,.10)); border-color: rgba(251,146,60,.3); }
+        body.dark-theme .c3-gicon { background: rgba(99,102,241,.18); color: #a5b4fc; }
+        body.dark-theme .c3-count { background: rgba(251,146,60,.16); }
+        body.dark-theme .c3-count.full { background: rgba(52,211,153,.16); }
+        body.dark-theme .c3-field input { background: #0f172a; border-color: #1d4ed8; }
+        body.dark-theme .c3-field.miss input { background: #1c130b; border-color: #c2410c; }
+        body.dark-theme .c3-compass .c3-field { background: rgba(255,255,255,.03); }
+        body.dark-theme .c3-compass .c3-field.miss { background: rgba(251,146,60,.08); border-color: rgba(251,146,60,.35); }
+        body.dark-theme .c3-field.empty .c3-fval, body.dark-theme .c3-field.empty .c3-ficon { color: #64748b; }
       `}</style>
     </div>
   );

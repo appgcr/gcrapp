@@ -28,9 +28,12 @@ function Card({ t, message }) {
   const emoji = typeof t.icon === 'string' ? t.icon : null;
   return (
     <div className={`gt-card gt-${t.type}`} onClick={close} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      <div className="gt-icon" style={{ background: k.bg, color: k.color }}>
-        {emoji ? <span style={{ fontSize: 18 }}>{emoji}</span> : <k.Icon size={20} strokeWidth={2.4} className={t.type === 'loading' ? 'gt-spin' : ''} />}
-      </div>
+      {/* List messages ("Fill these to continue") need no icon: the heading and red items say it */}
+      {!(React.isValidElement(t.message) && t.message.type === ListMessage) && (
+        <div className="gt-icon" style={{ background: k.bg, color: k.color }}>
+          {emoji ? <span style={{ fontSize: 18 }}>{emoji}</span> : <k.Icon size={20} strokeWidth={2.4} className={t.type === 'loading' ? 'gt-spin' : ''} />}
+        </div>
+      )}
       <div className="gt-body">{message}</div>
       {t.type !== 'loading' && (
         <button type="button" className="gt-x" aria-label="Close message" onClick={(e) => { e.stopPropagation(); close(); }}>

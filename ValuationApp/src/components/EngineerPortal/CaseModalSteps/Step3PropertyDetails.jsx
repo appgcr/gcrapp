@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Plus, X, ChevronRight } from 'lucide-react';
 import { FLOOR_LABELS, formatCurrency, formatArea, isBuiltProperty, toFieldValue } from './caseModalHelpers';
 import BankReportDetails, { isApgb } from './BankReportDetails';
 import LandRateCard, { landRateField } from './LandRateCard';
 import VoiceFill from './VoiceFill';
 import { useBanks, matchBank } from '../../../utils/banks';
+import { plotFromRoads } from '../caseValidationHelpers';
 
 export default function Step3PropertyDetails({
   propertyDetails = {},
@@ -27,6 +28,15 @@ export default function Step3PropertyDetails({
   const bankRec = matchBank(banks, bankName);
   const hasOwnFormat = bankRec ? bankRec.format && bankRec.format !== 'standard' : isApgb(bankName);
   const built = isBuiltProperty(propertyDetails.propertyType || '');
+  // Plot type follows the road sides written in the boundaries, unless the engineer picked one
+  const autoRaw = plotFromRoads(propertyDetails);
+  const autoPlot = autoRaw && (plotTypes.find(pt => pt.toLowerCase() === autoRaw.toLowerCase()) || autoRaw);
+  useEffect(() => {
+    if (autoPlot && !propertyDetails.plotTypeManual && autoPlot !== propertyDetails.plotType) {
+      setPropertyDetails(prev => ({ ...prev, plotType: autoPlot }));
+    }
+  }, [autoPlot, propertyDetails.plotType, propertyDetails.plotTypeManual]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const markEdited = (key) => setManuallyModifiedFields && setManuallyModifiedFields(prev => new Set(prev).add(key));
   // One tap: the site matches the documents
   const docBounds = propertyDetails.boundariesDoc || {};
@@ -50,7 +60,7 @@ export default function Step3PropertyDetails({
     setPropertyDetails({ ...propertyDetails, siteValue: { ...sv, plinthArea: planAreas.plinthArea || sv.plinthArea || '', floors } });
   };
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', gap: '16px', paddingBottom: '16px' }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', overscrollBehavior: 'contain', gap: '16px', paddingBottom: '16px' }}>
       <style>{`
         .same-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
         .same-btn { border: 1px solid #bfdbfe; background: #eff6ff; color: #1d4ed8; font-size: 12px; font-weight: 700; padding: 6px 10px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
@@ -745,19 +755,23 @@ export default function Step3PropertyDetails({
       <div style={{ display: 'flex', gap: '12px' }}>
         <div style={{ flex: 1 }}>
           <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '4px' }}>
-            Plot Type <span style={{ color: '#ef4444' }}>*</span>
+            Plot Type {autoPlot && !propertyDetails.plotTypeManual
+              ? <span style={{ color: '#16a34a', fontWeight: 700 }}>· auto from road sides</span>
+              : <span style={{ color: '#ef4444' }}>*</span>}
             {renderFieldBadge && renderFieldBadge('plotType')}
           </label>
           <select
             value={toFieldValue(propertyDetails.plotType)}
             onChange={e => {
               setManuallyModifiedFields && setManuallyModifiedFields(prev => new Set(prev).add('plotType'));
-              setPropertyDetails({...propertyDetails, plotType: e.target.value});
+              setPropertyDetails({...propertyDetails, plotType: e.target.value, plotTypeManual: !!e.target.value && e.target.value !== autoPlot});
             }}
-            style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none', backgroundColor: 'white' }}
+            style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
           >
             <option value="">Select...</option>
-            {plotTypes.map(pt => (
+            {[...plotTypes, ...[autoPlot, propertyDetails.plotType].filter(v => v && !plotTypes.includes(v))]
+              .filter((v, i, a) => a.indexOf(v) === i)
+              .map(pt => (
               <option key={pt} value={pt}>{pt}</option>
             ))}
           </select>
@@ -777,7 +791,7 @@ export default function Step3PropertyDetails({
               setManuallyModifiedFields && setManuallyModifiedFields(prev => new Set(prev).add('roadType'));
               setPropertyDetails({...propertyDetails, roadType: e.target.value});
             }}
-            style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none', backgroundColor: 'white' }}
+            style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
           >
             <option value="">Select...</option>
             {roadTypes.map(rt => (
@@ -798,7 +812,7 @@ export default function Step3PropertyDetails({
               setManuallyModifiedFields && setManuallyModifiedFields(prev => new Set(prev).add('structureType'));
               setPropertyDetails({...propertyDetails, structureType: e.target.value});
             }}
-            style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none', backgroundColor: 'white' }}
+            style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
           >
             <option value="">Select...</option>
             {structureTypes.map(st => (
@@ -822,7 +836,7 @@ export default function Step3PropertyDetails({
             setManuallyModifiedFields && setManuallyModifiedFields(prev => new Set(prev).add('flooringType'));
             setPropertyDetails({...propertyDetails, flooringType: e.target.value});
           }}
-          style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none', backgroundColor: 'white' }}
+          style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '13px', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
         >
           <option value="">Select...</option>
           {flooringTypes.map(ft => (

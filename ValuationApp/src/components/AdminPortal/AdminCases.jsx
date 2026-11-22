@@ -564,7 +564,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
           <input
             ref={searchInputRef}
             type="search"
-            placeholder="Search client, case ID, bank or address"
+            placeholder="Search cases"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             aria-label="Search cases"

@@ -150,7 +150,7 @@ export default function SettingsView({ currentUser, handleLogout }) {
 
       {page === 'main' && (
         <>
-          <h1 className="ios-large-title" style={{ marginTop: 0 }}>Settings</h1>
+          <div style={{ height: 12 }} />
 
           {/* Profile (like the Apple ID row) */}
           <div className="ios-group">

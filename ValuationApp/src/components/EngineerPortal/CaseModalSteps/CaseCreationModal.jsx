@@ -53,7 +53,8 @@ import {
   handleExtractedDocMeta,
   applyExtractedMeta,
   mapSaleDeedToPropertyDetails,
-  sanitizePropertyDetails
+  sanitizePropertyDetails,
+  plotFromRoads
 } from '../caseValidationHelpers';
 
 export default function CaseCreationModal({
@@ -622,6 +623,15 @@ export default function CaseCreationModal({
   const sheetFile = sheetFiles[0] || null;
   const setSheetFiles = (list) => setUploadedDocs(prev => ({ ...prev, officeSheet: Array.isArray(list) ? list : [] }));
   const setEntryMode = (mode) => setPropertyDetails(prev => ({ ...prev, entryMode: mode }));
+
+  // While a case is open, keep the page behind it still (scrolling the form must not move the case list)
+  useEffect(() => {
+    if (!(modalStep > 0)) return undefined;
+    const root = document.documentElement;
+    const prev = root.style.overflow;
+    root.style.overflow = 'hidden';
+    return () => { root.style.overflow = prev; };
+  }, [modalStep > 0]);
   const finishSheet = (s) => {
     setPropertyDetails(prev => sheetToCase(s, prev));
     // The case is in the applicant's name (Purchase) or the owner's (Mortgage)
@@ -1211,7 +1221,7 @@ export default function CaseCreationModal({
     if (noSides.length) missing.push(noSides.length === 4 ? 'Boundaries (all 4)' : `Boundary ${noSides.join(', ')}`);
     if (!p.propertyType) missing.push('Category type');
     if (!String(p.roadWidth || '').trim()) missing.push('Road width');
-    if (!p.plotType) missing.push('Plot type');
+    if (!p.plotType && !plotFromRoads(p)) missing.push('Plot type');
     if (!p.roadType) missing.push('Road type');
     if (built) {
       if (String(p.buildingAge ?? '').trim() === '') missing.push('Age of building');
@@ -1880,6 +1890,7 @@ export default function CaseCreationModal({
                   .ems-row button.on { border-color: #2563eb; background: #eff6ff; box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
                   .ems-row button.on b { color: #1d4ed8; }
                   body.dark-theme .ems-row button { background: #1c1c1e; border-color: #3a3a3c; } body.dark-theme .ems-row button b { color: #fff; }
+                  body.dark-theme .ems-row button.on { background: rgba(10,132,255,.16); border-color: #0a84ff; box-shadow: 0 0 0 3px rgba(10,132,255,.22); } body.dark-theme .ems-row button.on b { color: #64b5ff; } body.dark-theme .ems-t { color: #aeaeb2; }
                 `}</style>
               </div>
                   )}

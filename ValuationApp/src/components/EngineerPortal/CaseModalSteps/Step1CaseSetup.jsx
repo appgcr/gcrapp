@@ -39,7 +39,7 @@ export default function Step1CaseSetup({
     : availableBanks.filter(b => b.toLowerCase().includes(bankName.toLowerCase())));
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', overscrollBehavior: 'contain' }}>
       {top}
       <div style={{ marginBottom: '16px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '8px' }}>
@@ -188,7 +188,7 @@ export default function Step1CaseSetup({
           data-testid="step1-property-type"
           value={propertyType}
           onChange={e => setPropertyType(e.target.value)}
-          style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '15px', backgroundColor: 'white' }}
+          style={{ width: '100%', padding: '14px 12px', borderRadius: '12px', border: '2px solid var(--border-color)', fontSize: '15px', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
         >
           <option value="">Select the report type…</option>
           {propertyTypes.map(pt => <option key={pt} value={pt}>{pt}</option>)}

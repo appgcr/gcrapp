@@ -1002,6 +1002,27 @@ const applyLocalMetaDirectly = (localMeta, setPropertyDetails, setClientName, ma
 };
 
 // ── Dedicated Local Sale Deed Autofill Mapper ──────────────────────────────────
+// Plot type from the sides that touch a road (same rule as the report, no entry needed):
+// 1 road side or 2 opposite sides → Intermediary; 2 sides meeting at a corner → Corner;
+// 3 sides → Double Corner; 4 sides → Island. Site (actual) boundaries first, else the deed's.
+const ROAD_SIDE = /\b(road|rd|street|st\.?|lane|rastha|rasta|highway|nh|main\s*road)\b(?!\s*(no|number)\b)/i;
+export const plotFromRoads = (pd = {}) => {
+  const sides = ['north', 'south', 'east', 'west'];
+  for (const src of [pd.boundariesActual || {}, pd.boundariesDoc || {}]) {
+    const texts = sides.map(sd => String(src[sd] || ''));
+    if (!texts.some(t => t.trim())) continue;
+    const roads = sides.filter((sd, i) => ROAD_SIDE.test(texts[i]));
+    if (!roads.length) return '';
+    if (roads.length === 1) return 'Intermediary Plot';
+    if (roads.length === 2) {
+      const k = roads.join(',');
+      return (k === 'north,south' || k === 'east,west') ? 'Intermediary Plot' : 'Corner Plot';
+    }
+    return roads.length === 3 ? 'Double Corner Plot' : 'Island Plot';
+  }
+  return '';
+};
+
 export const mapSaleDeedToPropertyDetails = (
   extractedData,
   setPropertyDetails,

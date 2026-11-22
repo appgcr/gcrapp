@@ -206,7 +206,11 @@ export default function PermissionsSetup({ currentUser, onDone, fromSettings = f
 
           <p className="pm-privacy">{currentUser?.role === 'ENGINEER'
             ? 'Your location is shared with the office 24/7, as you agreed. Photos are used only in your valuation reports.'
-            : 'Alerts are sent only for your branch’s cases, reports and reminders.'}</p>
+            : currentUser?.role === 'SUPER_ADMIN'
+              ? 'Alerts cover cases, reports and reminders from every branch.'
+              : currentUser?.role === 'BANK'
+                ? 'Alerts are sent only for your bank’s cases and reports.'
+                : 'Alerts are sent only for your branch’s cases, reports and reminders.'}</p>
 
           <button className="lg-primary" onClick={finish}>{allGranted || fromSettings ? 'Done' : 'Continue'}</button>
           {!allGranted && !fromSettings && <button className="lg-link pm-later" onClick={finish}>Set up later</button>}

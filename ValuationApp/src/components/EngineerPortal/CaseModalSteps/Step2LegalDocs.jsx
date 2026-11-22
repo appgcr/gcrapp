@@ -44,9 +44,9 @@ export default function Step2LegalDocs({
   nameLocked = false,
   onUseOwnerName
 }) {
-  const docBtn = { height: '34px', padding: '0 10px', borderRadius: '9px', backgroundColor: '#fff', border: '1px solid #cbd5e1', display: 'inline-flex', alignItems: 'center', gap: '5px', cursor: 'pointer', color: '#334155', fontSize: '12.5px', fontWeight: 700, boxShadow: '0 1px 2px rgba(0,0,0,0.05)', whiteSpace: 'nowrap' };
+  const docBtn = { height: '34px', padding: '0 10px', borderRadius: '9px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', display: 'inline-flex', alignItems: 'center', gap: '5px', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '12.5px', fontWeight: 700, boxShadow: '0 1px 2px rgba(0,0,0,0.05)', whiteSpace: 'nowrap' };
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', overscrollBehavior: 'contain' }}>
       <input 
         type="file" 
         ref={fileInputRef} 
@@ -60,7 +60,7 @@ export default function Step2LegalDocs({
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           <div style={{ padding: '10px 12px', backgroundColor: 'rgba(234, 179, 8, 0.08)', border: '1px solid #eab308', borderRadius: '10px', display: 'flex', gap: '8px', marginBottom: '14px', alignItems: 'flex-start' }}>
             <span style={{ fontSize: '12px', color: '#854d0e', lineHeight: '1.45' }}>
-              <strong>Strict Validation Active:</strong> Every upload is scanned by Mahe AI using OCR text analysis. PDFs, Word files and photos of any size are verified. Duplicate files are detected via content-hash — renaming a file will not bypass this. Irrelevant documents are rejected immediately. You can add multiple pages per document.
+              <strong>Mahe AI checks every upload.</strong> Photos, PDFs and Word files all work, and you can add several pages per document. A wrong document, or the same file uploaded twice (even renamed), is rejected straight away.
             </span>
           </div>
 
