@@ -82,6 +82,8 @@ router.get('/', authenticateToken, async (req, res) => {
 // GET /api/attendance/week-summary — this week (Monday → today, India time) for one engineer:
 // days present, hours worked, site visits done (first reports) and reports submitted (incl. corrections).
 // Engineers get their own; admins may pass ?userId= for someone they can see.
+const OPEN_SHIFT_CAP_MS = 16 * 3600000; // longest real shift; beyond this it is a missed check-out
+
 router.get('/week-summary', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.role === 'ENGINEER' ? req.user.id : (req.query.userId || req.user.id);
@@ -105,8 +107,11 @@ router.get('/week-summary', authenticateToken, async (req, res) => {
     let hours = rows.filter((r) => r.attendanceType === 'Clock-Out').reduce((sum, r) => sum + (r.workDurationHours || 0), 0);
     const lastDuty = await Attendance.findOne({ userId, attendanceType: { $in: ['Clock-In', 'Clock-Out'] } }).sort({ timestamp: -1 }).lean();
     if (lastDuty?.attendanceType === 'Clock-In') {
-      const from = Math.max(new Date(lastDuty.timestamp).getTime(), weekStart.getTime());
-      hours += Math.max(0, now.getTime() - from) / 3600000;
+      // A check-in never checked out counts at most one long shift (16 h), not every hour since
+      const start = new Date(lastDuty.timestamp).getTime();
+      const from = Math.max(start, weekStart.getTime());
+      const until = Math.min(now.getTime(), start + OPEN_SHIFT_CAP_MS);
+      hours += Math.max(0, until - from) / 3600000;
     }
     // A Clock-Out this week whose Clock-In was last week: count only this week's part
     const firstOut = rows.find((r) => r.attendanceType === 'Clock-Out');
@@ -281,7 +286,24 @@ router.post('/', authenticateToken, async (req, res) => {
     // Duty state = the latest Clock-In / Clock-Out ever (so a shift that runs past midnight still counts)
     const lastDuty = await Attendance.findOne({ userId: payload.userId, attendanceType: { $in: ['Clock-In', 'Clock-Out'] } })
       .sort({ timestamp: -1 }).lean();
-    const onDuty = lastDuty?.attendanceType === 'Clock-In';
+    let onDuty = lastDuty?.attendanceType === 'Clock-In';
+    // A check-in left open longer than one long shift is a missed check-out: close it at 16 h
+    // (marked for the admin) so the engineer can check in again and the hours stay sensible
+    if (onDuty && (type === 'Clock-In' || type === 'Clock-Out') && now.getTime() - new Date(lastDuty.timestamp).getTime() > OPEN_SHIFT_CAP_MS) {
+      const closeAt = new Date(new Date(lastDuty.timestamp).getTime() + OPEN_SHIFT_CAP_MS);
+      await Attendance.create({
+        id: `ATT-${Date.now()}-auto${Math.random().toString(36).substring(2, 6)}`,
+        userId: lastDuty.userId, name: lastDuty.name, timestamp: closeAt, attendanceType: 'Clock-Out',
+        lat: lastDuty.lat || '', lng: lastDuty.lng || '', address: lastDuty.address || '',
+        formattedTime: format12Hour(closeAt), formattedDate: formatDateString(closeAt),
+        workDurationHours: OPEN_SHIFT_CAP_MS / 3600000, workDurationFormatted: formatDuration(OPEN_SHIFT_CAP_MS / 3600000),
+        status: 'Verified', missedCheckOut: true,
+      });
+      onDuty = false;
+      if (type === 'Clock-Out') {
+        return res.json({ missedCheckOut: true, message: `Your check-in from ${formatDateString(new Date(lastDuty.timestamp))} had no check-out, so it was closed after 16 hours. Check in again when you start work.` });
+      }
+    }
 
     // A real position is required to check in or out (no "default branch" or blank locations)
     const lat = Number(payload.lat);

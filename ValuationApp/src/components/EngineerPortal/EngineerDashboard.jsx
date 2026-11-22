@@ -76,7 +76,7 @@ export default function EngineerDashboard({ currentUser, onOpenCase }) {
 
   const fetchCases = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/cases`);
+      const res = await fetch(`${API_BASE_URL}/api/cases?view=list`); // no photos needed here
       if (res.ok) {
         const data = await res.json();
         // Filter cases assigned to this user

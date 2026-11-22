@@ -7,6 +7,7 @@ import { FileText, Loader2, X, Plus, Building2, Undo2, Download, Pencil, Ban, Fi
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../../config/api';
 import { isSuperAdmin } from '../../utils/session';
+import { saveBlobToDevice } from '../../utils/fileDownload';
 
 if (typeof window !== 'undefined' && pdfjs && pdfjs.GlobalWorkerOptions) pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.mjs';
 
@@ -53,10 +54,7 @@ export default function AdminFees({ currentUser }) {
       const res = await fetch(`${API_BASE_URL}/api/billing/export.csv?${qs}`);
       if (!res.ok) throw new Error('Could not export.');
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob); const a = document.createElement('a');
-      a.href = url; a.download = `Gouru_Fees_${r.from || 'all'}_${r.to || 'today'}.csv`; document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 4000);
-      toast.success('Fees exported — opens in Excel');
+      await saveBlobToDevice(blob, `Gouru_Fees_${r.from || 'all'}_${r.to || 'today'}.csv`, { successMsg: 'Fees exported — opens in Excel' });
     } catch (e) { toast.error(e.message); }
   };
 
@@ -244,9 +242,7 @@ export function PdfSheet({ url, title, fileName, onClose }) {
   }, [url]);
   const name = fileName;
   const download = () => {
-    const url = URL.createObjectURL(blob); const a = document.createElement('a');
-    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    saveBlobToDevice(blob, name).catch(() => {});
   };
   return (
     <Sheet title={title} onClose={onClose}>

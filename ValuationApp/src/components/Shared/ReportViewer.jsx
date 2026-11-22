@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, Download, Loader2, FileWarning, RefreshCw } from 'lucide-react';
 import { renderAsync } from 'docx-preview';
 import toast from 'react-hot-toast';
+import { saveBlobToDevice } from '../../utils/fileDownload';
 
 /**
  * Shows the bank-format report (the .docx the server builds) inside the app — the same
@@ -75,17 +76,17 @@ export default function ReportViewer({ title = 'Valuation Report', subtitle, loa
     return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
   }, [onClose]);
 
-  const download = () => {
-    if (!blob) return;
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 4000);
-    toast.success('Report downloaded');
+  const [saving, setSaving] = useState(false);
+  const download = async () => {
+    if (!blob || saving) return;
+    setSaving(true);
+    try {
+      await saveBlobToDevice(blob, fileName);
+    } catch (_) {
+      // Toast already shown in saveBlobToDevice
+    } finally {
+      setSaving(false);
+    }
   };
 
   return createPortal(
@@ -103,8 +104,8 @@ export default function ReportViewer({ title = 'Valuation Report', subtitle, loa
             <button type="button" onClick={() => zoomBy(1.25)} aria-label="Zoom in">+</button>
           </div>
         )}
-        <button type="button" className="rv-dl" onClick={download} disabled={!blob}>
-          <Download size={16} /> <span>Word</span>
+        <button type="button" className="rv-dl" onClick={download} disabled={!blob || saving}>
+          {saving ? <Loader2 size={16} className="spin" /> : <Download size={16} />} <span>Word</span>
         </button>
       </header>
 

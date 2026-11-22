@@ -440,7 +440,10 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
   const lastLog = [...allLogs].filter(isDutyEvent).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0] || null;
   const lastAction = lastLog ? lastLog.attendanceType : null;
 
-  const isOnDuty = lastAction === 'Clock-In';
+  // A check-in left open over one long shift (16 h) is a missed check-out: the server closes it at
+  // 16 h when the engineer next checks in, so show it as off duty with a note
+  const staleOpen = lastAction === 'Clock-In' && lastLog && (currentTime.getTime() - new Date(lastLog.timestamp).getTime()) > 16 * 3600000;
+  const isOnDuty = lastAction === 'Clock-In' && !staleOpen;
   const canClockIn = !isOnDuty;
   const canClockOut = isOnDuty;
 
@@ -458,12 +461,14 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
   // A check-in left open from an earlier day counts only from today's midnight ("worked today"),
   // and the card shows the day it started so the engineer sees the missed check-out.
   const startOfToday = new Date(currentTime); startOfToday.setHours(0, 0, 0, 0);
-  const openSince = isOnDuty && lastLog ? new Date(lastLog.timestamp) : null;
+  const openSince = lastAction === 'Clock-In' && lastLog ? new Date(lastLog.timestamp) : null;
   const openFromEarlierDay = !!openSince && openSince < startOfToday;
   let activeElapsedHours = 0;
   if (openSince) {
+    // A missed check-out stops counting after one long shift (16 h)
     const from = Math.max(openSince.getTime(), startOfToday.getTime());
-    activeElapsedHours = Math.max(0, currentTime.getTime() - from) / (1000 * 60 * 60);
+    const until = Math.min(currentTime.getTime(), openSince.getTime() + 16 * 3600000);
+    activeElapsedHours = Math.max(0, until - from) / (1000 * 60 * 60);
   }
 
   const netDayHours = totalCompletedHours + activeElapsedHours;
@@ -738,6 +743,11 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
               <button className="td-action in" onClick={() => handleOpenScanner('Clock-In')} disabled={!canClockIn || isBlocked || isSubmitting}>
                 {isSubmitting ? <Loader2 size={20} className="animate-spin" /> : <LogIn size={20} />} Check In
               </button>
+            )}
+            {staleOpen && !logsFailed && (
+              <p className="td-hint" style={{ color: '#b45309' }}>
+                You didn’t check out on {new Date(lastLog.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}. That shift is closed after 16 hours and shown to your admin. Check in when you start work.
+              </p>
             )}
             {logsFailed && (
               <p className="td-hint" style={{ color: '#b45309' }}>

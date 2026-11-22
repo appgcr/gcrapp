@@ -105,7 +105,7 @@ router.get('/', authenticateToken, async (req, res) => {
     // ?view=summary: just what a list needs (engineer phones on weak signal), not every full case
     if (req.query.view === 'summary') {
       const rows = await ValuationCase.find({ $and: parts }).sort({ createdAt: -1 })
-        .select('id fileNumber clientName bankName bankBranch branchId status assignedEngineerId assignedEngineerName createdAt updatedAt approvedAt selfFiled propertyDetails.propertyType')
+        .select('id fileNumber clientName bankName bankBranch branchId status assignedEngineerId assignedEngineerName createdAt updatedAt approvedAt selfFiled propertyDetails.propertyType propertyDetails.marketValueAmount valuation.realizableValue valuation.fairMarketValue')
         .lean();
       return res.json(rows);
     }

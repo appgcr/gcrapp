@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, Loader2, FileSpreadsheet } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../../config/api';
+import { saveBlobToDevice } from '../../utils/fileDownload';
 
 /** One month at a glance: work done, time taken, engineers, banks and money. */
 const inr = (n) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN');
@@ -17,7 +18,7 @@ export default function AdminMonthly() {
     fetch(`${API_BASE_URL}/api/insights/monthly?month=${month}`).then((r) => r.json()).then((x) => setD(x.work ? x : { error: x.error || 'Could not load.' })).catch(() => setD({ error: 'Could not load.' }));
   }, [month]);
 
-  const exportCsv = () => {
+  const exportCsv = async () => {
     if (!d || d.error) return;
     const q = (v) => { let t = v == null ? '' : String(v); if (typeof v === 'string' && /^[=+\-@\t\r]/.test(t)) t = `'${t}`; return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
     const rows = [
@@ -31,10 +32,7 @@ export default function AdminMonthly() {
       ...d.banks.map((b) => [b.bank, b.requests, b.approved, Math.round(b.value), b.billed, b.received]),
     ];
     const blob = new Blob(['﻿' + rows.map((r) => r.map(q).join(',')).join('\r\n')], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob); const a = document.createElement('a');
-    a.href = url; a.download = `Gouru_Monthly_${d.month}.csv`; document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 4000);
-    toast.success('Monthly report exported');
+    await saveBlobToDevice(blob, `Gouru_Monthly_${d.month}.csv`, { successMsg: 'Monthly report exported' });
   };
 
   return (

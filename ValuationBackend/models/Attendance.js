@@ -21,7 +21,8 @@ const attendanceSchema = new mongoose.Schema({
   faceMatchScore: { type: Number, default: 0 },
   livenessVerified: { type: Boolean, default: false },
   verifiedBy: { type: String, enum: ['Face', 'Fingerprint', ''], default: '' } , // how the check-in was confirmed
-  offline: { type: Boolean, default: false } // made with no signal; time is the phone's (≤ 12 h old)
+  offline: { type: Boolean, default: false }, // made with no signal; time is the phone's (≤ 12 h old)
+  missedCheckOut: { type: Boolean, default: false } // closed by the system: the engineer never checked out (16 h cap)
 });
 
 attendanceSchema.index({ userId: 1, timestamp: -1 });

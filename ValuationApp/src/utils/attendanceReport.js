@@ -128,6 +128,8 @@ export function buildRegister(people, records, range) {
 const periodLabel = (reg) => `${fmtDate(reg.from)} to ${fmtDate(reg.to)}`;
 const generatedLabel = () => `Generated ${fmtDate(new Date())} ${fmtClock(new Date())}`;
 
+import { saveBlobToDevice } from './fileDownload';
+
 const STATUS_FILL = {
   Present: 'FFDCF5E3', 'On duty': 'FFDCEBFF', Incomplete: 'FFFFF4CC', Absent: 'FFFDE2E1', 'Weekly off': 'FFF0F0F2',
 };
@@ -136,14 +138,7 @@ const STATUS_FONT = {
 };
 
 function download(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  saveBlobToDevice(blob, filename, { successMsg: `Downloaded ${filename}` }).catch(() => {});
 }
 
 /** Real Excel workbook: "Summary" + "Daily Register" sheets with styling. */
