@@ -469,9 +469,15 @@ export default function CaseDetailsView({ caseId }) {
             {caseData.requestDetails?.notes && <div style={{ marginTop: 8, fontSize: 13, color: '#334155' }}>Bank note: “{caseData.requestDetails.notes}”</div>}
           </div>
         )}
-        <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px' }}>Scanned Documents (5 Required)</h3>
+        {(() => {
+          // Office sheet cases: the filled sheet replaces the 5 documents (any that were added still show)
+          const sheetCase = propertyDetails?.entryMode === 'sheet';
+          return <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px' }}>{sheetCase ? 'Office Data Sheet' : 'Scanned Documents (5 Required)'}</h3>;
+        })()}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {REQUIRED_DOCS.map(reqDoc => {
+          {(propertyDetails?.entryMode === 'sheet'
+            ? [{ id: 'officeSheet', label: 'Office data sheet (filled at the office)' }, ...REQUIRED_DOCS.filter((d) => (documents?.[d.id] || []).length > 0)]
+            : REQUIRED_DOCS).map(reqDoc => {
             const uploadedPages = (documents && documents[reqDoc.id]) ? documents[reqDoc.id] : [];
             const isUploaded = uploadedPages.length > 0;
 

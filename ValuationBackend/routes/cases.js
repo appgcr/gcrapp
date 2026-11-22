@@ -731,13 +731,12 @@ router.get('/:id/report', authenticateToken, async (req, res) => {
       role: req.user?.role || ''
     });
 
-    if (activeArchiveRes.found) {
-      if (activeArchiveRes.corrupted) {
-        return res.status(422).json({
-          error: activeArchiveRes.error,
-          message: activeArchiveRes.message
-        });
-      }
+    if (activeArchiveRes.found && activeArchiveRes.corrupted) {
+      // Saved copy unusable (and could not be restored/rebuilt): build the report fresh below
+      // instead of showing an error to the engineer / admin / bank
+      console.warn(`Report archive unusable for Case #${caseItem.id} v${currentV}: ${activeArchiveRes.error} — building fresh`);
+    }
+    if (activeArchiveRes.found && !activeArchiveRes.corrupted) {
       res.setHeader('Content-Disposition', `inline; filename="${activeArchiveRes.filename}"`);
       res.setHeader('Content-Type', activeArchiveRes.mimeType);
       res.setHeader('X-Report-Sha256', activeArchiveRes.sha256);

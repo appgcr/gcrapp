@@ -405,6 +405,12 @@ def _exact_bank_format(case_data, output_path):
     if not str(fields.get("engineerInitials") or "").strip():
         from apgb import engineer_initials
         fields["engineerInitials"] = engineer_initials(case_data)
+    # Corner / intermittent plot worked out from the road sides (unless typed into the report by hand)
+    from apgb import plot_position
+    _rep = ((case_data.get("propertyDetails") or {}).get("report") or {})
+    _pos = plot_position(case_data)
+    if _pos and not str(_rep.get("cornerPlot") or "").strip():
+        fields["cornerPlot"] = _pos
     job_path = output_path + ".job.json"
     branch = _branch_for_job(case_data, output_path)
     if branch:

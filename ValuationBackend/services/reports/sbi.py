@@ -177,7 +177,7 @@ def build_house(case, temps, bank=None):
         'accessLine': rep.get('accessLine') or f'Yes, {rep.get("roadWidth") or "Above 20’0”  Wide CC Road"}',
         'taxName': (f"{rep['taxPaidName'].strip().rstrip(',')}, " if (rep.get('taxPaidName') or '').strip() else f['owner1NameLine']), 'taxLine': (f'Assessment No: {f["assessmentNo"]},  Rs {int(num(rep.get("taxAmount")))}/-'
                                                      if rep.get('taxAmount') else f'Assessment No: {f["assessmentNo"]}'),
-        'engineerInitials': rep.get('engineerInitials') or case.get('assignedEngineerName') or ' ',
+        'engineerInitials': apgb.engineer_initials(case),
         'floorsShort': floors, 'yearAgeLine': f' {f["yearOfConstruction"]} ({age} Y)',
         'residualLine': f' {max(life - age, 0)} Years (Total Life OfBuilding : {life} Y)', 'structure': 'RCC Framed Structure',
         'item1Head': 'As Per Deed (Item 1)/Plan' if i2 else 'As Per Deed/Plan', 'item2Head': 'As Per Deed (Item 2)/Plan' if i2 else 'As Per Actual',

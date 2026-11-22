@@ -8,6 +8,10 @@ const reportArchiveSchema = new mongoose.Schema({
   docxStoragePath: { type: String, required: true },
   pdfStoragePath: { type: String, required: true },
   manifestStoragePath: { type: String, default: null },
+  // Copies of the files in the database: the server's disk is wiped on every redeploy (Render),
+  // so the files are restored from here when missing. Not loaded unless asked for.
+  docxData: { type: Buffer, select: false },
+  pdfData: { type: Buffer, select: false },
 
   // Cryptographic checksums (SHA-256) and Digital Signature
   docxSha256: { type: String, required: true },

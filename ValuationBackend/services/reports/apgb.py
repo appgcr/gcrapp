@@ -1005,6 +1005,31 @@ BUILDERS = {'house': build_house, 'apartment': build_apartment, 'open_site': bui
 TEMPLATES = {name: f'apgb_{name}.docx' for name in BUILDERS}
 
 
+ROAD_SIDE = re.compile(r'\b(road|rd|street|st\.?|lane|rastha|rasta|highway|nh|main\s*road)\b(?!\s*(no|number)\b)', re.I)
+
+
+def plot_position(case):
+    """Corner / intermittent plot from the sides that touch a road (no entry needed):
+    1 road side → Intermittent Plot; 2 sides meeting at a corner (E&N, N&W, W&S, S&E) → Corner Plot;
+    2 opposite sides (E&W, N&S) → Intermittent Plot; 3 sides → Double Corner Plot; 4 sides → Island.
+    Uses the boundaries as found at the site, else the deed's. None when no road is written."""
+    pd = case.get('propertyDetails') or {}
+    sides = ('north', 'south', 'east', 'west')
+    for src in (pd.get('boundariesActual') or {}, pd.get('boundariesDoc') or {}):
+        texts = {sd: str(src.get(sd) or '') for sd in sides}
+        if not any(t.strip() for t in texts.values()):
+            continue
+        roads = {sd for sd, t in texts.items() if ROAD_SIDE.search(t)}
+        if not roads:
+            return None
+        if len(roads) == 1:
+            return 'Intermittent Plot'
+        if len(roads) == 2:
+            return 'Intermittent Plot' if roads in ({'east', 'west'}, {'north', 'south'}) else 'Corner Plot'
+        return 'Double Corner Plot' if len(roads) == 3 else 'Island'
+    return None
+
+
 def engineer_initials(case):
     """Letterhead initials: what the office sheet says ("SMN & SYS"), else the report field, else the engineer."""
     pd = case.get('propertyDetails') or {}

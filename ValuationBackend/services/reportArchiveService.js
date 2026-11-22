@@ -277,6 +277,9 @@ async function archiveCaseReport(caseData, version, submitterInfo = {}) {
       pdfSha256,
       digitalSignature,
       keyId,
+      // keep copies in the database (files on the server disk do not survive a redeploy);
+      // skipped if together they would be too big for one record
+      ...(docxBuffer.length + pdfBuffer.length < 14 * 1024 * 1024 ? { docxData: docxBuffer, pdfData: pdfBuffer } : {}),
       docxSizeBytes: docxBuffer.length,
       pdfSizeBytes: pdfBuffer.length,
       templateId: 'HOUSE_APGB_NEW_FORMAT',
@@ -349,7 +352,40 @@ async function getArchivedReport(caseId, version, format = 'pdf', actorInfo = {}
   const targetPath = isPdf ? archive.pdfStoragePath : archive.docxStoragePath;
   const expectedSha256 = isPdf ? archive.pdfSha256 : archive.docxSha256;
 
-  // 1. File existence check
+  // 1. File existence check — the server disk is wiped on each redeploy: restore the file from the
+  //    database copy, or (older archives with no copy) rebuild the report from the case once
+  if (!fs.existsSync(targetPath)) {
+    const withData = await ReportArchive.findById(archive._id).select('+docxData +pdfData').lean();
+    const saved = withData && (isPdf ? withData.pdfData : withData.docxData);
+    if (saved && saved.length) {
+      try {
+        fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+        const buf = Buffer.from(saved.buffer ? saved.buffer : saved);
+        fs.writeFileSync(targetPath, buf);
+        const other = isPdf ? withData.docxData : withData.pdfData;
+        const otherPath = isPdf ? archive.docxStoragePath : archive.pdfStoragePath;
+        if (other && !fs.existsSync(otherPath)) fs.writeFileSync(otherPath, Buffer.from(other.buffer ? other.buffer : other));
+      } catch (e) { console.warn('archive restore:', e.message); }
+    }
+    if (!fs.existsSync(targetPath) && !actorInfo._rebuilt) {
+      try {
+        const ValuationCase = require('../models/ValuationCase');
+        const c = await ValuationCase.findOne({ id: String(caseId) });
+        if (c) {
+          console.warn(`Archive file missing for Case #${caseId} v${vNum} (server disk reset) — rebuilding the report`);
+          // set the old record aside (kept as history), build a new one; put it back if that fails
+          await ReportArchive.updateOne({ _id: archive._id }, { $set: { version: -Math.abs(vNum) - Date.now() % 100000 * 1000 } });
+          try {
+            await archiveCaseReport(c.toObject(), vNum, { id: 'SYSTEM', username: 'archive-rebuild', name: 'Rebuilt after server restart', role: 'SYSTEM' });
+            return getArchivedReport(caseId, vNum, format, { ...actorInfo, _rebuilt: true });
+          } catch (e) {
+            await ReportArchive.updateOne({ _id: archive._id }, { $set: { version: vNum } });
+            throw e;
+          }
+        }
+      } catch (e) { console.warn(`Archive rebuild failed for Case #${caseId} v${vNum}:`, e.message); }
+    }
+  }
   if (!fs.existsSync(targetPath)) {
     archive.auditTrail.push({
       action: 'INTEGRITY_FAILED',
