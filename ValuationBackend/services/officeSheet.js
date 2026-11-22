@@ -331,7 +331,7 @@ async function readOfficeSheet({ bytes, type = '', name = '' }) {
     const tmp = path.join(os.tmpdir(), `sheet_${Date.now()}_${Math.random().toString(36).slice(2)}.docx`);
     fs.writeFileSync(tmp, bytes);
     try {
-      const r = spawnSync('python3', [path.join(__dirname, 'officeSheetReader.py'), tmp], { timeout: 30000, maxBuffer: 8 * 1024 * 1024 });
+      const r = await require('./runPython').runPython([path.join(__dirname, 'officeSheetReader.py'), tmp], { timeout: 30000 });
       if (r.status !== 0) throw new Error('This Word file could not be opened. Save it again as .docx and upload, or upload a PDF / photo of the sheet.');
       const { rows } = JSON.parse(r.stdout.toString('utf8'));
       if (!rows || !rows.some((row) => row[0] && /DEED NO|SURVEY NO|DOOR NO/i.test(row[0].text))) {

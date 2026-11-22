@@ -233,7 +233,7 @@ def _ssl_context():
 _SSL = None
 
 
-def _fetch(url, timeout=12):
+def _fetch(url, timeout=8):
     global _SSL
     if _SSL is None:
         _SSL = _ssl_context()
@@ -299,11 +299,21 @@ def site_map(lat, lng, zoom, w, h, temps):
     px, py = x * 256, y * 256
     left, top = int(px - w / 2), int(py - h / 2)
     canvas = Image.new('RGB', (w, h), (235, 235, 235))
-    for tx in range(left // 256, (left + w) // 256 + 1):
-        for ty in range(top // 256, (top + h) // 256 + 1):
+    # Fetch the tiles side by side (one by one took ~15 s on a fresh server with no tile cache)
+    from concurrent.futures import ThreadPoolExecutor
+    spots = [(tx, ty) for tx in range(left // 256, (left + w) // 256 + 1) for ty in range(top // 256, (top + h) // 256 + 1)]
+
+    def get(spot):
+        try:
+            return spot, _tile(zoom, spot[0] % n, spot[1])
+        except Exception:
+            return spot, None
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        for (tx, ty), raw in pool.map(get, spots):
+            if not raw:
+                continue
             try:
-                tile = Image.open(io.BytesIO(_tile(zoom, tx % n, ty)))
-                canvas.paste(tile, (tx * 256 - left, ty * 256 - top))
+                canvas.paste(Image.open(io.BytesIO(raw)), (tx * 256 - left, ty * 256 - top))
             except Exception:
                 pass
     d = ImageDraw.Draw(canvas)

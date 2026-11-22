@@ -185,7 +185,7 @@ async function archiveCaseReport(caseData, version, submitterInfo = {}) {
 
   try {
     const scriptPath = path.join(__dirname, 'masterDocxGenerator.py');
-    const pyResult = spawnSync('python3', [scriptPath, tempJsonPath, tempDocxPath]);
+    const pyResult = await require('./runPython').runPython([scriptPath, tempJsonPath, tempDocxPath], { timeout: 150000 });
     try { fs.unlinkSync(tempJsonPath); } catch (_) {}
 
     if (pyResult.status !== 0 || !fs.existsSync(tempDocxPath)) {

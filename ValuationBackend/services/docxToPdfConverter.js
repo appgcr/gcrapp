@@ -7,28 +7,24 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { spawnSync } = require('child_process');
+const { runPython } = require('./runPython'); // runs any command without freezing the server
 
-function getLibreOfficeCommand() {
+// Which converter is available, checked once (the check itself takes seconds)
+let loCache;
+async function getLibreOfficeCommand() {
+  if (loCache !== undefined) return loCache;
   const candidates = ['soffice', 'libreoffice', '/usr/bin/soffice', '/usr/bin/libreoffice'];
   for (const cmd of candidates) {
-    try {
-      const res = spawnSync(cmd, ['--version']);
-      if (res.status === 0 || (res.stdout && res.stdout.toString().includes('LibreOffice'))) {
-        return { type: 'native', bin: cmd };
-      }
-    } catch (_) {}
-  }
-
-  // Check if docker daemon is actively running to delegate conversion
-  try {
-    const dRes = spawnSync('docker', ['info'], { timeout: 1500 });
-    if (dRes.status === 0) {
-      return { type: 'docker', bin: 'docker' };
+    const res = await runPython(['--version'], { cmd, timeout: 20000 });
+    if (res.status === 0 || (res.stdout && res.stdout.toString().includes('LibreOffice'))) {
+      loCache = { type: 'native', bin: cmd };
+      return loCache;
     }
-  } catch (_) {}
-
-  return null;
+  }
+  // Check if docker daemon is actively running to delegate conversion
+  const dRes = await runPython(['info'], { cmd: 'docker', timeout: 3000 });
+  loCache = dRes.status === 0 ? { type: 'docker', bin: 'docker' } : null;
+  return loCache;
 }
 
 /**
@@ -42,7 +38,7 @@ async function convertDocxToPdf(inputDocxPath, targetPdfPath) {
     throw new Error(`Source DOCX file not found: ${inputDocxPath}`);
   }
 
-  const lo = getLibreOfficeCommand();
+  const lo = await getLibreOfficeCommand();
   if (!lo) {
     throw new Error('LibreOffice headless environment not detected. Please verify Docker container or install LibreOffice.');
   }
@@ -73,7 +69,7 @@ async function convertDocxToPdf(inputDocxPath, targetPdfPath) {
         tempWorkDir,
         tempDocxCopy
       ];
-      result = spawnSync(lo.bin, args, { timeout: 60000 });
+      result = await runPython(args, { cmd: lo.bin, timeout: 60000 });
     } else {
       // Running via backend Docker image delegation
       const dockerArgs = [
@@ -94,7 +90,7 @@ async function convertDocxToPdf(inputDocxPath, targetPdfPath) {
         '/work',
         '/work/document.docx'
       ];
-      result = spawnSync('docker', dockerArgs, { timeout: 90000 });
+      result = await runPython(dockerArgs, { cmd: 'docker', timeout: 90000 });
     }
 
     const convertedPdfInTemp = path.join(tempWorkDir, 'document.pdf');

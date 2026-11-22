@@ -17,7 +17,7 @@ async function applyBankReportValues(caseObj, valuation) {
   const file = path.join(os.tmpdir(), `values_${caseObj.id || 'x'}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.json`);
   try {
     fs.writeFileSync(file, JSON.stringify(data), 'utf-8');
-    const py = spawnSync('python3', [path.join(__dirname, 'reports', 'values.py'), file], { timeout: 30000 });
+    const py = await require('./runPython').runPython([path.join(__dirname, 'reports', 'values.py'), file], { timeout: 30000 });
     if (py.status !== 0) {
       console.warn('Bank report values:', py.stderr ? py.stderr.toString().slice(-300) : 'failed');
       return valuation;

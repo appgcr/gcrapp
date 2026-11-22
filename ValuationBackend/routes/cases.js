@@ -486,17 +486,21 @@ router.put('/:id', authenticateToken, async (req, res) => {
       );
 
       // Permanent Report Archival (Phase 3.5.4): Compile & archive original binaries upon submission
+      // (built in the background: the engineer's phone gets "submitted" straight away instead of
+      // waiting for the report + PDF — a slow build used to look like a failed submit)
       if (updated.bankName && updated.bankName.trim() && updated.bankStatus === 'Assigned') {
-        try {
-          await archiveCaseReport(updated.toObject(), currentV, {
-            id: req.user?.id || updated.assignedEngineerId,
-            username: req.user?.username || updated.assignedEngineerName,
-            name: req.user?.name || updated.assignedEngineerName,
-            role: req.user?.role || 'ENGINEER'
+        const snapshot = updated.toObject();
+        const who = {
+          id: req.user?.id || updated.assignedEngineerId,
+          username: req.user?.username || updated.assignedEngineerName,
+          name: req.user?.name || updated.assignedEngineerName,
+          role: req.user?.role || 'ENGINEER'
+        };
+        setImmediate(() => {
+          archiveCaseReport(snapshot, currentV, who).catch((archiveErr) => {
+            console.error(`⚠️ Report archival failed for Case #${snapshot.id} v${currentV}:`, archiveErr.message);
           });
-        } catch (archiveErr) {
-          console.error(`⚠️ Report archival failed for Case #${updated.id} v${currentV}:`, archiveErr.message);
-        }
+        });
       }
     } else if (updated.status === 'Approved') {
       // Mark current version as Approved in ValuationCaseVersion
@@ -786,7 +790,7 @@ router.get('/:id/report', authenticateToken, async (req, res) => {
     fs.writeFileSync(tempJsonPath, JSON.stringify(reportCaseData, null, 2), 'utf-8');
 
     const scriptPath = path.join(__dirname, '../services/masterDocxGenerator.py');
-    const pyResult = spawnSync('python3', [scriptPath, tempJsonPath, tempDocxPath]);
+    const pyResult = await require('../services/runPython').runPython([scriptPath, tempJsonPath, tempDocxPath], { timeout: 150000 });
     try { fs.unlinkSync(tempJsonPath); } catch (_) {}
 
     if (pyResult.status === 0 && fs.existsSync(tempDocxPath)) {
@@ -1412,7 +1416,7 @@ router.post('/:id/report-preview', authenticateToken, async (req, res) => {
     const jsonPath = path.join(os.tmpdir(), `preview_${stamp}.json`);
     const docxPath = path.join(os.tmpdir(), `preview_${stamp}.docx`);
     fs.writeFileSync(jsonPath, JSON.stringify(data), 'utf-8');
-    const py = spawnSync('python3', [path.join(__dirname, '../services/masterDocxGenerator.py'), jsonPath, docxPath], { timeout: 120000 });
+    const py = await require('../services/runPython').runPython([path.join(__dirname, '../services/masterDocxGenerator.py'), jsonPath, docxPath], { timeout: 150000 });
     try { fs.unlinkSync(jsonPath); } catch (_) {}
     if (py.status !== 0 || !fs.existsSync(docxPath)) {
       const noFormat = require('../services/reportFormatCheck').fromGeneratorError(py.stderr);

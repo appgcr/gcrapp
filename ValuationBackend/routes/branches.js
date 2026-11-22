@@ -188,7 +188,7 @@ router.post('/:id/letterhead/preview', authenticateToken, async (req, res) => {
   const jsonPath = path.join(os.tmpdir(), `${stamp}.json`);
   const docxPath = path.join(os.tmpdir(), `${stamp}.docx`);
   fs.writeFileSync(jsonPath, JSON.stringify(data));
-  const py = spawnSync('python3', [path.join(__dirname, '../services/masterDocxGenerator.py'), jsonPath, docxPath], { timeout: 120000 });
+  const py = await require('../services/runPython').runPython([path.join(__dirname, '../services/masterDocxGenerator.py'), jsonPath, docxPath], { timeout: 150000 });
   try {
     if (py.status !== 0 || !fs.existsSync(docxPath)) {
       return res.status(500).json({ error: 'Could not build the preview.', detail: String(py.stderr || '').slice(-400) });

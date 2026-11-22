@@ -122,7 +122,7 @@ async function reportFile(c, format = 'docx') {
     const jsonPath = path.join(os.tmpdir(), `share_${stamp}.json`);
     const docxPath = path.join(os.tmpdir(), `share_${stamp}.docx`);
     fs.writeFileSync(jsonPath, JSON.stringify(data), 'utf-8');
-    const r = spawnSync('python3', [path.join(__dirname, 'masterDocxGenerator.py'), jsonPath, docxPath], { timeout: 120000 });
+    const r = await require('./runPython').runPython([path.join(__dirname, 'masterDocxGenerator.py'), jsonPath, docxPath], { timeout: 150000 });
     try { fs.unlinkSync(jsonPath); } catch { /* ignore */ }
     if (r.status !== 0 || !fs.existsSync(docxPath)) return null;
     const buffer = fs.readFileSync(docxPath);
