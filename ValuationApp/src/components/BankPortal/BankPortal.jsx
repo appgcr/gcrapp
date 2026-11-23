@@ -10,7 +10,8 @@ import './BankPortal.css';
 import { PdfSheet } from '../AdminPortal/AdminFees';
 
 const STEPS = ['Received by Gouru', 'Engineer assigned', 'Site visit done', 'Under Gouru review', 'Report ready'];
-const EMPTY = { clientName: '', clientPhone: '', notes: '', bankBranch: '', documents: [] };
+const EMPTY = { clientName: '', clientPhone: '', notes: '', bankBranch: '', documents: [], inspectionDate: '', inspectionTime: '', engineerId: '' };
+const todayLocal = () => { const d = new Date(); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
 
 /** Bank employee's portal: send valuation requests to Gouru and follow them until the report is ready. */
@@ -217,6 +218,23 @@ export default function BankPortal({ currentUser, handleLogout }) {
                   </ul>
                 )}
               </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Schedule <small className="bp-opt">optional</small></legend>
+              <label>Inspection date<input type="date" min={todayLocal()} value={form.inspectionDate} onChange={set('inspectionDate')} /></label>
+              <label>Time<input type="time" value={form.inspectionTime} onChange={set('inspectionTime')} /></label>
+              <label className="bp-wide">Engineer
+                <select value={form.engineerId} onChange={set('engineerId')}>
+                  <option value="">Let Gouru choose</option>
+                  {(me?.engineers || []).map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+                </select>
+              </label>
+              <p className="bp-muted bp-wide" style={{ margin: 0 }}>
+                {form.engineerId
+                  ? `The request goes straight to ${(me?.engineers || []).find((e) => e.id === form.engineerId)?.name || 'this engineer'}${me?.gcrBranch?.name ? ` at Gouru ${me.gcrBranch.name}` : ''}.`
+                  : `${me?.gcrBranch?.name ? `Gouru ${me.gcrBranch.name}` : 'Gouru'} picks the engineer${(me?.engineers || []).length ? '' : ' (no engineers listed yet)'}.`}
+              </p>
             </fieldset>
 
             <fieldset>

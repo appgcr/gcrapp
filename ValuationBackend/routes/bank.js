@@ -8,10 +8,11 @@ const express = require('express');
 const router = express.Router();
 const ValuationCase = require('../models/ValuationCase');
 const Branch = require('../models/Branch');
+const User = require('../models/User');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { nextFileNumber } = require('../services/fileNumber');
 const { findBank, reportFormatFor } = require('../services/banks');
-const { notifyLater } = require('../services/notify');
+const { notifyLater, notifyCaseChange } = require('../services/notify');
 
 const onlyBank = [authenticateToken, requireRole('BANK')];
 const PROPERTY_TYPES = ['Open Site', 'Independent House', 'Apartment / Flat', 'Agricultural Land', 'Commercial Building', 'Industrial Unit'];
@@ -46,11 +47,18 @@ function view(c) {
   };
 }
 
+// Active engineers of the bank user's Gouru branch (names only), for the Schedule dropdown
+const branchEngineers = (branchId) => (branchId
+  ? User.find({ role: 'ENGINEER', branchId, status: { $ne: 'Inactive' } }).select('id name username').sort({ name: 1 }).lean()
+    .then((list) => list.map((e) => ({ id: e.id, name: e.name || e.username })))
+  : Promise.resolve([]));
+
 router.get('/me', onlyBank, async (req, res) => {
   const b = await Branch.findOne({ id: req.user.branchId }).select('id name code address phone').lean();
   res.json({
     name: req.user.name, phone: req.user.phone, email: req.user.email, designation: req.user.designation,
     bankName: req.user.bankName, bankBranch: req.user.bankBranch, gcrBranch: b, propertyTypes: PROPERTY_TYPES,
+    engineers: await branchEngineers(req.user.branchId),
   });
 });
 
@@ -72,6 +80,19 @@ router.post('/requests', onlyBank, async (req, res) => {
     if (clientName.length < 3) errors.push('customer name');
     if (!PHONE.test(clientPhone)) errors.push('customer’s 10-digit mobile number');
     if (errors.length) return res.status(400).json({ error: `Please fill: ${errors.join(', ')}.` });
+
+    // Schedule (optional): inspection date / time and an engineer from this Gouru branch
+    const inspectionDate = /^\d{4}-\d{2}-\d{2}$/.test(clean(b.inspectionDate, 10)) ? clean(b.inspectionDate, 10) : '';
+    const inspectionTime = /^\d{2}:\d{2}$/.test(clean(b.inspectionTime, 5)) ? clean(b.inspectionTime, 5) : '';
+    if (inspectionDate) {
+      const todayIst = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+      if (inspectionDate < todayIst) return res.status(400).json({ error: 'The inspection date can’t be in the past.' });
+    }
+    let engineer = null;
+    if (b.engineerId) {
+      engineer = (await branchEngineers(branch.id)).find((e) => e.id === b.engineerId);
+      if (!engineer) return res.status(400).json({ error: 'That engineer isn’t available. Please pick another, or let Gouru choose.' });
+    }
 
     // Documents the bank attached: only files this bank user uploaded (max 20)
     const fileStore = require('../services/fileStore');
@@ -103,7 +124,9 @@ router.post('/requests', onlyBank, async (req, res) => {
       branchId: branch.id,
       source: 'BANK',
       status: 'Pending',
-      assignedEngineerId: 'UNASSIGNED',
+      assignedEngineerId: engineer ? engineer.id : 'UNASSIGNED',
+      ...(engineer ? { assignedEngineerName: engineer.name } : {}),
+      inspectionDate, inspectionTime,
       clientName, clientPhone,
       clientFatherName: clean(b.clientFatherName, 120),
       address: clean(b.clientAddress, 400),
@@ -125,8 +148,10 @@ router.post('/requests', onlyBank, async (req, res) => {
       to: 'ADMIN', branchId: saved.branchId, type: 'case_created', caseId: saved.id,
       priority: saved.requestDetails.urgency === 'Urgent' ? 'urgent' : 'normal',
       title: `New request from ${bank.name}`,
-      message: `${saved.fileNumber} · ${clientName}${propertyType ? ` (${propertyType})` : ''}${bankDocs.length ? ` · ${bankDocs.length} document${bankDocs.length === 1 ? '' : 's'}` : ''} from ${u.name}, ${u.bankBranch || bank.name}. Assign an engineer.`,
+      message: `${saved.fileNumber} · ${clientName}${propertyType ? ` (${propertyType})` : ''}${bankDocs.length ? ` · ${bankDocs.length} document${bankDocs.length === 1 ? '' : 's'}` : ''} from ${u.name}, ${u.bankBranch || bank.name}.${inspectionDate ? ` Inspection ${inspectionDate}${inspectionTime ? ` ${inspectionTime}` : ''}.` : ''} ${engineer ? `Bank chose ${engineer.name}.` : 'Assign an engineer.'}`,
     });
+    // The bank picked the engineer → tell them straight away (same as an admin assignment)
+    if (engineer) notifyCaseChange({ assignedEngineerId: 'UNASSIGNED', status: '' }, saved.toObject());
     res.status(201).json(view(saved));
   } catch (err) {
     console.error('POST /api/bank/requests', err);
