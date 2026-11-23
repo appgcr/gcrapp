@@ -29,7 +29,7 @@ import Step3PropertyDetails from './Step3PropertyDetails';
 import Step3CheckDetails, { missingDocDetails } from './Step3CheckDetails';
 import { voiceToCase } from './voiceToCase';
 import CaseStepper, { stepIndex, SHEET_STEPS, sheetStepIndex } from './CaseStepper';
-import OfficeSheetStep, { EMPTY_SHEET, sheetToCase } from './OfficeSheetStep';
+import OfficeSheetStep, { EMPTY_SHEET, sheetToCase, sheetMissing } from './OfficeSheetStep';
 import AiReviewCall from './AiReviewCall';
 import Step4SiteImages from './Step4SiteImages';
 import Step5ExtractedDataReview from './Step5ExtractedDataReview';
@@ -653,10 +653,27 @@ export default function CaseCreationModal({
   useEffect(() => {
     if (!loadedAt || sheetInitDone.current === loadedAt || !editingCaseId || !initialSheet || !bypassAllowed) return;
     sheetInitDone.current = loadedAt;
-    if (Array.isArray(initialSheet.files) && initialSheet.files.length) setUploadedDocs((prev) => ({ ...prev, officeSheet: initialSheet.files }));
-    setPropertyDetails((prev) => ({ ...prev, entryMode: 'sheet', sheet: { ...EMPTY_SHEET, ...(prev.sheet || {}), ...(initialSheet.fields || {}) } }));
-    setModalStep(8);
+    const files = Array.isArray(initialSheet.files) ? initialSheet.files : [];
+    if (files.length) setUploadedDocs((prev) => ({ ...prev, officeSheet: files }));
+    const f = initialSheet.fields || {};
+    const s = { ...EMPTY_SHEET, ...f, measurements: { ...EMPTY_SHEET.measurements, ...(f.measurements || {}) }, boundaries: { ...EMPTY_SHEET.boundaries, ...(f.boundaries || {}) } };
+    const missing = files.length ? sheetMissing(s) : ['the office sheet'];
+    if (!missing.length) {
+      // Everything the report needs was read: straight on to the site photos (the sheet stays one tap away)
+      setPropertyDetails((prev) => sheetToCase(s, { ...prev, entryMode: 'sheet', sheet: s }));
+      const name = s.dealType === 'Purchase' ? s.applicantName : s.ownerName;
+      if (name && !lockedFields.clientName) setClientName(name);
+      const rel = s.dealType === 'Purchase' ? s.applicantRelation : s.ownerRelation;
+      if (rel) setClientFatherName((prev) => prev || rel);
+      setSheetReadCount(Object.entries(s).filter(([k, v]) => k !== 'corrections' && (typeof v === 'object' ? Object.values(v || {}).some((x) => String(x || '').trim()) : String(v || '').trim())).length);
+      setModalStep(4);
+    } else {
+      setPropertyDetails((prev) => ({ ...prev, entryMode: 'sheet', sheet: s }));
+      setModalStep(8);
+      if (files.length) toast(`Fill ${missing.length === 1 ? 'this' : `these ${missing.length}`} on the sheet, then go on to the photos: ${missing.join(', ')}`, { duration: 7000 });
+    }
   }, [loadedAt, editingCaseId, initialSheet, bypassAllowed]);
+  const [sheetReadCount, setSheetReadCount] = useState(0); // >0: the case skipped the sheet step (read in New Case)
 
   // Documents picked in the New Case sheet: open the Documents step and run each through the usual
   // Gouru AI checks, one document at a time (so the duplicate check sees the ones before it)
@@ -668,6 +685,19 @@ export default function CaseCreationModal({
     // Open the Documents step after each load while the picked files are still waiting
     if (docStepFor.current !== loadedAt && docQueueRef.current.length) { docStepFor.current = loadedAt; setModalStep(2); }
   }, [loadedAt, editingCaseId, initialDocFiles]);
+  // All 5 documents added in New Case and accepted by Gouru AI → on to Check (Docs is done)
+  const docsAdvanced = useRef(false);
+  useEffect(() => {
+    const q = docQueueRef.current;
+    if (!q || q.length || docsAdvanced.current || modalStep !== 2 || Object.values(scanningDocs).some(Boolean)) return;
+    docsAdvanced.current = true;
+    const allIn = REQUIRED_DOCS.every((d) => (uploadedDocs[d.id] || []).length > 0);
+    const noErrors = !Object.values(docErrors || {}).some(Boolean);
+    if (allIn && noErrors) {
+      setModalStep(3);
+      toast.success('All 5 documents passed. Check what Gouru AI read.', { duration: 4000 });
+    }
+  }, [modalStep, scanningDocs, uploadedDocs, docErrors]);
   useEffect(() => {
     const q = docQueueRef.current;
     if (!q || !q.length || modalStep !== 2 || Object.values(scanningDocs).some(Boolean)) return;
@@ -2031,6 +2061,12 @@ export default function CaseCreationModal({
             )}
 
             {/* STEP 4: Site Images */}
+            {modalStep === 4 && sheetMode && sheetReadCount > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', margin: '0 0 12px', borderRadius: 12, background: '#ecfdf5', border: '1px solid #a7f3d0' }}>
+                <span style={{ flex: 1, fontSize: 13.5, color: '#065f46', lineHeight: 1.35 }}><b>{sheetReadCount} details read from the office sheet.</b> Take the site photos and selfie next.</span>
+                <button type="button" onClick={() => setModalStep(8)} style={{ flexShrink: 0, border: 'none', background: '#fff', color: '#047857', fontWeight: 700, fontSize: 13.5, padding: '8px 12px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit' }}>Review sheet</button>
+              </div>
+            )}
             {modalStep === 4 && (
               <Step4SiteImages
                 siteImages={siteImages}
