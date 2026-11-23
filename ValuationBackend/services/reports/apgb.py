@@ -123,7 +123,11 @@ def rs(n):
 
 
 # ---------------------------------------------------------------- extents
-UNIT_RE = re.compile(r'(\d[\d,]*(?:\.\d+)?)\s*(cents?|cts?|sq\.?\s*y(?:ar)?ds?|sq\.?\s*yards?|sy|yds?|sq\.?\s*m(?:ts|trs|eters?|etres?)?\b|sqm\w*|sq\.?\s*f(?:ee)?t|sft|sq\.?\s*ft|acres?|ac\b)', re.I)
+# Units as written on documents: 'Sq. Ft.', 'square feet', 'S.F.T', 'Sq.Mtr', 'm²', 'Guntas', 'Hectare'…
+UNIT_RE = re.compile(r'(\d[\d,]*(?:\.\d+)?)\s*(cents?|cts?|sq\.?\s*y(?:ar)?ds?|sq\.?\s*yards?|square\s*y(?:ar)?ds?|sy\b|yds?\b|yards?|'
+                     r'sq\.?\s*f(?:ee|oo)?t|square\s*f(?:ee|oo)?t|s\.?\s*f\.?\s*t\b|sfts?\b|ft\s*[2²]|'
+                     r'sq\.?\s*m(?:ts?|trs?|eters?|etres?)?\b|sqm\w*|square\s*met(?:er|re)s?|m\s*[2²]|'
+                     r'gunt(?:a|ha)s?|hect(?:are)?s?\b|ha\b|acres?|ac\b)', re.I)
 
 
 def extent_parts(text):
@@ -132,8 +136,9 @@ def extent_parts(text):
     for m in UNIT_RE.finditer(str(text or '')):
         v = float(m.group(1).replace(',', ''))
         u = m.group(2).lower().replace(' ', '').replace('.', '')
-        key = ('cent' if u.startswith('c') else 'acre' if u.startswith('ac') else
-               'yd' if ('y' in u or u == 'sy') else 'ft' if ('f' in u) else 'm')
+        key = ('cent' if u.startswith('c') else 'acre' if u.startswith('ac') else 'gunta' if u.startswith('gunt') else
+               'ha' if (u.startswith('hect') or u == 'ha') else 'yd' if ('y' in u or u == 'sy') else
+               'ft' if ('f' in u) else 'm')
         out.setdefault(key, v)
     return out
 
@@ -154,6 +159,10 @@ def extent_in_cents(text):
         return parts['ft'] / SQFT_PER_SQM / SQM_PER_CENT
     if 'acre' in parts:
         return parts['acre'] * 100
+    if 'gunta' in parts:
+        return parts['gunta'] * 2.5      # 40 guntas = 1 acre = 100 cents
+    if 'ha' in parts:
+        return parts['ha'] * 247.105     # 1 hectare = 2.47105 acres
     t = str(text).lower()
     v = num(t)
     if 'cent' in t:
@@ -650,7 +659,9 @@ def sqft_of(text):
     v = num(t)
     if 'yd' in t or 'yard' in t:
         return v * 9
-    if 'sqm' in t or 'sq.m' in t or 'metre' in t or 'meter' in t:
+    if re.search(r'sq\.?\s*f|square\s*f|\bs\.?\s*f\.?\s*t\b|\bsft|ft\s*[2²]|feet', t):
+        return v
+    if re.search(r'sq\.?\s*m|sqm|square\s*met|\bm\s*[2²]|metre|meter|\bmtrs?\b|\bmts\b', t):
         return v * SQFT_PER_SQM
     return v
 

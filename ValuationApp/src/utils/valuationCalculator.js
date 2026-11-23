@@ -105,9 +105,9 @@ export function parseExtentToSqYardsScaled(extentInput) {
   if (!s) throw new Error('Land extent cannot be empty.');
   // Two units written together ("364.45 Sq.yds (or) 7.530 Cents"): read each number with its own unit
   // and use one pair (Sq.yds first, then cents, sq.m, sq.ft) — never the first number with another unit
-  const pairs = [...s.matchAll(/(\d+(?:\.\d+)?)\s*(cents?|sq\.?\s*y(?:ar)?ds?|yards?|yds?|sq\.?\s*m(?:ts|trs|eters?|etres?)?\b|sqm\w*|sq\.?\s*f(?:ee)?t|sqft|sft|acres?)/g)];
+  const pairs = [...s.matchAll(/(\d+(?:\.\d+)?)\s*(cents?|sq\.?\s*y(?:ar)?ds?|yards?|yds?|sq\.?\s*m(?:ts|trs?|eters?|etres?)?\b|sqm\w*|sq\.?\s*f(?:ee)?t|square\s*f(?:ee|oo)?t|square\s*met(?:er|re)s?|sqft|sfts?|acres?|guntas?|hectares?)/g)];
   if (pairs.length > 1) {
-    const rank = (u) => (/y/.test(u) ? 0 : /cent/.test(u) ? 1 : /f/.test(u) ? 3 : /acre/.test(u) ? 4 : 2);
+    const rank = (u) => (/y/.test(u) ? 0 : /cent/.test(u) ? 1 : /f/.test(u) ? 3 : /acre|gunt|hect/.test(u) ? 4 : 2);
     const best = pairs.sort((a, b) => rank(a[2]) - rank(b[2]))[0];
     s = `${best[1]} ${best[2]}`;
   }
@@ -121,16 +121,29 @@ export function parseExtentToSqYardsScaled(extentInput) {
 
   const rawScaled = parseDecimalToScaled(numStr, 4, 'Land Extent');
 
-  if (unitStr.includes('cent') || unitStr.includes('సెంట్లు') || unitStr.includes('సెంట్')) {
+  // Unit as written on documents: "Sq. Ft.", "square feet", "S.F.T", "Sq.Mtrs", "m²", "Guntas", "Hectare"…
+  const U = unitStr.replace(/\s+/g, ' ');
+  if (/cent|సెంట్/.test(U)) {
+    // 1 Cent = 48.4 Sq. Yards = 484 / 10
     return (rawScaled * 484n + 5n) / 10n;
-  } else if (unitStr.includes('sq.ft') || unitStr.includes('sq ft') || unitStr.includes('sqft') || unitStr.includes('sft') || unitStr.includes('sq.feet') || unitStr.includes('చ.అడుగులు')) {
+  } else if (/sq\.? ?f(?:ee|oo)?t|square ?f(?:ee|oo)?t|\bs\.? ?f\.? ?t\b|\bsfts?\b|\bft2\b|ft²|చ\.? ?అడుగు/.test(U)) {
+    // 9 Sq. Ft = 1 Sq. Yard
     return (rawScaled + 4n) / 9n;
-  } else if (unitStr.includes('ankanam') || unitStr.includes('అంకణము')) {
+  } else if (/ankanam|అంకణ/.test(U)) {
+    // 1 Ankanam = 8 Sq. Yards
     return rawScaled * 8n;
-  } else if (/sq\.?\s*m|sqm|square\s*met|\bm2\b|చ\.మీ/.test(unitStr)) {
+  } else if (/sq\.? ?y|square ?y|\byards?\b|\byds?\b|గజ/.test(U)) {
+    return rawScaled; // already Sq. Yards
+  } else if (/sq\.? ?m|\bsqm|square ?met|\bm ?[2²]|mtrs?\b|metres?|meters?|చ\.? ?మీ|మీటర్/.test(U)) {
     // 1 Sq. Metre = 1.19599 Sq. Yards
     return (rawScaled * 119599n + 50000n) / 100000n;
-  } else if (/acre|ఎకరా/.test(unitStr)) {
+  } else if (/gunt|గుంట/.test(U)) {
+    // 1 Gunta = 121 Sq. Yards
+    return rawScaled * 121n;
+  } else if (/hect|\bha\b|హెక్టా/.test(U)) {
+    // 1 Hectare = 11959.9 Sq. Yards
+    return (rawScaled * 119599n + 5n) / 10n;
+  } else if (/acre|ఎకరా|ఎకర/.test(U)) {
     // 1 Acre = 4840 Sq. Yards
     return rawScaled * 4840n;
   }

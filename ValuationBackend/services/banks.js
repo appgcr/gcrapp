@@ -217,10 +217,19 @@ async function bankInfoForReport(caseObj) {
     if (!clean(rep0.village) && clean(pd0.village)) rep0.village = clean(pd0.village);
     if (!clean(rep0.mandal) && clean(pd0.mandal)) rep0.mandal = clean(pd0.mandal);
     if (!clean(rep0.landmark)) {
+      // Every part of the property's detailed address that the report doesn't already print
+      // (door / plot / survey / flat numbers, village, mandal, district, PIN, state) — not just the first one
       const skip = [rep0.village, rep0.mandal, pd0.district, out.bankDistrict].map((x) => clean(x).toLowerCase()).filter(Boolean);
-      const parts = clean(caseObj.address).split(',').map(clean).filter(Boolean);
-      const area = parts.slice(0, -1).find((x) => !/^(d\.?\s*no|door|plot|h\.?\s*no|sy|flat)/i.test(x) && !skip.some((k) => x.toLowerCase().includes(k) || k.includes(x.toLowerCase())));
-      if (area) rep0.landmark = area;
+      const sheetAddr = pd0.entryMode === 'sheet' ? clean(pd0.sheet && pd0.sheet.address) : '';
+      const src = sheetAddr || clean(caseObj.address);
+      const isNumberPart = (x) => /^(d\.?\s*no|door|plot|h\.?\s*no|house\s*no|sy\.?|s\.?\s*no|survey|flat|ward)\b/i.test(x) || /^[\d\s/-]+$/.test(x);
+      const isRegion = (x) => /\b(dist(rict)?|dt|mandal|state|andhra\s*pradesh|a\.?\s*p\.?|india|pin(code)?)\b/i.test(x) || /\b\d{6}\b/.test(x);
+      const known = (x) => skip.some((k) => x.toLowerCase() === k || x.toLowerCase().replace(/\s*(village|town|city|mandal)\b/g, '').trim() === k);
+      const parts = src.split(/,|\n/).map(clean).filter(Boolean)
+        .filter((x) => !isNumberPart(x) && !isRegion(x) && !known(x));
+      const seen = new Set();
+      const keep = parts.filter((x) => { const k = x.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
+      if (keep.length) rep0.landmark = keep.join(', ');
     }
     out.propertyDetails = { ...pd0, report: rep0 };
   }
