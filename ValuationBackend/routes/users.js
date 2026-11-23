@@ -238,7 +238,7 @@ router.post('/', authenticateToken, requireRole('SUPER_ADMIN', 'ADMIN'), async (
 });
 
 // DELETE /api/users/:username — Strictly restricted to SUPER_ADMIN
-router.delete('/:username', authenticateToken, requireRole('SUPER_ADMIN', 'ADMIN'), async (req, res) => {
+router.delete('/:username', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
   try {
     const target = await User.findOne({ $or: [{ username: req.params.username }, { id: req.params.username }] });
     if (!target) return res.status(404).json({ error: 'User not found' });

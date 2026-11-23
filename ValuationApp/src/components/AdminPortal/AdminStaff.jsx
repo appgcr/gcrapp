@@ -1,7 +1,7 @@
 import askConfirm from '../Shared/askConfirm';
 import { API_BASE_URL } from '../../config/api';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Loader2, X, Eye, EyeOff, Maximize2, Copy, Lock, KeyRound, MessageCircle, Navigation, Phone } from 'lucide-react';
+import { Plus, Loader2, X, Eye, EyeOff, Maximize2, Copy, Lock, KeyRound, MessageCircle, Navigation, Phone, Trash2 } from 'lucide-react';
 import { authHeaders } from '../Shared/authHeaders';
 import toast from 'react-hot-toast';
 import { MapContainer, TileLayer, Marker, Popup, Circle, AttributionControl, useMap } from 'react-leaflet';
@@ -156,6 +156,7 @@ export default function AdminStaff({ currentUser }) {
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [resetResult, setResetResult] = useState(null);
   const [resetting, setResetting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   // Password the admin issued: fetched only when the admin taps Show, hidden again after 30 s
   const [pwInfo, setPwInfo] = useState(null); // { password, changedByUserAt }
   const [pwLoading, setPwLoading] = useState(false);
@@ -197,6 +198,25 @@ export default function AdminStaff({ currentUser }) {
       toast.error(err.message);
     } finally {
       setResetting(false);
+    }
+  };
+
+  // Only the Super Admin can delete an employee (the server enforces this too)
+  const handleDeleteStaff = async () => {
+    if (!selectedStaff || !superAdmin) return;
+    if (!(await askConfirm({ title: `Delete ${selectedStaff.displayName}?`, message: 'Their login stops working straight away and they are removed from staff. Cases and reports they worked on stay. This can’t be undone.', confirmText: 'Delete', tone: 'danger' }))) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/users/${encodeURIComponent(selectedStaff.id)}`, { method: 'DELETE', headers: authHeaders() });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Could not delete this employee');
+      toast.success(`${selectedStaff.displayName} deleted`);
+      closeProfile();
+      fetchStaffData();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -524,6 +544,17 @@ export default function AdminStaff({ currentUser }) {
                 <div className="pf-result-note">The old password no longer works. You can view this one again anytime with Show.</div>
               </div>
             )}
+
+            {superAdmin && (
+              <>
+                <div className="pf-group" style={{ marginTop: 20 }}>
+                  <button className="pf-row pf-action pf-danger" onClick={handleDeleteStaff} disabled={deleting}>
+                    {deleting ? <Loader2 size={16} className="spin" /> : <Trash2 size={16} />} Delete {selectedStaff.role === 'ADMIN' ? 'Branch Admin' : 'Engineer'}
+                  </button>
+                </div>
+                <p className="pf-foot">Only the Super Admin can delete staff.</p>
+              </>
+            )}
           </div>
           <style>{`
             .pf-backdrop { position: fixed; inset: 0; z-index: 10002; background: rgba(0,0,0,0.32); display: flex; align-items: flex-end; justify-content: center; animation: pfFade .2s ease-out; }
@@ -550,6 +581,7 @@ export default function AdminStaff({ currentUser }) {
             .pf-foot { margin: 7px 16px 16px; font-size: 13px; color: #6d6d72; line-height: 1.35; }
             .pf-action { justify-content: center; gap: 8px; color: #007aff; font-weight: 600; cursor: pointer; }
             .pf-action:disabled { opacity: .5; }
+            .pf-danger { color: #ff3b30; }
             .pf-result { padding: 16px; display: flex; flex-direction: column; gap: 10px; align-items: center; text-align: center; }
             .pf-result-label { font-size: 13px; color: #6d6d72; }
             .pf-result-pw { font-size: 24px; font-weight: 700; letter-spacing: .5px; font-family: ui-monospace, 'SF Mono', Menlo, monospace; color: #000; user-select: all; }

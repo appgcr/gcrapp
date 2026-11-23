@@ -32,7 +32,7 @@ function Sheet({ title, message, confirmText, cancelText, tone, onDone }) {
         </div>
       </div>
       <style>{`
-        .ack-bg { position: fixed; inset: 0; z-index: 5000; background: rgba(15,23,42,.45); display: flex; align-items: flex-end; justify-content: center; animation: ackIn .15s ease-out; }
+        .ack-bg { position: fixed; inset: 0; z-index: 2147483000; background: rgba(15,23,42,.45); display: flex; align-items: flex-end; justify-content: center; animation: ackIn .15s ease-out; }
         @media (min-width: 640px) { .ack-bg { align-items: center; } .ack { border-radius: 18px !important; } }
         .ack { width: 100%; max-width: 440px; background: #fff; border-radius: 18px 18px 0 0; padding: 20px 18px calc(18px + env(safe-area-inset-bottom)); font-family: inherit; }
         .ack-t { font-size: 17px; font-weight: 800; color: #0f172a; }
