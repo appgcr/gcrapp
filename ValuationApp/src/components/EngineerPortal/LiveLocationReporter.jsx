@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { BackgroundGeolocation } from '../../utils/backgroundGeolocation';
 import { API_BASE_URL } from '../../config/api';
@@ -180,13 +180,44 @@ export default function LiveLocationReporter({ currentUser }) {
   }, [currentUser?.id, currentUser?.role, currentUser?.name, currentUser?.username]);
 
   if (!showOff) return null;
+  return <OffBanner native={native} />;
+}
+
+// The red "Location is off" banner. It sits just under the page header and the page moves down by its
+// height while it shows, so nothing (New case, search, titles) is ever hidden underneath it.
+function OffBanner({ native }) {
+  const ref = useRef(null);
+  const [top, setTop] = useState(null);
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    const place = () => {
+      // The visible page header (fixed headers have no offsetParent, so measure the box)
+      const head = [...document.querySelectorAll('.eng-navbar, .admin-header')].find((h) => { const r = h.getBoundingClientRect(); return r.height > 0 && r.bottom > 0 && getComputedStyle(h).display !== 'none'; });
+      const hb = head ? head.getBoundingClientRect().bottom : 0;
+      const t0 = Math.max(0, Math.round(hb)) + 8;
+      setTop(t0);
+      const h = ref.current ? ref.current.getBoundingClientRect().height : 0;
+      root.style.setProperty('--loc-banner-space', `${Math.round(h) + 12}px`);        // extra room (admin page)
+      root.style.setProperty('--loc-banner-bottom', `${t0 + Math.round(h) + 14}px`);   // where the page starts (engineer page)
+    };
+    place();
+    document.body.classList.add('loc-off');
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(place) : null;
+    if (ro && ref.current) ro.observe(ref.current);
+    window.addEventListener('resize', place);
+    const t = setInterval(place, 1500); // header changes height between screens
+    return () => {
+      ro && ro.disconnect(); window.removeEventListener('resize', place); clearInterval(t);
+      document.body.classList.remove('loc-off'); root.style.removeProperty('--loc-banner-space'); root.style.removeProperty('--loc-banner-bottom');
+    };
+  }, []);
   const turnOn = () => {
     if (native) BackgroundGeolocation.openSettings?.().catch(() => {});
     else window.dispatchEvent(new Event('gcr_open_permissions'));
   };
   return (
-    <div role="alert" style={{
-      position: 'fixed', left: 12, right: 12, top: 'calc(env(safe-area-inset-top, 0px) + 66px)', zIndex: 10020,
+    <div ref={ref} role="alert" style={{
+      position: 'fixed', left: 12, right: 12, top: top != null ? top : 'calc(env(safe-area-inset-top, 0px) + 66px)', zIndex: 10020,
       background: '#ff3b30', color: '#fff', borderRadius: 14, padding: '12px 14px',
       display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 8px 24px rgba(255,59,48,.35)',
       fontFamily: '-apple-system, BlinkMacSystemFont, Inter, sans-serif',

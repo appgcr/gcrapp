@@ -66,6 +66,7 @@ export default function CaseCreationModal({
   editingCaseId: propEditingCaseId,
   onCaseSaved,
   initialDocFiles = null, // { saleDeed: [File], … } picked in the New Case sheet: checked here one document at a time
+  initialSheet = null,    // { files: [uploaded office-sheet pages], fields } picked and read in the New Case sheet
 }) {
 
   // Modal State
@@ -116,6 +117,7 @@ export default function CaseCreationModal({
   // Don't auto-save until an assigned case has finished loading — otherwise an empty
   // form would be saved and later "restored" over the real case details.
   const [draftReady, setDraftReady] = useState(!propEditingCaseId);
+  const [loadedAt, setLoadedAt] = useState(0); // each time the case finished loading from the server
   const usableDraft = (d) => d && d.modalStep > 0 && String(d.clientName || '').trim();
   // Which case a saved draft belongs to (file number), so an old draft never fills a different case
   const caseStampRef = useRef('');
@@ -556,7 +558,7 @@ export default function CaseCreationModal({
           } else {
             setModalStep(1);
           }
-        }).finally(() => setDraftReady(true));
+        }).finally(() => { setDraftReady(true); setLoadedAt(Date.now()); });
       })
       .catch(err => {
         setDraftReady(true);
@@ -645,14 +647,27 @@ export default function CaseCreationModal({
     setModalStep(4);
   };
 
+  // Office sheet picked in the New Case sheet: it is the case's office sheet (when the branch uses that route)
+  // (applied again after every load: a second load would otherwise put the form back on Step 1)
+  const sheetInitDone = useRef(0);
+  useEffect(() => {
+    if (!loadedAt || sheetInitDone.current === loadedAt || !editingCaseId || !initialSheet || !bypassAllowed) return;
+    sheetInitDone.current = loadedAt;
+    if (Array.isArray(initialSheet.files) && initialSheet.files.length) setUploadedDocs((prev) => ({ ...prev, officeSheet: initialSheet.files }));
+    setPropertyDetails((prev) => ({ ...prev, entryMode: 'sheet', sheet: { ...EMPTY_SHEET, ...(prev.sheet || {}), ...(initialSheet.fields || {}) } }));
+    setModalStep(8);
+  }, [loadedAt, editingCaseId, initialSheet, bypassAllowed]);
+
   // Documents picked in the New Case sheet: open the Documents step and run each through the usual
   // Gouru AI checks, one document at a time (so the duplicate check sees the ones before it)
   const docQueueRef = useRef(null);
+  const docStepFor = useRef(0);
   useEffect(() => {
-    if (!draftReady || !editingCaseId || !initialDocFiles || docQueueRef.current !== null) return;
-    docQueueRef.current = Object.entries(initialDocFiles).filter(([, files]) => files && files.length);
-    if (docQueueRef.current.length) setModalStep(2);
-  }, [draftReady, editingCaseId, initialDocFiles]);
+    if (!loadedAt || !editingCaseId || !initialDocFiles) return;
+    if (docQueueRef.current === null) docQueueRef.current = Object.entries(initialDocFiles).filter(([, files]) => files && files.length);
+    // Open the Documents step after each load while the picked files are still waiting
+    if (docStepFor.current !== loadedAt && docQueueRef.current.length) { docStepFor.current = loadedAt; setModalStep(2); }
+  }, [loadedAt, editingCaseId, initialDocFiles]);
   useEffect(() => {
     const q = docQueueRef.current;
     if (!q || !q.length || modalStep !== 2 || Object.values(scanningDocs).some(Boolean)) return;

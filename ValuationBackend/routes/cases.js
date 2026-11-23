@@ -191,7 +191,7 @@ router.post('/', authenticateToken, canCreateCase, async (req, res) => {
     // Self case: only the basic request details; the case is the engineer's own and goes to their branch
     const selfEng = req.selfCaseEngineer;
     if (selfEng) {
-      const pick = ['clientName', 'clientPhone', 'bankName', 'address', 'locationData', 'note'];
+      const pick = ['clientName', 'clientFatherName', 'clientPhone', 'bankName', 'bankBranch', 'address', 'locationData', 'note'];
       const body = {};
       for (const k of pick) if (req.body[k] !== undefined) body[k] = typeof req.body[k] === 'string' ? req.body[k].slice(0, 500) : req.body[k];
       if (!String(body.clientName || '').trim()) return res.status(400).json({ error: 'Enter the customer name.' });

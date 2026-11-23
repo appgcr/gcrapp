@@ -908,3 +908,7 @@ body.kb-open .ios-tabbar { display: none !important; }
 .cs-check span { color: #57534e; font-size: 12px; line-height: 1.4; }
 body.dark-theme .cs-checks { background: #1c1c1e; border-color: #3a3a3c; }
 body.dark-theme .cs-check b { color: #fff; }
+
+/* "Location is off" banner showing: move the page down by its height so nothing hides under it */
+body.loc-off .main-content { padding-top: var(--loc-banner-bottom, calc(76px + env(safe-area-inset-top, 0px))) !important; }
+body.loc-off .admin-main-content { padding-top: calc(12px + var(--loc-banner-space, 0px)) !important; }

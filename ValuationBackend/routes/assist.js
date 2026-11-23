@@ -117,6 +117,88 @@ Reply with ONLY this JSON:
   }
 });
 
+// POST /api/assist/case-start { files: [{ url, name, kind: 'officeSheet' | 'saleDeed' | 'propertyTax' | … }] }
+// Documents picked when a case is started → the customer's details for the New Case form:
+// { clientName, fatherName, mobile, bankName, bankBranch, address, sheet (office-sheet fields) | null, from }.
+// Office sheet first (it has everything); otherwise the sale deed / tax receipt is read by Gouru AI.
+router.post('/case-start', async (req, res) => {
+  try {
+    const list = Array.isArray(req.body?.files) ? req.body.files.slice(0, 12) : [];
+    if (!list.length) return res.status(400).json({ error: 'No documents received.' });
+    const { bytesOf } = require('../services/annexure');
+    const out = { clientName: '', fatherName: '', mobile: '', bankName: '', bankBranch: '', address: '', sheet: null, from: '' };
+
+    const sheetItems = list.filter((f) => f && f.kind === 'officeSheet');
+    if (sheetItems.length) {
+      const files = [];
+      for (const it of sheetItems) {
+        const got = await bytesOf(String(it.url || ''));
+        if (got && got.bytes.length) files.push({ bytes: got.bytes, type: got.type || '', name: String(it.name || got.name || '') });
+      }
+      if (files.length) {
+        try {
+          const { readOfficeSheetFiles } = require('../services/officeSheet');
+          const r = await readOfficeSheetFiles(files);
+          const s = r.fields || {};
+          const purchase = s.dealType === 'Purchase';
+          out.sheet = s;
+          out.clientName = (purchase ? s.applicantName : s.ownerName) || s.ownerName || '';
+          out.fatherName = (purchase ? s.applicantRelation : s.ownerRelation) || '';
+          out.address = s.address || (purchase ? s.applicantAddress : s.ownerAddress) || '';
+          const bank = String(s.bank || '');
+          // "INDIAN BANK, RAJIV PARK BRANCH" → bank + branch
+          const m = /^(.*?)(?:[,\-–]\s*|\s+)([^,]*?\bbranch\b.*)$/i.exec(bank);
+          out.bankName = (m ? m[1] : bank).trim();
+          out.bankBranch = m ? m[2].replace(/\bbranch\b/i, '').trim() : '';
+          out.from = 'sheet';
+        } catch (err) {
+          if (!list.some((f) => f.kind !== 'officeSheet')) return res.status(422).json({ error: err.message || 'The office sheet could not be read.' });
+        }
+      }
+    }
+
+    // No office sheet (or it had no name): read the sale deed / tax receipt
+    if (!out.clientName && aiOn()) {
+      const doc = list.find((f) => f && f.kind === 'saleDeed') || list.find((f) => f && f.kind === 'propertyTax') || list.find((f) => f && f.kind !== 'officeSheet');
+      const got = doc ? await bytesOf(String(doc.url || '')) : null;
+      const type = got ? (got.type || (/\.pdf$/i.test(doc.name || '') ? 'application/pdf' : '')) : '';
+      if (got && got.bytes.length && /pdf|image\//i.test(type) && got.bytes.length < 18 * 1024 * 1024) {
+        const prompt = `This is an Indian property document (sale deed, gift / settlement deed or property tax receipt; English and/or Telugu).
+Find the person the property now belongs to: in a sale deed the PURCHASER / vendee (not the seller), in a tax receipt the assessee.
+Reply with ONLY this JSON (use "" when not written; names in English letters, properly capitalised):
+{"clientName": "", "relation": "S/o, W/o or D/o with the name, e.g. S/o Venkata Ramana", "mobile": "10-digit mobile if written", "propertyAddress": "door no / survey no, street, village / town, district"}`;
+        // The owner's name and address are on the first pages: send only those (big scans otherwise time out)
+        let bytes = got.bytes;
+        if (/pdf/i.test(type)) {
+          try {
+            const { PDFDocument } = require('pdf-lib');
+            const src = await PDFDocument.load(bytes, { ignoreEncryption: true });
+            if (src.getPageCount() > 3) {
+              const dst = await PDFDocument.create();
+              const pages = await dst.copyPages(src, [0, 1, 2]);
+              pages.forEach((pg) => dst.addPage(pg));
+              bytes = Buffer.from(await dst.save());
+            }
+          } catch { /* use the whole file */ }
+        }
+        const r = await askJson(prompt, [`data:${type};base64,${bytes.toString('base64')}`], { timeoutMs: 45000 });
+        if (r) {
+          out.clientName = String(r.clientName || '').trim();
+          out.fatherName = out.fatherName || String(r.relation || '').trim();
+          const mob = String(r.mobile || '').replace(/\D/g, '').slice(-10);
+          out.mobile = /^[6-9]\d{9}$/.test(mob) ? mob : '';
+          out.address = out.address || String(r.propertyAddress || '').trim();
+          out.from = out.from || 'deed';
+        }
+      }
+    }
+    res.json(out);
+  } catch (err) {
+    console.error('POST /api/assist/case-start', err);
+    res.status(500).json({ error: 'Could not read the documents. Please fill the details.' });
+  }
+});
+
 // Photo kinds a bank expects for a valuation
 const KINDS = {
   front: 'Front view', road: 'Approach road', side: 'Side / rear view', inside: 'Inside (hall / rooms)',
