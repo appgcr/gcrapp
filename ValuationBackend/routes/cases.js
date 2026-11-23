@@ -12,6 +12,7 @@ const { authenticateToken, requireRole } = require('../middleware/auth');
 const Branch = require('../models/Branch');
 const { isSuper, isAdmin, branchScope, caseFilter, canSeeCase } = require('../services/access');
 const { nextFileNumber } = require('../services/fileNumber');
+const { reportFileName } = require('../services/fileNames');
 const { reportFormatFor, findBank, policyForName, bankInfoForReport } = require('../services/banks');
 const { applyBankReportValues } = require('../services/bankReportValues');
 
@@ -719,7 +720,7 @@ router.get('/:id/report', authenticateToken, async (req, res) => {
             message: archiveRes.message
           });
         }
-        res.setHeader('Content-Disposition', `inline; filename="${archiveRes.filename}"`);
+        res.setHeader('Content-Disposition', `inline; filename="${reportFileName(caseItem, /pdf/i.test(archiveRes.mimeType || '') ? 'pdf' : 'docx')}"`);
         res.setHeader('Content-Type', archiveRes.mimeType);
         res.setHeader('X-Report-Sha256', archiveRes.sha256);
         res.setHeader('X-Report-Version', String(vNum));
@@ -754,7 +755,7 @@ router.get('/:id/report', authenticateToken, async (req, res) => {
       console.warn(`Report archive unusable for Case #${caseItem.id} v${currentV}: ${activeArchiveRes.error} — building fresh`);
     }
     if (activeArchiveRes.found && !activeArchiveRes.corrupted) {
-      res.setHeader('Content-Disposition', `inline; filename="${activeArchiveRes.filename}"`);
+      res.setHeader('Content-Disposition', `inline; filename="${reportFileName(caseItem, /pdf/i.test(activeArchiveRes.mimeType || '') ? 'pdf' : 'docx')}"`);
       res.setHeader('Content-Type', activeArchiveRes.mimeType);
       res.setHeader('X-Report-Sha256', activeArchiveRes.sha256);
       res.setHeader('X-Report-Version', String(currentV));
@@ -774,7 +775,7 @@ router.get('/:id/report', authenticateToken, async (req, res) => {
         role: req.user?.role || ''
       });
       if (verified.found && !verified.corrupted) {
-        res.setHeader('Content-Disposition', `inline; filename="${verified.filename}"`);
+        res.setHeader('Content-Disposition', `inline; filename="${reportFileName(caseItem, /pdf/i.test(verified.mimeType || '') ? 'pdf' : 'docx')}"`);
         res.setHeader('Content-Type', verified.mimeType);
         res.setHeader('X-Report-Sha256', verified.sha256);
         res.setHeader('X-Report-Version', String(currentV));
@@ -820,7 +821,7 @@ router.get('/:id/report', authenticateToken, async (req, res) => {
           try { fs.unlinkSync(tempDocxPath); } catch (_) {}
           try { fs.unlinkSync(tempPdfPath); } catch (_) {}
 
-          res.setHeader('Content-Disposition', `inline; filename="${safeBankName}_Valuation_Report_${caseItem.id}.pdf"`);
+          res.setHeader('Content-Disposition', `inline; filename="${reportFileName(caseItem, 'pdf')}"`);
           res.setHeader('Content-Type', 'application/pdf');
           return res.send(pdfBuffer);
         } catch (pdfErr) {
@@ -833,7 +834,7 @@ router.get('/:id/report', authenticateToken, async (req, res) => {
 
       const docxBuffer = fs.readFileSync(tempDocxPath);
       try { fs.unlinkSync(tempDocxPath); } catch (_) {}
-      res.setHeader('Content-Disposition', `attachment; filename="${safeBankName}_Valuation_Report_${caseItem.id}.docx"`);
+      res.setHeader('Content-Disposition', `attachment; filename="${reportFileName(caseItem, 'docx')}"`);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
       return res.send(docxBuffer);
     }
@@ -1199,7 +1200,7 @@ router.get('/:id/report', authenticateToken, async (req, res) => {
 
     const buffer = await Packer.toBuffer(doc);
     const safeBankName = (caseItem.bankName || 'Valuation').replace(/[^a-zA-Z0-9_-]/g, '_');
-    res.setHeader('Content-Disposition', `attachment; filename="${safeBankName}_Valuation_Report_${caseItem.id}.docx"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${reportFileName(caseItem, 'docx')}"`);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.send(buffer);
 
@@ -1268,7 +1269,7 @@ router.get('/:id/shared-report', async (req, res) => {
   }
 });
 
-// POST /api/cases/ai-review { draft } — Mahe AI review call: the questions for the engineer before submitting
+// POST /api/cases/ai-review { draft } — Gouru AI review call: the questions for the engineer before submitting
 router.post('/ai-review', authenticateToken, async (req, res) => {
   try {
     if (!['ENGINEER', 'ADMIN', 'SUPER_ADMIN'].includes(req.user?.role)) return res.status(403).json({ error: 'Not available for this login.' });
@@ -1290,7 +1291,7 @@ router.post('/ai-review/answer', authenticateToken, async (req, res) => {
     if (!/^data:audio\/[a-z0-9.+-]+;base64,/i.test(String(audio || ''))) return res.status(400).json({ error: 'No recording received.' });
     if (String(audio).length > 6 * 1024 * 1024) return res.status(413).json({ error: 'Answer too long. Keep it under a minute.' });
     const out = await require('../services/aiReview').understandAnswer(audio, question || {});
-    if (!out) return res.status(503).json({ error: 'Mahe AI could not hear that. Please tap an answer instead.' });
+    if (!out) return res.status(503).json({ error: 'Gouru AI could not hear that. Please tap an answer instead.' });
     res.json(out);
   } catch (err) {
     res.status(500).json({ error: 'Could not understand the answer. Please tap an answer instead.' });
@@ -1313,7 +1314,7 @@ router.get('/:id/annexure.pdf', authenticateToken, async (req, res) => {
     const c = await ValuationCase.findOne({ id: req.params.id }).select('id fileNumber clientName borrowerName bankName bankBranch branchId assignedEngineerId assignedEngineerName inspectionDate documents sitePhotos siteSelfie aiReview').lean();
     if (!c || !canSeeCase(req.user, c)) return res.status(404).json({ error: 'Case not found.' });
     const { annexurePdf } = require('../services/annexure');
-    const a = await annexurePdf(c, { internal: true }); // Gouru's own copy: includes the Mahe AI call record
+    const a = await annexurePdf(c, { internal: true }); // Gouru's own copy: includes the Gouru AI call record
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${a.filename}"`);
     res.setHeader('X-Annexure-Pages', String(a.pages));
@@ -1444,7 +1445,7 @@ router.post('/:id/report-preview', authenticateToken, async (req, res) => {
     const buf = fs.readFileSync(docxPath);
     try { fs.unlinkSync(docxPath); } catch (_) {}
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    res.setHeader('Content-Disposition', `inline; filename="Preview_${caseItem.id}.docx"`);
+    res.setHeader('Content-Disposition', `inline; filename="${reportFileName(draft, 'docx')}"`);
     res.send(buf);
   } catch (err) {
     res.status(500).json({ error: err.message });

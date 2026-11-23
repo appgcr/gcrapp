@@ -12,6 +12,7 @@ import { authHeaders, errorFrom } from '../Shared/authHeaders';
 import { STAGES, stageOf } from '../Shared/caseStages';
 import { isSuperAdmin, getBranchScope } from '../../utils/session';
 import { useBanks, matchBank, searchBanks } from '../../utils/banks';
+import { reportFileName } from '../../utils/reportFileName';
 
 
 export default function AdminCases({ defaultFilter = '', currentUser }) {
@@ -417,8 +418,8 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
               <span className="cs-file">{c.fileNumber || `#${c.id}`}</span>{c.bankName ? ` · ${c.bankName}` : ' · Bank not set'}{c.bankBranch ? ` · ${c.bankBranch}` : ''}
             </div>
             {c.aiReview && c.aiReview.status !== 'skipped' && (
-              <div className="cs-ai-tag" title="Checked by Mahe AI before submit — open Files for the call recording and answers">
-                ✦ Mahe AI verified{c.aiReview.status === 'clear' ? '' : ` · ${(c.aiReview.log || []).filter((e) => e.decision === 'change').length} corrected`}
+              <div className="cs-ai-tag" title="Checked by Gouru AI before submit — open Files for the call recording and answers">
+                ✦ Gouru AI verified{c.aiReview.status === 'clear' ? '' : ` · ${(c.aiReview.log || []).filter((e) => e.decision === 'change').length} corrected`}
               </div>
             )}
             {c.propertyDetails?.entryMode === 'sheet' && (
@@ -1247,7 +1248,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
         <ReportViewer
           title={viewing.clientName || 'Valuation Report'}
           subtitle={[viewing.fileNumber || `#${viewing.id}`, viewing.bankName].filter(Boolean).join(' · ')}
-          fileName={`${(viewing.bankName || 'Valuation').replace(/[^a-zA-Z0-9]+/g, '_')}_${String(viewing.fileNumber || viewing.id).replace(/[^a-zA-Z0-9]+/g, '-')}.docx`}
+          fileName={reportFileName(viewing)}
           load={() => fetchReport(`${API_BASE_URL}/api/cases/${viewing.id}/report?format=docx`)}
           onClose={() => setViewing(null)}
           footer={viewing.status === 'Reviewing' ? (

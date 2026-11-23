@@ -6,6 +6,7 @@ import { authHeaders } from '../Shared/authHeaders';
 import { isWordFile, resolveDocUrl } from '../../utils/docFiles';
 import { PdfSheet } from './AdminFees';
 import PdfPages from '../Shared/PdfPages';
+import { reportFileName } from '../../utils/reportFileName';
 
 const DOCS = [
   ['bankDocs', 'Documents from the bank'],
@@ -107,11 +108,11 @@ function FilesSheet({ c, onClose }) {
                 </div>
               ) : <div className="cf-none"><ImageIcon size={16} /> No site photos yet.</div>}
               {full.aiReview && full.aiReview.status !== 'skipped' && (<>
-                <div className="cf-sec">Mahe AI review call <small>{full.aiReview.status === 'clear' ? 'no questions' : `${(full.aiReview.log || []).length} answers · ${Math.floor((full.aiReview.seconds || 0) / 60)}m ${(full.aiReview.seconds || 0) % 60}s`}</small></div>
+                <div className="cf-sec">Gouru AI review call <small>{full.aiReview.status === 'clear' ? 'no questions' : `${(full.aiReview.log || []).length} answers · ${Math.floor((full.aiReview.seconds || 0) / 60)}m ${(full.aiReview.seconds || 0) % 60}s`}</small></div>
                 <div className="cf-ai">
-                  {full.aiReview.status === 'clear' && <div className="cf-ai-ok"><Sparkles size={15} /> Mahe AI checked this case before submit — nothing needed the engineer's answer.</div>}
+                  {full.aiReview.status === 'clear' && <div className="cf-ai-ok"><Sparkles size={15} /> Gouru AI checked this case before submit — nothing needed the engineer's answer.</div>}
                   {(full.documents?.aiReviewCall || [])[0] && (
-                    <audio controls preload="metadata" src={resolveDocUrl(full.documents.aiReviewCall[0].url)} style={{ width: '100%' }} aria-label="Mahe AI review call recording" />
+                    <audio controls preload="metadata" src={resolveDocUrl(full.documents.aiReviewCall[0].url)} style={{ width: '100%' }} aria-label="Gouru AI review call recording" />
                   )}
                   {(full.aiReview.log || []).map((e, k) => (
                     <div key={k} className="cf-ai-row">
@@ -160,7 +161,7 @@ function FilesSheet({ c, onClose }) {
 
       {all && (
         <div onClick={(e) => e.stopPropagation()}>
-          <PdfSheet url={`${API_BASE_URL}/api/cases/${c.id}/annexure.pdf`} title="Documents & photos" fileName={`Documents_${safeNo}.pdf`} onClose={() => setAll(false)} />
+          <PdfSheet url={`${API_BASE_URL}/api/cases/${c.id}/annexure.pdf`} title="Documents & photos" fileName={reportFileName(c, 'pdf', 'Documents')} onClose={() => setAll(false)} />
         </div>
       )}
 

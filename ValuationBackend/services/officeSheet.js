@@ -345,13 +345,13 @@ async function readOfficeSheet({ bytes, type = '', name = '' }) {
   const mime = /pdf/.test(type) || bytes.slice(0, 4).toString() === '%PDF' ? 'application/pdf' : (type.startsWith('image/') ? type : 'image/jpeg');
   const { askJson } = require('./aiJson');
   const ai = await askJson(PROMPT, [`data:${mime};base64,${bytes.toString('base64')}`], { timeoutMs: 90000 });
-  if (!ai) throw new Error('Mahe AI could not read the sheet right now. Type the details below, or try again in a minute.');
+  if (!ai) throw new Error('Gouru AI could not read the sheet right now. Type the details below, or try again in a minute.');
   const fields = clean(ai);
   return { fields, source: 'ai', filled: filledCount(fields) };
 }
 
 /** Several pages / files of one sheet (photos, PDF, Word) → one set of fields.
- *  Word files are read exactly; photos and PDFs go to Mahe AI together, so a sheet on two pages reads as one. */
+ *  Word files are read exactly; photos and PDFs go to Gouru AI together, so a sheet on two pages reads as one. */
 async function readOfficeSheetFiles(files) {
   const list = (files || []).filter((f) => f && f.bytes && f.bytes.length);
   if (!list.length) throw new Error('Please choose the filled office sheet (Word, PDF or photo).');
@@ -380,7 +380,7 @@ async function readOfficeSheetFiles(files) {
     const { askJson } = require('./aiJson');
     const prompt = `${PROMPT}\n\nThe sheet is given as ${others.length} pages/files, in order. Read them together as ONE sheet.`;
     const ai = await askJson(prompt, urls, { timeoutMs: 120000 });
-    if (!ai && !fields) throw new Error('Mahe AI could not read the sheet right now. Type the details below, or tap Read again in a minute.');
+    if (!ai && !fields) throw new Error('Gouru AI could not read the sheet right now. Type the details below, or tap Read again in a minute.');
     if (ai) { const f = clean(ai); fields = fields ? merge(fields, f) : f; source = source ? 'word+ai' : 'ai'; }
   }
   if (!fields) throw new Error('This is not the GOURU VALUATION – OFFICE sheet. Please upload the filled office sheet.');
@@ -398,4 +398,4 @@ function merge(a, b) {
   return out;
 }
 
-module.exports = { readOfficeSheet, readOfficeSheetFiles, fromWordRows, FIELDS, classify, amount, deedNumber, splitRelation };
+module.exports = { readOfficeSheet, readOfficeSheetFiles, fromWordRows, FIELDS, classify, amount, deedNumber, splitRelation, cleanSheet: clean };

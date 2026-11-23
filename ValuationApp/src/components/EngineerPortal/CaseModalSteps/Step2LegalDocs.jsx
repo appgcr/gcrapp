@@ -60,7 +60,7 @@ export default function Step2LegalDocs({
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           <div style={{ padding: '10px 12px', backgroundColor: 'rgba(234, 179, 8, 0.08)', border: '1px solid #eab308', borderRadius: '10px', display: 'flex', gap: '8px', marginBottom: '14px', alignItems: 'flex-start' }}>
             <span style={{ fontSize: '12px', color: '#854d0e', lineHeight: '1.45' }}>
-              <strong>Mahe AI checks every upload.</strong> Photos, PDFs and Word files all work, and you can add several pages per document. A wrong document, or the same file uploaded twice (even renamed), is rejected straight away.
+              <strong>Gouru AI checks every upload.</strong> Photos, PDFs and Word files all work, and you can add several pages per document. A wrong document, or the same file uploaded twice (even renamed), is rejected straight away.
             </span>
           </div>
 
@@ -187,7 +187,7 @@ export default function Step2LegalDocs({
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', zIndex: 1 }}>
                         <Loader2 size={16} className="spin" color="#2563eb" />
                         <span style={{ fontSize: '13px', fontWeight: '700', color: '#1e40af' }}>
-                          {scanProgress[doc.id]?.status || 'Mahe AI OCR Scanning...'}
+                          {scanProgress[doc.id]?.status || 'Gouru AI OCR Scanning...'}
                         </span>
                       </div>
                       <div style={{ fontSize: '11px', color: '#475569', textAlign: 'center', fontWeight: '500', zIndex: 1 }}>
@@ -624,7 +624,7 @@ export default function Step2LegalDocs({
                 }}
               >
                 {anyScanningNow ? (
-                  <><Loader2 size={16} className="spin" /> Mahe AI is checking…</>
+                  <><Loader2 size={16} className="spin" /> Gouru AI is checking…</>
                 ) : allUploaded ? (
                   <>Continue <ChevronRight size={18} /></>
                 ) : (

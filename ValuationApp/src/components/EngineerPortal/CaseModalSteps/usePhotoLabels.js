@@ -21,7 +21,7 @@ function shrink(url) {
 }
 
 /**
- * Mahe AI names each site photo (front, road, inside…) and lists the key photos still missing.
+ * Gouru AI names each site photo (front, road, inside…) and lists the key photos still missing.
  * → { labels: { [imageId]: { kind, label } }, missing: [{ kind, label }] | null, busy }
  */
 const KIND_LABEL = { front: 'Front view', road: 'Approach road', side: 'Side / rear view', inside: 'Inside (hall / rooms)', kitchen: 'Kitchen', surroundings: 'Surroundings', boundary: 'Boundary / compound', meter: 'Electricity meter / door no.', open_land: 'Open land / plot', other: 'Other' };
@@ -33,7 +33,7 @@ function needed(propertyType = '') {
 }
 
 /**
- * Mahe AI names each site photo (front, road, inside…) and lists the key photos still missing.
+ * Gouru AI names each site photo (front, road, inside…) and lists the key photos still missing.
  * Each photo is sent once; deleting or adding a photo only checks the new ones.
  * → { labels: { [imageId]: { kind, label } }, missing: [{ kind, label }] | null, busy }
  */

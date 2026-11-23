@@ -12,6 +12,7 @@ import PdfPages from '../Shared/PdfPages';
 import TellCustomer from './TellCustomer';
 import { queuedItemFor, subscribeSyncStatus, pendingAttendance } from '../../services/offlineSyncService';
 import './AttendanceView.css';
+import { reportFileName } from '../../utils/reportFileName';
 const queuedCss = `.cd-queued { margin-top: 12px; padding: 10px 12px; border-radius: 12px; font-size: 13px; line-height: 1.4; background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; } .cd-queued.bad { background: #fef2f2; color: #991b1b; border-color: #fecaca; }`;
 
 const REQUIRED_DOCS = [
@@ -652,7 +653,7 @@ export default function CaseDetailsView({ caseId }) {
         <ReportViewer
           title={caseData?.clientName || 'Valuation Report'}
           subtitle={[caseData?.fileNumber, caseData?.bankName].filter(Boolean).join(' · ')}
-          fileName={`Report_${String(caseData?.fileNumber || caseId).replace(/[^a-zA-Z0-9]+/g, '-')}.docx`}
+          fileName={reportFileName(caseData || { id: caseId })}
           load={() => fetchReport(`${API_BASE_URL}/api/cases/${caseId}/report?format=docx`)}
           onClose={() => setShowReport(false)}
         />

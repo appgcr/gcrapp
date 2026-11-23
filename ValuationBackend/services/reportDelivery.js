@@ -128,7 +128,7 @@ async function reportFile(c, format = 'docx') {
     const buffer = fs.readFileSync(docxPath);
     try { fs.unlinkSync(docxPath); } catch { /* ignore */ }
     const safe = String(c.fileNumber || c.id).replace(/[^a-zA-Z0-9]+/g, '-');
-    return { found: true, buffer, filename: `Valuation_Report_${safe}.docx`, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+    return { found: true, buffer, filename: require('./fileNames').reportFileName(c, 'docx'), mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
   } catch (err) {
     console.warn('report build for delivery:', err.message);
     return null;
@@ -148,7 +148,7 @@ async function deliverReport(caseId, { baseUrl, actor = 'auto', quiet = false, w
       try {
         let attachment = null;
         const a = await reportFile(c, 'docx');
-        if (a) attachment = { filename: a.filename || `Valuation_${c.fileNumber || c.id}.docx`, content: a.buffer };
+        if (a) attachment = { filename: require('./fileNames').reportFileName(c, /\.pdf$/i.test(a.filename || '') ? 'pdf' : 'docx'), content: a.buffer };
         await sendEmail(contact.email, c, link, attachment, { withDocs });
         delivery.status = 'emailed';
       } catch (err) {

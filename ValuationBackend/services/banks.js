@@ -181,6 +181,8 @@ async function bankInfoForReport(caseObj) {
     const sh = pdS.sheet || {};
     // The owner's own address from the sheet (the property's address is printed in the property part)
     if (pdS.entryMode === 'sheet' && String(sh.ownerAddress || '').trim()) out.address = String(sh.ownerAddress).trim();
+    // Owner's address spoken on the case form (voice fill)
+    else if (String(pdS.report?.ownerAddress || '').trim()) out.address = String(pdS.report.ownerAddress).trim();
     if (pdS.entryMode === 'sheet' && pdS.dealType !== 'Purchase' && !String(out.clientFatherName || '').trim() && String(sh.ownerRelation || '').trim()) out.clientFatherName = String(sh.ownerRelation).trim();
     if (pdS.entryMode === 'sheet' && pdS.dealType === 'Purchase' && String(sh.ownerName || '').trim()) {
       const rep = { ...(pdS.report || {}) };

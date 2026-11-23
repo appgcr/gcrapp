@@ -6,7 +6,7 @@ import { authHeaders } from '../../Shared/authHeaders';
 import { requestMic } from '../../../utils/micPermission';
 
 /**
- * Mahe AI review call — before the case goes to the admin, Mahe AI "calls" the engineer and asks about
+ * Gouru AI review call — before the case goes to the admin, Gouru AI "calls" the engineer and asks about
  * anything that looks wrong. Questions are spoken aloud; the engineer answers by tapping, typing or voice.
  * The whole call is recorded (the engineer's side through the microphone) and kept with the case.
  *
@@ -15,10 +15,10 @@ import { requestMic } from '../../../utils/micPermission';
  *        onFinish({ log, blob, mime, seconds })
  *        onCancel()                 — engineer declined: nothing is submitted
  */
-// What Mahe AI says besides the questions — natural Telugu, or English
+// What Gouru AI says besides the questions — natural Telugu, or English
 const SAY = {
-  greet: (n) => ({ te: `నమస్కారం అండి, నేను మహే AI. ఈ case admin కి పంపే ముందు ${n} విషయాలు మీతో ఒకసారి confirm చేసుకోవాలి. ఒక్క నిమిషం పడుతుంది అండి.`,
-    en: `Hello, this is Mahe AI. Before this case goes to your admin, I need to confirm ${n} thing${n === 1 ? '' : 's'} with you. It will only take a minute.` }),
+  greet: (n) => ({ te: `నమస్కారం అండి, నేను గౌరు AI. ఈ case admin కి పంపే ముందు ${n} విషయాలు మీతో ఒకసారి confirm చేసుకోవాలి. ఒక్క నిమిషం పడుతుంది అండి.`,
+    en: `Hello, this is Gouru AI. Before this case goes to your admin, I need to confirm ${n} thing${n === 1 ? '' : 's'} with you. It will only take a minute.` }),
   keep: { te: 'సరే అండి, అలాగే ఉంచుతున్నాను.', en: 'Okay, I have kept it as it is.' },
   change: { te: 'సరే అండి, మార్చాను.', en: 'Done, I have changed it.' },
   explain: { te: 'అర్థమైంది అండి, మీ కారణం note చేసుకున్నాను.', en: 'Understood, I have noted your reason.' },
@@ -81,7 +81,7 @@ export default function AiReviewCall({ questions, onApply, onFinish, onCancel })
     return () => clearInterval(id);
   }, [phase]);
 
-  // Mahe AI's voice (Gemini, natural Telugu / English); the phone's own voice only if that is unavailable
+  // Gouru AI's voice (Gemini, natural Telugu / English); the phone's own voice only if that is unavailable
   const voiceFor = (text) => {
     const key = `${lang}|${text}`;
     if (!voiceCache.current.has(key)) {
@@ -143,7 +143,7 @@ export default function AiReviewCall({ questions, onApply, onFinish, onCancel })
 
   const accept = async () => {
     t0.current = Date.now();
-    // One audio graph: Mahe AI's voice + the engineer's microphone → speaker and the call recording
+    // One audio graph: Gouru AI's voice + the engineer's microphone → speaker and the call recording
     try {
       ctx.current = new (window.AudioContext || window.webkitAudioContext)();
       await ctx.current.resume();
@@ -154,7 +154,7 @@ export default function AiReviewCall({ questions, onApply, onFinish, onCancel })
         stream.current = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
         if (ctx.current && dest.current) ctx.current.createMediaStreamSource(stream.current).connect(dest.current);
       }
-    } catch { /* no microphone: Mahe AI's side is still recorded */ }
+    } catch { /* no microphone: Gouru AI's side is still recorded */ }
     try {
       const recStream = dest.current ? dest.current.stream : stream.current;
       if (recStream && typeof MediaRecorder !== 'undefined') {
@@ -187,7 +187,7 @@ export default function AiReviewCall({ questions, onApply, onFinish, onCancel })
   };
   const explain = (note, via = 'typed', extra = {}) => { record({ decision: 'explain', after: q.current || '', note, via, ...extra }); say(SAY.explain).then(next); };
 
-  // Voice answer: a short clip of the same microphone, understood by Mahe AI, then confirmed by the engineer
+  // Voice answer: a short clip of the same microphone, understood by Gouru AI, then confirmed by the engineer
   const startVoice = async () => {
     try {
       if (!stream.current) {
@@ -243,15 +243,15 @@ export default function AiReviewCall({ questions, onApply, onFinish, onCancel })
 
   const mmss = `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`;
   return createPortal(
-    <div className="arc" role="dialog" aria-modal="true" aria-label="Mahe AI review call" data-no-reach>
+    <div className="arc" role="dialog" aria-modal="true" aria-label="Gouru AI review call" data-no-reach>
       {phase === 'ringing' && (
         <div className="arc-ring">
           <div className="arc-avatar pulse"><Sparkles size={44} /></div>
-          <div className="arc-name">Mahe AI</div>
+          <div className="arc-name">Gouru AI</div>
           <div className="arc-sub">{lang === 'te' ? `ఈ case గురించి call చేస్తోంది · ${questions.length} ప్రశ్నలు` : `is calling to check this case · ${questions.length} question${questions.length === 1 ? '' : 's'}`}</div>
           <p className="arc-why">{lang === 'te'
-            ? 'Admin కి పంపే ముందు మహే AI కొన్ని విషయాలు మీతో confirm చేసుకుంటుంది. ఈ call record అయ్యి case తో save అవుతుంది.'
-            : 'Before it goes to your admin, Mahe AI checks a few details with you. The call is recorded and saved with the case.'}</p>
+            ? 'Admin కి పంపే ముందు గౌరు AI కొన్ని విషయాలు మీతో confirm చేసుకుంటుంది. ఈ call record అయ్యి case తో save అవుతుంది.'
+            : 'Before it goes to your admin, Gouru AI checks a few details with you. The call is recorded and saved with the case.'}</p>
           <button type="button" className="arc-lang" onClick={() => setLang(lang === 'te' ? 'en' : 'te')} style={{ marginTop: -10, marginBottom: 14 }}>{lang === 'te' ? 'English' : 'తెలుగు'}</button>
           <div className="arc-btns">
             <button type="button" className="arc-dec" onClick={decline} aria-label="Decline"><PhoneOff size={28} /></button>
@@ -265,7 +265,7 @@ export default function AiReviewCall({ questions, onApply, onFinish, onCancel })
         <div className="arc-call">
           <div className="arc-top">
             <div className="arc-avatar small"><Sparkles size={22} /></div>
-            <div><b>Mahe AI</b><span>{whole.current ? '● Recording · ' : ''}{mmss}</span></div>
+            <div><b>Gouru AI</b><span>{whole.current ? '● Recording · ' : ''}{mmss}</span></div>
             <button type="button" className="arc-lang" onClick={() => { stopVoice(); setLang(lang === 'te' ? 'en' : 'te'); }} aria-label="Change language">{lang === 'te' ? 'English' : 'తెలుగు'}</button>
             <button type="button" className="arc-mute" onClick={() => { if (!muted) stopVoice(); setMuted(!muted); }} aria-label={muted ? 'Turn voice on' : 'Turn voice off'}>{muted ? <VolumeX size={18} /> : <Volume2 size={18} />}</button>
           </div>
@@ -307,7 +307,7 @@ export default function AiReviewCall({ questions, onApply, onFinish, onCancel })
           )}
 
           <div className="arc-voice">
-            {thinking ? <div className="arc-think"><Loader2 size={18} className="spin" /> Mahe AI is listening to your answer…</div>
+            {thinking ? <div className="arc-think"><Loader2 size={18} className="spin" /> Gouru AI is listening to your answer…</div>
               : listening ? <button type="button" className="arc-mic on" onClick={stopAnswer}><Square size={20} /> Stop — I'm done</button>
                 : <button type="button" className="arc-mic" onClick={startVoice}><Mic size={20} /> Answer by voice</button>}
           </div>

@@ -8,13 +8,13 @@ import askConfirm from '../../Shared/askConfirm';
 
 /**
  * Speak the site details — "road 30 feet, framed structure, 12 years, vitrified flooring,
- * north side road…" — and Mahe AI fills the Site step. Only what was said is changed.
+ * north side road…" — and Gouru AI fills the Site step. Only what was said is changed.
  */
 const MAX_SEC = 120;
 const FLOOR_LABELS = ['Ground Floor (GF)', 'First Floor (FF)', 'Second Floor (SF)', 'Third Floor (TF)', 'Fourth Floor (4F)', 'Fifth Floor (5F)', 'Sixth Floor (6F)', 'Seventh Floor (7F)'];
 
 // Any recording → 16 kHz mono WAV (every phone's format is accepted that way)
-async function toWav(blob) {
+export async function toWav(blob) {
   const buf = await blob.arrayBuffer();
   const Ctx = window.AudioContext || window.webkitAudioContext;
   const ctx = new Ctx();
@@ -163,7 +163,7 @@ export default function VoiceFill({ propertyDetails, setPropertyDetails, setManu
         <button type="button" className="vfl-btn rec" onClick={stop}><Square size={16} /> Stop · {Math.floor(secs / 60)}:{String(secs % 60).padStart(2, '0')}</button>
       )}
       {state === 'busy' && (
-        <button type="button" className="vfl-btn" disabled><Loader2 size={18} className="spin" /> Mahe AI is filling…</button>
+        <button type="button" className="vfl-btn" disabled><Loader2 size={18} className="spin" /> Gouru AI is filling…</button>
       )}
       <div className="vfl-hint">
         {state === 'rec'

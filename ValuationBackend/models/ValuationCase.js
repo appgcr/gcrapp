@@ -97,7 +97,7 @@ const valuationCaseSchema = new mongoose.Schema({
     report: { type: mongoose.Schema.Types.Mixed, default: {} }
   },
 
-  // Mahe AI review call before submit: questions, the engineer's answers, changes made and the call recording
+  // Gouru AI review call before submit: questions, the engineer's answers, changes made and the call recording
   aiReview: { type: mongoose.Schema.Types.Mixed, default: null },
   // Checks run before submit (services/preCheck.js): shown to the engineer and the reviewing admin
   preCheck: { type: mongoose.Schema.Types.Mixed, default: null },

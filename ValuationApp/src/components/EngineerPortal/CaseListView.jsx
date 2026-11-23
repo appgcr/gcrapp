@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Search, ChevronRight, Plus, Loader2 } from 'lucide-react';
+import { FileText, Search, ChevronRight, Plus, Loader2, Paperclip, X } from 'lucide-react';
+import { DOC_ACCEPT } from '../../utils/docFiles';
 import { createPortal } from 'react-dom';
 import { useBanks } from '../../utils/banks';
 import toast from 'react-hot-toast';
@@ -18,6 +19,7 @@ export default function CaseListView({ onOpenCase, currentUser }) {
   const [canSelfCase, setCanSelfCase] = useState(!!currentUser?.canSelfCase);
   const [newOpen, setNewOpen] = useState(false);
   const [reload, setReload] = useState(0);
+  const [sheetDocs, setSheetDocs] = useState(null); // documents picked in the New Case sheet
   const [loadState, setLoadState] = useState('loading'); // loading | ok | error
   useEffect(() => {
     if (!currentUser?.id) return;
@@ -130,8 +132,9 @@ export default function CaseListView({ onOpenCase, currentUser }) {
       {newOpen && (
         <SelfCaseSheet
           onClose={() => setNewOpen(false)}
-          onCreated={(c) => {
+          onCreated={(c, docs) => {
             setNewOpen(false);
+            setSheetDocs(docs && Object.values(docs).some((a) => a.length) ? docs : null);
             setReload((n) => n + 1);
             toast.success(`Case ${c.fileNumber || c.id} created. Fill in the details and submit it to your admin.`);
             setEditingCaseId(c.id);   // straight into the case form
@@ -144,9 +147,11 @@ export default function CaseListView({ onOpenCase, currentUser }) {
           isOpen={isModalOpen}
           editingCaseId={editingCaseId}
           currentUser={currentUser}
+          initialDocFiles={sheetDocs}
           onClose={() => {
             setIsModalOpen(false);
             setEditingCaseId(null);
+            setSheetDocs(null);
           }}
           onCaseSaved={(formattedNewCase, isEditing) => {
             if (isEditing) {
@@ -161,10 +166,22 @@ export default function CaseListView({ onOpenCase, currentUser }) {
   );
 }
 
+const SHEET_DOCS = [
+  ['saleDeed', 'Sale Deed'],
+  ['buildingPlan', 'Building Plan'],
+  ['propertyTax', 'Property Tax'],
+  ['marketValue', 'Market Value'],
+  ['layoutPlan', 'Layout Plan'],
+];
+
 // Short form to start a self case; the full details are filled in the usual case form afterwards
 function SelfCaseSheet({ onClose, onCreated }) {
   const banks = useBanks();
   const [f, setF] = useState({ clientName: '', clientPhone: '', bankName: '', address: '', note: '' });
+  const [docs, setDocs] = useState({}); // docId → [File]
+  const [pickFor, setPickFor] = useState(null);
+  const fileInput = React.useRef(null);
+  const docCount = Object.values(docs).reduce((n, a) => n + a.length, 0);
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: k === 'clientPhone' ? e.target.value.replace(/\D/g, '').slice(0, 10) : e.target.value }));
   const ok = f.clientName.trim() && f.address.trim() && (!f.clientPhone || f.clientPhone.length === 10) && !busy;
@@ -180,7 +197,7 @@ function SelfCaseSheet({ onClose, onCreated }) {
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || 'Could not create the case');
-      onCreated(d);
+      onCreated(d, docs);
     } catch (err) {
       toast.error(err.message);
       setBusy(false);
@@ -212,7 +229,29 @@ function SelfCaseSheet({ onClose, onCreated }) {
           <label className="fs-row"><span>Address</span><input value={f.address} onChange={set('address')} placeholder="Required" autoComplete="off" /></label>
           <label className="fs-row"><span>Note</span><input value={f.note} onChange={set('note')} placeholder="Optional" autoComplete="off" /></label>
         </div>
-        <p className="fs-foot">The case gets a file number now. Fill in the documents, photos and details, then submit it — it goes to your admin for review, like any other case.</p>
+        <div className="fs-section">Documents <small style={{ textTransform: 'none' }}>· optional</small></div>
+        <div className="fs-group">
+          <input ref={fileInput} type="file" multiple hidden accept={DOC_ACCEPT}
+            onChange={(e) => { const list = Array.from(e.target.files || []); if (pickFor && list.length) setDocs((d) => ({ ...d, [pickFor]: [...(d[pickFor] || []), ...list] })); e.target.value = ''; }} />
+          {SHEET_DOCS.map(([id, label]) => (
+            <div key={id} className="fs-row" style={{ cursor: 'pointer' }} onClick={() => { setPickFor(id); fileInput.current?.click(); }} role="button" tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter') { setPickFor(id); fileInput.current?.click(); } }}>
+              <span>{label}</span>
+              {docs[id]?.length ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#34c759', fontWeight: 600, marginLeft: 'auto' }}>
+                  {docs[id].length} file{docs[id].length === 1 ? '' : 's'}
+                  <button type="button" aria-label={`Remove ${label}`} onClick={(e) => { e.stopPropagation(); setDocs((d) => ({ ...d, [id]: [] })); }}
+                    style={{ border: 'none', background: 'none', color: '#8e8e93', padding: 2, cursor: 'pointer', display: 'inline-flex' }}><X size={16} /></button>
+                </span>
+              ) : (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#007aff', marginLeft: 'auto' }}><Paperclip size={15} /> Add</span>
+              )}
+            </div>
+          ))}
+        </div>
+        <p className="fs-foot">{docCount
+          ? `Gouru AI checks ${docCount === 1 ? 'this file' : `these ${docCount} files`} as soon as the case opens. Then add the photos and details and submit it to your admin.`
+          : 'Add the documents now or later. The case gets a file number now; fill in the documents, photos and details, then submit it to your admin for review.'}</p>
       </form>
     </div>,
     document.body,

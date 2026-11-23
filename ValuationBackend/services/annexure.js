@@ -112,22 +112,22 @@ async function annexurePdf(c, { internal = false } = {}) {
     } catch { /* skip */ }
   }
 
-  // Mahe AI review call: the questions and the engineer's answers (the recording itself stays with the case)
+  // Gouru AI review call: the questions and the engineer's answers (the recording itself stays with the case)
   const rv = c.aiReview;
   if (internal && rv && Array.isArray(rv.log) && rv.log.length) {
-    let page = doc.addPage(A4); label(page, 'Mahe AI review call - questions and answers');
+    let page = doc.addPage(A4); label(page, 'Gouru AI review call - questions and answers');
     let y = A4[1] - 70;
     const line = (txt, o = {}) => {
       const size = o.size || 10; const f = o.f || font; const maxW = A4[0] - 80 - (o.indent || 0);
       const parts = ascii(txt).split(/\s+/); let cur = '';
       const flush = () => {
-        if (y < 50) { page = doc.addPage(A4); label(page, 'Mahe AI review call (continued)'); y = A4[1] - 70; }
+        if (y < 50) { page = doc.addPage(A4); label(page, 'Gouru AI review call (continued)'); y = A4[1] - 70; }
         page.drawText(cur, { x: 40 + (o.indent || 0), y, size, font: f, color: o.color || ink }); y -= size + 4; cur = '';
       };
       for (const w of parts) { const t = cur ? `${cur} ${w}` : w; if (f.widthOfTextAtSize(t, size) > maxW && cur) { flush(); cur = w; } else cur = t; }
       if (cur) flush();
     };
-    line(`Before submitting, Mahe AI asked the engineer ${rv.log.length} question${rv.log.length === 1 ? '' : 's'}. Call length ${Math.floor((rv.seconds || 0) / 60)} min ${(rv.seconds || 0) % 60} s. ${rv.recording ? 'The call recording is saved with the case.' : 'No recording (microphone not available).'}`, { color: grey });
+    line(`Before submitting, Gouru AI asked the engineer ${rv.log.length} question${rv.log.length === 1 ? '' : 's'}. Call length ${Math.floor((rv.seconds || 0) / 60)} min ${(rv.seconds || 0) % 60} s. ${rv.recording ? 'The call recording is saved with the case.' : 'No recording (microphone not available).'}`, { color: grey });
     y -= 8;
     rv.log.forEach((e, k) => {
       line(`Q${k + 1}. ${e.question}`, { f: bold });
@@ -137,7 +137,7 @@ async function annexurePdf(c, { internal = false } = {}) {
       if (e.transcript) line(`Engineer said: "${e.transcript}"`, { indent: 14, color: grey, size: 9 });
       y -= 6;
     });
-    contents.push(['Mahe AI review call (questions & answers)', 1]);
+    contents.push(['Gouru AI review call (questions & answers)', 1]);
   }
 
   // Cover page
@@ -165,7 +165,7 @@ async function annexurePdf(c, { internal = false } = {}) {
   t(`Prepared by Gouru Valuations on ${new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}`, 40, 40, { size: 9, color: grey });
 
   const pdf = Buffer.from(await doc.save());
-  return { pdf, pages: doc.getPageCount(), skipped, filename: `Documents_${String(fileNo).replace(/[^A-Za-z0-9]+/g, '-')}.pdf` };
+  return { pdf, pages: doc.getPageCount(), skipped, filename: require('./fileNames').reportFileName(c, 'pdf', 'Documents') };
 }
 
 module.exports = { annexurePdf, bytesOf, DOCS };

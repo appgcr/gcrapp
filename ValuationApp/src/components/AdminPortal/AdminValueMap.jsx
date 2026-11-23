@@ -7,6 +7,7 @@ import { getBranchScope } from '../../utils/session';
 import { API_BASE_URL } from '../../config/api';
 import SmoothBaseMap from '../Shared/SmoothBaseMap';
 import ReportViewer, { fetchReport } from '../Shared/ReportViewer';
+import { reportFileName } from '../../utils/reportFileName';
 
 /**
  * Value Map — every finished valuation as a landmark on the map, labelled with its value.
@@ -229,7 +230,7 @@ export default function AdminValueMap() {
         <ReportViewer
           title={report.clientName || 'Valuation Report'}
           subtitle={[report.fileNumber, report.bankName].filter(Boolean).join(' · ')}
-          fileName={`Report_${String(report.fileNumber || report.id).replace(/[^a-zA-Z0-9]+/g, '-')}.docx`}
+          fileName={reportFileName(report)}
           load={() => fetchReport(`${API_BASE_URL}/api/cases/${report.id}/report?format=docx`)}
           onClose={() => setReport(null)}
         />

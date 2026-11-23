@@ -190,7 +190,7 @@ function ConversationList({ conversations, listLoaded, currentUser, onOpen, acti
         {onBack && !embedded && <button className="ch-back" onClick={onBack} aria-label="Back"><ChevronLeft size={28} /></button>}
         <div className="ch-list-titles">
           <h1>Messages</h1>
-          {superAdmin ? <BranchSwitcher currentUser={currentUser} /> : currentUser?.branchInfo && <span className="ch-branch-static">{currentUser.branchInfo.name} Branch</span>}
+          {superAdmin ? <BranchSwitcher currentUser={currentUser} /> : currentUser?.branchInfo && <span className="ch-branch-static">{currentUser.branchInfo.name}{/branch$/i.test(currentUser.branchInfo.name || '') ? '' : ' Branch'}</span>}
         </div>
         <button className="ch-compose-all" onClick={() => window.dispatchEvent(new CustomEvent('gcr_quick_action', { detail: { action: 'broadcast' } }))} aria-label="Message everyone" title="Message everyone">
           <Megaphone size={20} />

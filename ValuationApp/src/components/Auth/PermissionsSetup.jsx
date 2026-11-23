@@ -44,7 +44,7 @@ const ITEMS = {
   },
   microphone: {
     icon: Mic, color: 'purple', title: 'Microphone',
-    why: 'Speak the site details and Mahe AI fills the form. Used only when you tap Speak.',
+    why: 'Speak the site details and Gouru AI fills the form. Used only when you tap Speak.',
   },
   notifications: {
     icon: Bell, color: 'red', title: 'Notifications',

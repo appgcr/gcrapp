@@ -22,10 +22,12 @@ import { reconcileDocuments } from '../../../utils/reconciliation';
 import { isStrictlyEmpty } from '../../../utils/canonicalSchema';
 
 import Step1CaseSetup from './Step1CaseSetup';
+import { reportFileName } from '../../../utils/reportFileName';
 import Step2LegalDocs from './Step2LegalDocs';
 import { landRateMissing } from './LandRateCard';
 import Step3PropertyDetails from './Step3PropertyDetails';
 import Step3CheckDetails, { missingDocDetails } from './Step3CheckDetails';
+import { voiceToCase } from './voiceToCase';
 import CaseStepper, { stepIndex, SHEET_STEPS, sheetStepIndex } from './CaseStepper';
 import OfficeSheetStep, { EMPTY_SHEET, sheetToCase } from './OfficeSheetStep';
 import AiReviewCall from './AiReviewCall';
@@ -62,7 +64,8 @@ export default function CaseCreationModal({
   onClose,
   currentUser,
   editingCaseId: propEditingCaseId,
-  onCaseSaved
+  onCaseSaved,
+  initialDocFiles = null, // { saleDeed: [File], … } picked in the New Case sheet: checked here one document at a time
 }) {
 
   // Modal State
@@ -305,7 +308,7 @@ export default function CaseCreationModal({
   // Office sheet route (Super Admin switches it on per branch): sheet → photos + selfie → sign
   const [bypassAllowed, setBypassAllowed] = useState(false);
   const [siteSelfie, setSiteSelfie] = useState(null); // { url, lat, lng, takenAt }
-  // Mahe AI review call before the case goes to the admin
+  // Gouru AI review call before the case goes to the admin
   const aiReviewRef = useRef(null);
   const [reviewQuestions, setReviewQuestions] = useState(null);
   const [reviewBusy, setReviewBusy] = useState(false);
@@ -642,6 +645,34 @@ export default function CaseCreationModal({
     setModalStep(4);
   };
 
+  // Documents picked in the New Case sheet: open the Documents step and run each through the usual
+  // Gouru AI checks, one document at a time (so the duplicate check sees the ones before it)
+  const docQueueRef = useRef(null);
+  useEffect(() => {
+    if (!draftReady || !editingCaseId || !initialDocFiles || docQueueRef.current !== null) return;
+    docQueueRef.current = Object.entries(initialDocFiles).filter(([, files]) => files && files.length);
+    if (docQueueRef.current.length) setModalStep(2);
+  }, [draftReady, editingCaseId, initialDocFiles]);
+  useEffect(() => {
+    const q = docQueueRef.current;
+    if (!q || !q.length || modalStep !== 2 || Object.values(scanningDocs).some(Boolean)) return;
+    const [docId, files] = q.shift();
+    activeDocUploadRef.current = docId;
+    handleSimulateUpload({ target: { files } });
+  }, [modalStep, scanningDocs, draftReady]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Spoken details → every field of the case (not only the page the engineer is on)
+  const applyVoiceToCase = (f) => {
+    const r = voiceToCase(f, { propertyDetails, lockedName: lockedFields.clientName, lists: { roadTypes, structureTypes, flooringTypes } });
+    if (r.name) setClientName(r.name);
+    if (r.fatherName) setClientFatherName(r.fatherName);
+    if (r.paths.length) {
+      setPropertyDetails((prev) => r.patch(prev));
+      setManuallyModifiedFields((prev) => { const n = new Set(prev); r.paths.forEach((k) => n.add(k)); return n; });
+    }
+    return { filled: r.filled, skipped: r.skipped };
+  };
+
   const handleNextToUpload = async () => {
     if (clientName.trim() === '' || bankName.trim() === '') {
       toast.error("Please enter both the client's name and the bank name.");
@@ -826,7 +857,7 @@ export default function CaseCreationModal({
         }) : null;
 
         // ── 3. OCR / PDF TEXT VALIDATION WITH LIVE STREAMING ─────────────
-        const scanMsg = isWord ? 'Mahe AI is reading the Word file...' : isPdf ? 'Mahe AI is scanning PDF (may take a few seconds)...' : 'Mahe AI is scanning document...';
+        const scanMsg = isWord ? 'Gouru AI is reading the Word file...' : isPdf ? 'Gouru AI is scanning PDF (may take a few seconds)...' : 'Gouru AI is scanning document...';
         toast(scanMsg, { icon: '🔍', duration: 3000 });
 
         let clientText = '';
@@ -852,7 +883,7 @@ export default function CaseCreationModal({
                 ...prev,
                 [docId]: {
                   ...prev[docId],
-                  status: `Mahe AI OCR Scanning Page ${pageNum} of ${totalPages}...`,
+                  status: `Gouru AI OCR Scanning Page ${pageNum} of ${totalPages}...`,
                   detail: `Extracting live text stream (Page ${pageNum}/${totalPages})`,
                   currentPage: pageNum,
                   totalPages: totalPages,
@@ -875,7 +906,7 @@ export default function CaseCreationModal({
           ...prev,
           [docId]: {
             ...prev[docId],
-            status: `Mahe AI OCR Scanning in Progress${fileLabel}...`,
+            status: `Gouru AI OCR Scanning in Progress${fileLabel}...`,
             detail: isPdf
               ? `Analyzing ${detectedPageCount} page${detectedPageCount > 1 ? 's' : ''}, municipal seals & sanction details`
               : 'Running OCR — reading stamps, signatures & seal details',
@@ -908,7 +939,7 @@ export default function CaseCreationModal({
           toast(validation.warning, { icon: '⚠️', duration: 5000 });
         } else {
           const rules = DOC_VALIDATION_RULES[docId];
-          toast.success(`Mahe AI Verified ✓ — ${rules?.name || 'Document'} accepted.`);
+          toast.success(`Gouru AI Verified ✓ — ${rules?.name || 'Document'} accepted.`);
         }
 
         // Show live extracted field badges and text snippets in the scanning box
@@ -1143,12 +1174,12 @@ export default function CaseCreationModal({
 
         // ── Validate camera-captured document via shared OCR validator ────
         try {
-          toast('Mahe AI is scanning captured document...', { icon: '🔍', duration: 2500 });
+          toast('Gouru AI is scanning captured document...', { icon: '🔍', duration: 2500 });
 
           const validation = await validateDocOCR(frameUrl, docId, false, null, '', clientName);
 
           if (!validation.passed) {
-            showValidationError(`⚠️ MAHE AI REJECTION:\n${validation.reason}`);
+            showValidationError(`⚠️ GOURU AI REJECTION:\n${validation.reason}`);
             setScanningDocs(prev => ({ ...prev, [docId]: false }));
             return;
           }
@@ -1157,7 +1188,7 @@ export default function CaseCreationModal({
             toast(validation.warning, { icon: '⚠️', duration: 5000 });
           } else {
             const rules = DOC_VALIDATION_RULES[docId];
-            toast.success(`Mahe AI Verified ✓ — ${rules?.name || 'Document'} accepted.`);
+            toast.success(`Gouru AI Verified ✓ — ${rules?.name || 'Document'} accepted.`);
           }
 
           // Auto-fill ALL extracted metadata into propertyDetails
@@ -1194,7 +1225,7 @@ export default function CaseCreationModal({
           setUploadedDocs(prev => ({ ...prev, [docId]: [...prev[docId], newPage] }));
         } catch (err) {
           console.error('Camera OCR Scan Failed', err);
-          showValidationError('⚠️ MAHE AI REJECTION:\nThe image quality is too poor or the document is unreadable. Please retake the photo with better lighting.');
+          showValidationError('⚠️ GOURU AI REJECTION:\nThe image quality is too poor or the document is unreadable. Please retake the photo with better lighting.');
         } finally {
           setScanningDocs(prev => ({ ...prev, [docId]: false }));
         }
@@ -1357,7 +1388,7 @@ export default function CaseCreationModal({
       try {
         const type = (mime || 'audio/webm').split(';')[0];
         const ext = /mp4|aac|m4a/.test(type) ? 'm4a' : /ogg/.test(type) ? 'ogg' : 'webm';
-        const f = new File([blob], `Mahe AI review call.${ext}`, { type });
+        const f = new File([blob], `Gouru AI review call.${ext}`, { type });
         const url = await uploadDocumentFile(f);
         recordingDoc = { name: f.name, url, isAudio: true, mime: type, size: blob.size, extension: ext.toUpperCase(), uploadedAt: new Date().toLocaleString('en-IN') };
       } catch { toast.error('The call recording could not be uploaded — your answers are saved.'); }
@@ -1413,7 +1444,7 @@ export default function CaseCreationModal({
       }
     }
 
-    // Mahe AI review call: anything doubtful is asked to the engineer before the case goes to the admin
+    // Gouru AI review call: anything doubtful is asked to the engineer before the case goes to the admin
     const offlineNow = typeof navigator !== 'undefined' && navigator.onLine === false;
     if (!aiReviewRef.current && !offlineNow) {
       setReviewBusy(true);
@@ -1682,8 +1713,8 @@ export default function CaseCreationModal({
       {reviewBusy && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 11000, background: 'rgba(11,21,51,.88)', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, textAlign: 'center', padding: 24 }} data-no-reach>
           <Loader2 size={34} className="spin" />
-          <div style={{ fontSize: 18, fontWeight: 800 }}>Mahe AI is checking your case…</div>
-          <div style={{ fontSize: 14, color: '#c7d2fe', maxWidth: 320 }}>Comparing your entries with the documents and the valuer checks. If anything needs your answer, Mahe AI will call you.</div>
+          <div style={{ fontSize: 18, fontWeight: 800 }}>Gouru AI is checking your case…</div>
+          <div style={{ fontSize: 14, color: '#c7d2fe', maxWidth: 320 }}>Comparing your entries with the documents and the valuer checks. If anything needs your answer, Gouru AI will call you.</div>
         </div>
       )}
       {reviewQuestions && (
@@ -1691,7 +1722,7 @@ export default function CaseCreationModal({
           questions={reviewQuestions}
           onApply={applyReview}
           onFinish={finishReview}
-          onCancel={() => { setReviewQuestions(null); toast('Not submitted. Submit again when you are ready for the Mahe AI call.', { icon: '📞' }); }}
+          onCancel={() => { setReviewQuestions(null); toast('Not submitted. Submit again when you are ready for the Gouru AI call.', { icon: '📞' }); }}
         />
       )}
       {showDraftPrompt && (
@@ -1757,7 +1788,7 @@ export default function CaseCreationModal({
             {isWordFile(previewImage) ? (
               <div style={{ color: 'white', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
                 <FileText size={56} color="#60a5fa" />
-                <div style={{ fontSize: '15px', maxWidth: '320px', lineHeight: 1.5 }}>Word document — checked by Mahe AI on the server. Open it in Word or another app to view.</div>
+                <div style={{ fontSize: '15px', maxWidth: '320px', lineHeight: 1.5 }}>Word document — checked by Gouru AI on the server. Open it in Word or another app to view.</div>
                 <a href={resolveDocUrl(previewImage.url)} target="_blank" rel="noreferrer" style={{ background: '#2563eb', color: 'white', padding: '10px 18px', borderRadius: '10px', fontWeight: 600, textDecoration: 'none' }}>Open / download</a>
               </div>
             ) : previewImage.isPdf ? (
@@ -1854,6 +1885,7 @@ export default function CaseCreationModal({
 
             {modalStep === 8 && (
               <OfficeSheetStep
+                voiceKey={`voice:${currentUser?.id || 'me'}:${editingCaseId || 'new'}:sheet`}
                 sheet={sheet}
                 setSheet={setSheet}
                 sheetFiles={sheetFiles}
@@ -1952,6 +1984,8 @@ export default function CaseCreationModal({
             {/* STEP 3: Property Details */}
             {modalStep === 3 && step3Phase === 'check' && (
               <Step3CheckDetails
+                voiceApply={applyVoiceToCase}
+                voiceKey={`voice:${currentUser?.id || 'me'}:${editingCaseId || 'new'}:check`}
                 propertyDetails={propertyDetails}
                 setPropertyDetails={setPropertyDetails}
                 setManuallyModifiedFields={setManuallyModifiedFields}
@@ -2066,7 +2100,7 @@ export default function CaseCreationModal({
         <ReportViewer
           title="Check the bank report"
           subtitle={`${clientName || 'Client'} · ${bankName || ''} — this is exactly what the bank receives`}
-          fileName={`Preview_${editingCaseId}.docx`}
+          fileName={reportFileName({ clientName, fileNumber: caseStampRef.current && /\//.test(caseStampRef.current) ? caseStampRef.current : '', id: editingCaseId })}
           load={() => fetchReport(`${API_BASE_URL}/api/cases/${editingCaseId}/report-preview`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

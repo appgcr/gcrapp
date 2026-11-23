@@ -825,7 +825,7 @@ export default function AttendanceView({ currentUser: initialUser, onOpenCase })
                   <div key={log.id || idx} className="td-row">
                     <IconTile icon={isIn ? LogIn : LogOut} color={isIn ? 'green' : 'red'} size={30} />
                     <div className="td-main">
-                      <div className="td-title">{isIn ? 'Checked in' : 'Checked out'} · {shortTime(log.timestamp)}</div>
+                      <div className="td-title">{isIn ? 'Checked in' : log.missedCheckOut ? 'Auto check-out (forgot)' : 'Checked out'} · {shortTime(log.timestamp)}</div>
                       <div className="td-sub">{log.workDurationFormatted ? `Worked ${log.workDurationFormatted} · ` : ''}{log.address || 'Location saved'}</div>
                     </div>
                     {log.imageUrl && (

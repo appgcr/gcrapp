@@ -8,6 +8,7 @@ import { API_BASE_URL } from '../../config/api';
 import ReportViewer, { fetchReport } from '../Shared/ReportViewer';
 import './BankPortal.css';
 import { PdfSheet } from '../AdminPortal/AdminFees';
+import { reportFileName } from '../../utils/reportFileName';
 
 const STEPS = ['Received by Gouru', 'Engineer assigned', 'Site visit done', 'Under Gouru review', 'Report ready'];
 const EMPTY = { clientName: '', clientPhone: '', notes: '', bankBranch: '', documents: [], inspectionDate: '', inspectionTime: '', engineerId: '' };
@@ -268,7 +269,7 @@ export default function BankPortal({ currentUser, handleLogout }) {
         <ReportViewer
           title={viewing.clientName}
           subtitle={`${viewing.fileNumber} · approved valuation report`}
-          fileName={`${String(viewing.fileNumber).replace(/[^\w-]+/g, '_')}.docx`}
+          fileName={reportFileName(viewing)}
           load={() => fetchReport(`${API_BASE_URL}/api/bank/requests/${encodeURIComponent(viewing.id)}/report?format=docx`)}
           onClose={() => setViewing(null)}
         />

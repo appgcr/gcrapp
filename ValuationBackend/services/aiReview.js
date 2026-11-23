@@ -1,4 +1,4 @@
-// Mahe AI review call: before a case goes to the admin, the engineer is asked about anything that looks
+// Gouru AI review call: before a case goes to the admin, the engineer is asked about anything that looks
 // wrong — valuer checks on the figures, and the form compared with the uploaded documents.
 // Each question can point at one field; the engineer keeps it, changes it, or explains.
 

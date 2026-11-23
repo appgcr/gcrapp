@@ -67,7 +67,7 @@ export default function Step4SiteImages({
 
           {siteImages.length > 0 && (
             <div className={`phl ${missing && missing.length === 0 ? 'ok' : ''}`}>
-              {labelling && !missing ? 'Mahe AI is sorting your photos…'
+              {labelling && !missing ? 'Gouru AI is sorting your photos…'
                 : missing === null ? null
                 : missing.length === 0 ? '✓ All key photos are here.'
                 : <>Still needed: <b>{missing.map(m => m.label).join(', ')}</b></>}

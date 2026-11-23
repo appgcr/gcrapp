@@ -1,4 +1,4 @@
-// Mahe AI's voice: natural Telugu (and English) speech from Gemini's speech models, and the review
+// Gouru AI's voice: natural Telugu (and English) speech from Gemini's speech models, and the review
 // questions turned into everyday spoken Telugu — the way a colleague would ask on the phone.
 
 const crypto = require('crypto');

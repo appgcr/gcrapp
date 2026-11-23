@@ -72,7 +72,7 @@ app.use('/api/auth/login', limit({
   message: (m) => `Too many wrong tries. Please wait ${m} minute${m > 1 ? 's' : ''} and try again.`,
 }));
 app.use(['/api/extract', '/api/assist'], limit({ name: 'ai', windowMs: 10 * 60 * 1000, max: 150, key: userOrIp,
-  message: (m) => `Mahe AI is being used a lot from this login. Please wait ${m} minute${m > 1 ? 's' : ''}.` }));
+  message: (m) => `Gouru AI is being used a lot from this login. Please wait ${m} minute${m > 1 ? 's' : ''}.` }));
 app.use('/api/cases/:id/shared-report', limit({ name: 'share', windowMs: 10 * 60 * 1000, max: 40, key: (req) => req.ip }));
 app.use('/api/bank/requests', (req, res, next) => (req.method === 'POST'
   ? limit({ name: 'bankreq', windowMs: 60 * 60 * 1000, max: 40, key: userOrIp })(req, res, next) : next()));

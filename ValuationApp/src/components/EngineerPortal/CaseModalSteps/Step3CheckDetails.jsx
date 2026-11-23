@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { CheckCircle2, AlertCircle, Pencil, ChevronRight, FileText, Receipt, IndianRupee, Compass, Building2 } from 'lucide-react';
 import { toFieldValue, isBuiltProperty } from './caseModalHelpers';
+import VoiceSheetFill, { sheetFilledList } from './VoiceSheetFill';
 
 /**
  * Step 3 — Check document details.
- * Everything Mahe AI read from the uploaded documents, as a short list to check.
+ * Everything Gouru AI read from the uploaded documents, as a short list to check.
  * Tap a row to correct it; anything the AI could not find is marked "Missing" and can be typed here.
  * Site-visit details (road, building, extra items…) come on the next screen.
  */
@@ -62,7 +63,13 @@ export function missingDocDetails(propertyDetails = {}) {
 const GROUP_ICON = { Registration: FileText, 'Tax & approval': Receipt, Apartment: Building2, Rates: IndianRupee, 'Boundaries as per documents': Compass };
 const fmtRate = (v) => (/^\d+(\.\d+)?$/.test(v) ? `₹${Number(v).toLocaleString('en-IN')} / Sq.yd` : v);
 
-export default function Step3CheckDetails({ propertyDetails = {}, setPropertyDetails, setManuallyModifiedFields, onNext }) {
+// Spoken office-sheet style values → this step's fields
+const VOICE_MAP = [
+  ['deedNo', 'deedNo'], ['deedDate', 'deedYear'], ['surveyNo', 'surveyNo'], ['plotNo', 'plotNo'], ['doorNo', 'doorNo'],
+  ['assessmentNo', 'assessmentNo'], ['baNumber', 'approvalPlanNo'], ['baDate', 'approvalPlanDate'], ['extentDocument', 'netExtent'],
+];
+
+export default function Step3CheckDetails({ voiceApply, voiceKey, propertyDetails = {}, setPropertyDetails, setManuallyModifiedFields, onNext }) {
   const [editing, setEditing] = useState(null);
   const rows = fieldsFor(toFieldValue(propertyDetails.propertyType) || '');
   const value = (k) => String(toFieldValue(getPath(propertyDetails, k)) ?? '').trim();
@@ -72,7 +79,28 @@ export default function Step3CheckDetails({ propertyDetails = {}, setPropertyDet
   const pct = rows.length ? found / rows.length : 0;
   const R = 26, C = 2 * Math.PI * R;
 
+  const [voiceKeys, setVoiceKeys] = useState(() => new Set());
+  const applyVoice = (f) => {
+    const allowed = new Set(rows.map((r) => r.key));
+    const labelOf = (k) => rows.find((r) => r.key === k)?.label || k;
+    const sets = [];
+    for (const [from, to] of VOICE_MAP) if (f[from] && allowed.has(to)) sets.push([to, String(f[from])]);
+    Object.entries(f.boundaries || {}).forEach(([side, v]) => { if (v && allowed.has(`boundariesDoc.${side}`)) sets.push([`boundariesDoc.${side}`, String(v)]); });
+    if (f.guidelineRate && allowed.has('report.guidelineRatePerSqyd')) sets.push(['report.guidelineRatePerSqyd', String(f.guidelineRate).replace(/[^\d.]/g, '')]);
+    if (sets.length) {
+      setManuallyModifiedFields && setManuallyModifiedFields((prev) => { const n = new Set(prev); sets.forEach(([k]) => n.add(k)); return n; });
+      setPropertyDetails((prev) => sets.reduce((acc, [k, v]) => setPath(acc, k, v), prev));
+    }
+    const used = new Set([...VOICE_MAP.filter(([from, to]) => f[from] && allowed.has(to)).map(([from]) => from), ...(sets.some(([k]) => k.startsWith('boundariesDoc')) ? ['boundaries'] : []), ...(sets.some(([k]) => k.startsWith('report.')) ? ['guidelineRate'] : [])]);
+    const skipped = sheetFilledList(Object.fromEntries(Object.entries(f).filter(([k]) => !used.has(k)))).map((x) => x.label);
+    return {
+      filled: sets.map(([k, v]) => ({ key: k, label: k.startsWith('boundariesDoc.') ? `Boundary ${k.split('.')[1]}` : labelOf(k), value: v })),
+      skipped,
+    };
+  };
+
   const change = (key, v) => {
+    if (voiceKeys.has(key)) setVoiceKeys((prev) => { const n = new Set(prev); n.delete(key); return n; });
     setManuallyModifiedFields && setManuallyModifiedFields((prev) => new Set(prev).add(key));
     setPropertyDetails(setPath(propertyDetails, key, v));
   };
@@ -83,7 +111,7 @@ export default function Step3CheckDetails({ propertyDetails = {}, setPropertyDet
     const open = editing === r.key || (!v && r.required);
     const state = v ? 'ok' : r.required ? 'miss' : 'empty';
     return (
-      <div key={r.key} className={`c3-field ${state} ${compact ? 'compact' : ''} ${open ? 'open' : ''}`}>
+      <div key={r.key} className={`c3-field ${state} ${compact ? 'compact' : ''} ${open ? 'open' : ''} ${voiceKeys.has(r.key) ? 'voice' : ''}`}>
         <button type="button" className="c3-fhead" onClick={() => setEditing(editing === r.key ? null : r.key)}>
           <span className="c3-ftext">
             <span className="c3-flabel">{r.label}</span>
@@ -116,11 +144,14 @@ export default function Step3CheckDetails({ propertyDetails = {}, setPropertyDet
             <text x="32" y="37" textAnchor="middle" fontSize="15" fontWeight="800" fill="currentColor">{found}/{rows.length}</text>
           </svg>
           <div className="c3-hero-text">
-            <span className="c3-kicker">Read by Mahe AI</span>
+            <span className="c3-kicker">Read by Gouru AI</span>
             <b>{missingRequired ? `${missingRequired} required detail${missingRequired > 1 ? 's' : ''} missing` : found === rows.length ? 'All details found' : 'Required details found'}</b>
             <span>{missingRequired ? 'Add them below — the rest is ready.' : 'Check them. Tap any detail to correct it.'}</span>
           </div>
         </div>
+
+        <VoiceSheetFill apply={voiceApply || applyVoice} storeKey={voiceKey} onFilled={(keys) => setVoiceKeys(new Set(keys))}
+          example="Deed number 123 by 2025, deed date 23-04-24, survey number 114, extent 200 square yards, door number 2/240-45, east road, west house of Ramaiah" />
 
         <div className="c3-type"><span>Report type</span><b>{toFieldValue(propertyDetails.propertyType) || 'Not chosen — go back to Step 1'}</b></div>
 
@@ -181,6 +212,9 @@ export default function Step3CheckDetails({ propertyDetails = {}, setPropertyDet
         .c3-field.empty .c3-fval { color: #a0aabb; font-weight: 500; font-size: 14.5px; }
         .c3-ficon { flex: none; display: grid; place-items: center; }
         .c3-field.ok .c3-ficon { color: var(--c3-ok); }
+        .c3-field.voice { background: #eef2ff; box-shadow: inset 3px 0 0 #6366f1; }
+        .c3-field.voice .c3-flabel::after { content: ' · by voice'; color: #4f46e5; font-weight: 700; }
+        body.dark-theme .c3-field.voice { background: #23234a; }
         .c3-field.miss .c3-ficon { color: var(--c3-warn); }
         .c3-field.empty .c3-ficon { color: #a0aabb; }
         .c3-field input { display: block; width: calc(100% - 28px); margin: 0 14px 12px; padding: 11px 12px; border-radius: 10px; border: 1.5px solid #93c5fd; font-size: 16px; outline: none; box-sizing: border-box; background: #fff; color: var(--c3-text); }

@@ -496,6 +496,9 @@ async function runReminders(now = new Date()) {
   // Deliver phone pushes that were held during quiet hours (runs even if reminders are off)
   summary.sent.releasedHeld = await releaseHeld(now);
 
+  // A check-in left open at the end of the day is closed by the system (always on)
+  try { summary.sent.autoCheckout = await require('./autoCheckout').runAutoCheckout(now); } catch (err) { console.warn('auto check-out:', err.message); }
+
   // Duty location check is a safety rule — it runs even when reminders are switched off
   try {
     const onDutyStaff = await User.find({ role: 'ENGINEER', status: { $ne: 'Inactive' } }).select('id username name branchId').lean();

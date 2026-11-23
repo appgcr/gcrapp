@@ -314,7 +314,7 @@ def run_ocr(input_data, is_pdf=False, process_all_pages=True):
         "is_blurred": is_blurred,
         "blur_score": blur_score,
         "clarity_reason": clarity_reason,
-        "ocr_engine": "Mahe AI Local Fast OCR (Digital + EasyOCR)"
+        "ocr_engine": "Gouru AI Local Fast OCR (Digital + EasyOCR)"
     }
 
 if __name__ == "__main__":

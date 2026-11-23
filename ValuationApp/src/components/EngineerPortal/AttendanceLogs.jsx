@@ -216,7 +216,7 @@ export default function AttendanceLogs() {
                     <div key={r.id || r._id} className="at-event">
                       <span className={`at-dot ${isIn ? 'in' : 'out'}`}>{isIn ? <LogIn size={14} /> : <LogOut size={14} />}</span>
                       <div className="at-event-main">
-                        <div className="at-event-title">{isIn ? 'Checked in' : 'Checked out'} · {fmtTime(r.timestamp)}
+                        <div className="at-event-title">{isIn ? 'Checked in' : r.missedCheckOut ? 'Auto check-out (forgot)' : 'Checked out'} · {fmtTime(r.timestamp)}
                           {r.faceVerified && <span className="at-face">Face verified</span>}
                           {r.verifiedBy === 'Fingerprint' && <span className="at-face">Fingerprint verified</span>}
                           {r.offline && <span className="at-face" style={{ background: '#fff7ed', color: '#c2410c' }} title="Made with no signal; the time is the phone's">No signal · phone time</span>}

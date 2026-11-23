@@ -18,7 +18,7 @@ export default function Step5ExtractedDataReview({
         </div>
         <div style={{ textAlign: 'center', maxWidth: '380px' }}>
           <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '8px' }}>Document Analysis</h3>
-          <p className="text-muted" style={{ fontSize: '14px', margin: 0 }}>Mahe AI is scanning & verifying your documents...</p>
+          <p className="text-muted" style={{ fontSize: '14px', margin: 0 }}>Gouru AI is scanning & verifying your documents...</p>
           <p className="text-primary" style={{ fontSize: '12px', fontWeight: '600', marginTop: '8px' }}>Scanning Languages: English, Telugu (తెలుగు)</p>
         </div>
         <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
