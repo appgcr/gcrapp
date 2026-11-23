@@ -296,10 +296,27 @@ router.put('/:id', authenticateToken, async (req, res) => {
         return res.status(409).json({ error: `A document or photo on this case is already used on case ${dupCase.fileNumber || dupCase.id}. Each case needs its own documents.` });
       }
     }
-    // Ownership and numbering never change through an edit
+    // Ownership and numbering never change through an edit, except that the Super Admin may move a case
+    // that hasn't started yet (Pending) to another branch: it then gets a file number from that branch.
+    const wantBranch = updateData.branchId;
     delete updateData.id;
     delete updateData.branchId;
     delete updateData.fileNumber;
+    let targetBranchId = existingCase.branchId;
+    if (wantBranch && wantBranch !== existingCase.branchId && isSuper(req.user)) {
+      if (existingCase.status !== 'Pending') {
+        return res.status(409).json({ error: 'Only a case that hasn’t started yet can be moved to another branch.' });
+      }
+      const nb = await Branch.findOne({ id: wantBranch }).lean();
+      if (!nb || nb.status === 'Inactive') return res.status(400).json({ error: 'Branch not found.' });
+      updateData.branchId = nb.id;
+      updateData.fileNumber = await nextFileNumber(nb.code, new Date());
+      if (updateData.assignedEngineerId === undefined && existingCase.assignedEngineerId) {
+        updateData.assignedEngineerId = '';
+        updateData.assignedEngineerName = '';
+      }
+      targetBranchId = nb.id;
+    }
     delete updateData.reportFormat;
     if (!isAdmin(req.user)) {
       // Engineers can't reassign cases or make decisions
@@ -347,7 +364,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
         return res.status(409).json({ error: msg });
       }
     }
-    if (updateData.assignedEngineerId !== undefined && !(await engineerInBranch(updateData.assignedEngineerId, existingCase.branchId))) {
+    if (updateData.assignedEngineerId !== undefined && !(await engineerInBranch(updateData.assignedEngineerId, targetBranchId))) {
       return res.status(400).json({ error: 'That engineer belongs to a different branch.' });
     }
     const config = (await AppConfig.findOne({ key: 'global' })) || {};

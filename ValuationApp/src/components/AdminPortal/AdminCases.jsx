@@ -224,6 +224,8 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
       const staffChanged = !!engineer && (!original || original.assignedEngineerId !== engineer.id);
       if (!newTask.id || staffChanged || !newTask.date) Object.assign(payload, assignStamp());
       if (superAdmin && !newTask.id) payload.branchId = newTask.branchId;
+      // Super Admin moved a case that hasn't started to another branch (it gets that branch's file number)
+      if (superAdmin && original && newTask.branchId && newTask.branchId !== original.branchId) payload.branchId = newTask.branchId;
 
       if (engineer) {
         payload.assignedEngineerId = engineer.id;
@@ -332,6 +334,8 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
   const engineers = users.filter(u => u.role === 'ENGINEER');
   // Engineers are always from the case's own branch
   const engineersFor = (branchId) => (branchId ? engineers.filter(u => u.branchId === branchId) : engineers);
+  // Super Admin may pick the branch (and so any branch's engineer) for a new case or one that hasn't started
+  const canMoveTask = !newTask.id || cases.find(c => c.id === newTask.id)?.status === 'Pending';
 
   // ---------- case card (one design for every tab) ----------
   const HOUR = 3600 * 1000;
@@ -649,7 +653,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
                     </button>
                   </div>
                   <form onSubmit={handleCreateNewTask} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    {superAdmin && !newTask.id && (
+                    {superAdmin && canMoveTask && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Branch *</label>
                         <select
@@ -661,7 +665,11 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
                           <option value="">Choose branch…</option>
                           {branches.filter((b) => b.status !== 'Inactive').map((b) => <option key={b.id} value={b.id}>{b.name} ({b.code})</option>)}
                         </select>
-                        <span style={{ fontSize: '12px', color: '#8e8e93' }}>The file number is created from this branch, e.g. GOURU/{branchById(newTask.branchId)?.code || 'KDP'}/…</span>
+                        <span style={{ fontSize: '12px', color: '#8e8e93' }}>{newTask.id
+                          ? (newTask.branchId !== cases.find(c => c.id === newTask.id)?.branchId
+                              ? `Moving it gives the case a new file number from ${branchById(newTask.branchId)?.name || 'that branch'}.`
+                              : 'You can move a case that hasn’t started yet to another branch.')
+                          : <>The file number is created from this branch, e.g. GOURU/{branchById(newTask.branchId)?.code || 'KDP'}/…</>}</span>
                       </div>
                     )}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -925,7 +933,13 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
                   
                   <select
                     value={newTask.assignedStaffId || ''}
-                    onChange={(e) => setNewTask({...newTask, assignedStaffId: e.target.value})}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      const eng = engineers.find(u => u.id === id);
+                      // Super Admin picking an engineer from another branch moves the case to that branch
+                      const move = superAdmin && canMoveTask && eng && eng.branchId && eng.branchId !== newTask.branchId;
+                      setNewTask({ ...newTask, assignedStaffId: id, ...(move ? { branchId: eng.branchId } : {}) });
+                    }}
                     style={{ 
                       width: '100%',
                       padding: '12px 16px', 
@@ -940,12 +954,26 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
                     }}
                   >
                     <option value="">-- Select Staff Member (Optional) --</option>
-                    {engineersFor(newTask.branchId).map(u => (
-                      <option key={u.id} value={u.id}>
-                        {u.name} ({u.phone || 'No phone'})
-                      </option>
-                    ))}
+                    {superAdmin && canMoveTask
+                      ? branches.filter(b => engineers.some(u => u.branchId === b.id)).map(b => (
+                          <optgroup key={b.id} label={`${b.name} (${b.code})`}>
+                            {engineers.filter(u => u.branchId === b.id).map(u => (
+                              <option key={u.id} value={u.id}>{u.name} ({u.phone || 'No phone'})</option>
+                            ))}
+                          </optgroup>
+                        ))
+                      : engineersFor(newTask.branchId).map(u => (
+                          <option key={u.id} value={u.id}>
+                            {u.name} ({u.phone || 'No phone'})
+                          </option>
+                        ))}
                   </select>
+                  {newTask.branchId && engineersFor(newTask.branchId).length === 0 && !(superAdmin && canMoveTask) && (
+                    <span style={{ fontSize: '12.5px', color: '#b45309', lineHeight: 1.4 }}>
+                      No engineers in {branchById(newTask.branchId)?.name || 'this branch'} yet.{' '}
+                      {superAdmin ? 'Move the case to another branch above, or add an engineer to this branch in Staff.' : 'Ask the Super Admin to add an engineer to your branch.'}
+                    </span>
+                  )}
                 </div>
 
                 <button 
