@@ -1288,8 +1288,8 @@ router.post('/ai-review', authenticateToken, async (req, res) => {
 router.post('/ai-review/answer', authenticateToken, async (req, res) => {
   try {
     const { audio, question } = req.body || {};
-    if (!/^data:audio\/[a-z0-9.+-]+;base64,/i.test(String(audio || ''))) return res.status(400).json({ error: 'No recording received.' });
-    if (String(audio).length > 6 * 1024 * 1024) return res.status(413).json({ error: 'Answer too long. Keep it under a minute.' });
+    if (!/^data:audio\/[a-z0-9.+-]+(?:;[^;,]+=[^;,]*)*;base64,/i.test(String(audio || ''))) return res.status(400).json({ error: 'No recording received.' });
+    if (String(audio).length > 8 * 1024 * 1024) return res.status(413).json({ error: 'Answer too long. Keep it under a minute.' });
     const out = await require('../services/aiReview').understandAnswer(audio, question || {});
     if (!out) return res.status(503).json({ error: 'Gouru AI could not hear that. Please tap an answer instead.' });
     res.json(out);

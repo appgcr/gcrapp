@@ -4,6 +4,7 @@ import { Phone, PhoneOff, Mic, Square, Check, Pencil, Loader2, Volume2, VolumeX,
 import { API_BASE_URL } from '../../../config/api';
 import { authHeaders } from '../../Shared/authHeaders';
 import { requestMic } from '../../../utils/micPermission';
+import { toWav } from './VoiceFill';
 
 /**
  * Gouru AI review call — before the case goes to the admin, Gouru AI "calls" the engineer and asks about
@@ -202,7 +203,12 @@ export default function AiReviewCall({ questions, onApply, onFinish, onCancel })
         setListening(false); setThinking(true);
         try {
           const blob = new Blob(clipChunks.current, { type: mr.mimeType || 'audio/webm' });
-          const audio = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob); });
+          if (!blob.size) throw new Error('Nothing was recorded. Please try again.');
+          // Phones record WebM / MP4 ("audio/webm;codecs=opus"); Gouru AI reads WAV reliably, so convert first
+          let audio;
+          try { audio = await toWav(blob); } catch {
+            audio = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob); });
+          }
           const r = await fetch(`${API_BASE_URL}/api/cases/ai-review/answer`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ audio, question: { text: q.text, label: q.label, current: q.current } }) });
           const j = await r.json();
           if (!r.ok) throw new Error(j.error || 'Could not hear that.');

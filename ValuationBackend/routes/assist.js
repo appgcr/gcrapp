@@ -14,7 +14,7 @@ const list = (a) => (Array.isArray(a) ? a.filter((x) => typeof x === 'string' &&
 router.post('/voice-fields', async (req, res) => {
   try {
     const { audio, propertyType = '', options = {} } = req.body || {};
-    if (!/^data:audio\/[a-z0-9.+-]+;base64,/i.test(String(audio || ''))) return res.status(400).json({ error: 'No recording received.' });
+    if (!/^data:audio\/[a-z0-9.+-]+(?:;[^;,]+=[^;,]*)*;base64,/i.test(String(audio || ''))) return res.status(400).json({ error: 'No recording received.' });
     if (String(audio).length > 12 * 1024 * 1024) return res.status(413).json({ error: 'Recording is too long. Keep it under 2 minutes.' });
     if (!aiOn()) return res.status(503).json({ error: 'Voice fill needs Gouru AI, which is switched off on this server.' });
     const o = {
@@ -68,7 +68,7 @@ Reply with ONLY this JSON:
 router.post('/voice-sheet', async (req, res) => {
   try {
     const { audio } = req.body || {};
-    if (!/^data:audio\/[a-z0-9.+-]+;base64,/i.test(String(audio || ''))) return res.status(400).json({ error: 'No recording received.' });
+    if (!/^data:audio\/[a-z0-9.+-]+(?:;[^;,]+=[^;,]*)*;base64,/i.test(String(audio || ''))) return res.status(400).json({ error: 'No recording received.' });
     if (String(audio).length > 12 * 1024 * 1024) return res.status(413).json({ error: 'Recording is too long. Keep it under 2 minutes.' });
     if (!aiOn()) return res.status(503).json({ error: 'Voice fill needs Gouru AI, which is switched off on this server.' });
     const ist = new Date(Date.now() + 5.5 * 3600 * 1000);

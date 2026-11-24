@@ -14,7 +14,8 @@ const aiOn = () => Boolean(config.GEMINI_ENABLED && (config.GEMINI_API_KEY || pr
 async function askJson(prompt, dataUrls = [], { timeoutMs = 60000 } = {}) {
   if (!aiOn()) return null;
   const apiKey = config.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
-  const files = dataUrls.map((u) => /^data:([^;]+);base64,(.*)$/s.exec(String(u || ''))).filter(Boolean)
+  // "data:audio/webm;codecs=opus;base64,…" → mime "audio/webm" (parameters dropped)
+  const files = dataUrls.map((u) => /^data:([^;,]+)(?:;[^;,]+=[^;,]*)*;base64,(.*)$/s.exec(String(u || ''))).filter(Boolean)
     .map((m) => ({ inlineData: { mimeType: m[1], data: m[2] } }));
   const body = JSON.stringify({
     contents: [{ parts: [{ text: prompt }, ...files] }],
