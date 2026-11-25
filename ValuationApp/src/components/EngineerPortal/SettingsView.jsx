@@ -1,10 +1,9 @@
 import { API_BASE_URL } from '../../config/api';
 import React, { useState, useEffect, useRef } from 'react';
-import { Moon, Sun, Fingerprint, HelpCircle, ChevronRight, CheckCircle2, Bell, SlidersHorizontal, PenTool } from 'lucide-react';
+import { Moon, Sun, Fingerprint, HelpCircle, ChevronRight, CheckCircle2, Bell, SlidersHorizontal } from 'lucide-react';
 import pkg from '../../../package.json';
 import IconTile, { AssistiveGlyph } from '../Shared/IconTile';
 import NotificationPrefsCard from '../Shared/NotificationPrefsCard';
-import SignatureSettings from '../Shared/SignatureSettings';
 import { Row, Switch, BackBar, IosSettingsStyles } from '../Shared/IosSettings';
 import { startRegistration } from '@simplewebauthn/browser';
 import toast from 'react-hot-toast';
@@ -164,12 +163,6 @@ export default function SettingsView({ currentUser, handleLogout }) {
             </button>
           </div>
 
-          <div className="ios-section">Reports</div>
-          <div className="ios-group">
-            <Row icon={PenTool} color="indigo" label="Digital Signature" onClick={() => open('signature')} />
-          </div>
-          <p className="ios-footnote">Save your signature once — it is applied to your bank reports when you submit a case.</p>
-
           <div className="ios-section">Notifications</div>
           <div className="ios-group">
             <Row icon={Bell} color="red" label="Notifications" onClick={() => open('notifications')} />
@@ -207,13 +200,6 @@ export default function SettingsView({ currentUser, handleLogout }) {
           </div>
 
           <div className="ios-version">Gouru Valuations · Version {pkg.version}<br />Developed by MSTechHive</div>
-        </>
-      )}
-
-      {page === 'signature' && (
-        <>
-          <BackBar onBack={() => setPage('main')} title="Digital Signature" />
-          <SignatureSettings />
         </>
       )}
 

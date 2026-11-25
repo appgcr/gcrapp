@@ -171,7 +171,7 @@ export default function Step4SiteImages({
             disabled={siteImages.length === 0 || (needSelfie && !siteSelfie)} 
             style={{ opacity: siteImages.length === 0 || (needSelfie && !siteSelfie) ? 0.5 : 1, marginTop: 'auto' }}
           >
-            <ScanLine size={18} /> Continue to Signature & Submit
+            <ScanLine size={18} /> Continue to Review & Submit
           </button>
         </div>
       ) : (

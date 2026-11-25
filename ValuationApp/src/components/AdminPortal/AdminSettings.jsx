@@ -1,7 +1,8 @@
 import { API_BASE_URL } from '../../config/api';
 import React, { useState } from 'react';
-import { Bell, HelpCircle, X, Mail, Phone, ChevronRight, ChevronLeft, Clock, BarChart3, Fingerprint, KeyRound, Landmark, FileImage } from 'lucide-react';
+import { Bell, HelpCircle, X, Mail, Phone, ChevronRight, ChevronLeft, Clock, BarChart3, Fingerprint, KeyRound, Landmark, FileImage, PenTool } from 'lucide-react';
 import LetterheadSettings from '../Shared/LetterheadSettings';
+import SignatureSettings from '../Shared/SignatureSettings';
 import BanksSettings from './BanksSettings';
 import pkg from '../../../package.json';
 import { isSuperAdmin, roleLabel } from '../../utils/session';
@@ -160,7 +161,7 @@ export default function AdminSettings({ currentUser, handleLogout }) {
   const name = currentUser?.name || 'Admin User';
   const initials = name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || 'A';
 
-  const titles = { notifications: 'Notifications', reminders: 'Automatic Reminders', insights: 'Alert Insights', banks: 'Banks', letterhead: 'Letterhead & Valuer' };
+  const titles = { notifications: 'Notifications', reminders: 'Automatic Reminders', insights: 'Alert Insights', banks: 'Banks', letterhead: 'Letterhead & Valuer', signature: 'Digital Signature' };
 
   if (page !== 'main') {
     return (
@@ -186,6 +187,7 @@ export default function AdminSettings({ currentUser, handleLogout }) {
         {page === 'reminders' && <ReminderSettingsCard currentUser={currentUser} embedded />}
         {page === 'insights' && <NotificationInsightsCard currentUser={currentUser} />}
         {page === 'banks' && <BanksSettings />}
+        {page === 'signature' && <SignatureSettings />}
         {page === 'letterhead' && <LetterheadSettings branchId={currentUser?.branchId} branchName={currentUser?.branchInfo?.name} />}
         <IosSettingsStyles />
       </div>
@@ -225,6 +227,12 @@ export default function AdminSettings({ currentUser, handleLogout }) {
           <p className="ios-footnote">Upload your branch letterhead once — every bank report from your branch uses it.</p>
         </>
       )}
+
+      <div className="ios-section">Signature</div>
+      <div className="ios-group">
+        <Row icon={PenTool} color="indigo" label="Digital Signature" onClick={() => open('signature')} />
+      </div>
+      <p className="ios-footnote">Your signature is printed on every report you approve, as the valuer’s signature.</p>
 
       <div className="ios-section">Notifications</div>
       <div className="ios-group">

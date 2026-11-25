@@ -215,6 +215,7 @@ router.post('/', authenticateToken, canCreateCase, async (req, res) => {
 
     const config = (await AppConfig.findOne({ key: 'global' })) || {};
     const caseData = { ...req.body, id: newId, branchId: branch.id, fileNumber: await nextFileNumber(branch.code, today) };
+    delete caseData.signatureDataUrl; // the report is signed only by the approving admin (valuer)
     if (caseData.documents) caseData.documents = await fileStore.offloadLargeDocuments(caseData.documents, req.user && req.user.id);
     if (Array.isArray(req.body.sitePhotos) && req.body.sitePhotos.length > MAX_SITE_PHOTOS) {
       return res.status(400).json({ error: `A case can have at most ${MAX_SITE_PHOTOS} site photos.` });
@@ -375,6 +376,16 @@ router.put('/:id', authenticateToken, async (req, res) => {
       if (!isAdmin(req.user)) {
         return res.status(403).json({ error: 'Field engineers cannot approve valuation cases. Only an admin can approve.' });
       }
+    }
+    // Only the valuer signs the report: the approving admin's saved signature (Settings → Digital Signature)
+    // goes on it at approval. Nobody else can put a signature on a case.
+    delete updateData.signatureDataUrl;
+    if (updateData.status === 'Approved' && existingCase.status !== 'Approved') {
+      const approver = await User.findOne({ id: req.user.id }).select('savedSignature').lean();
+      if (!approver || !approver.savedSignature) {
+        return res.status(422).json({ code: 'NO_SIGNATURE', error: 'Save your signature in Settings → Digital Signature before approving. It is printed on the report as the valuer’s signature.' });
+      }
+      updateData.signatureDataUrl = approver.savedSignature;
     }
     // A decision needs a submitted report: the engineer must have sent it for review first
     // (Rejecting = closing the case, e.g. the bank cancelled it — allowed at any time)
@@ -1414,7 +1425,7 @@ router.post('/:id/report-preview', authenticateToken, async (req, res) => {
     if (!caseItem) return;
     const draft = { ...caseItem.toObject() };
     const ALLOWED = ['clientName', 'clientFatherName', 'bankName', 'bankBranch', 'bankDistrict', 'address',
-      'propertyDetails', 'sitePhotos', 'signatureDataUrl', 'currentLocation', 'locationData'];
+      'propertyDetails', 'sitePhotos', 'currentLocation', 'locationData'];
     for (const k of ALLOWED) if (req.body[k] !== undefined) draft[k] = req.body[k];
     if (req.body.bankName !== undefined) {
       const bank = await findBank(req.body.bankName);

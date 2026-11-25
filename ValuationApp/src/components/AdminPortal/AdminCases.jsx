@@ -7,6 +7,7 @@ import SuggestedEngineer from './SuggestedEngineer';
 import SendToBank from './SendToBank';
 import CaseFiles from './CaseFiles';
 import ReportViewer, { fetchReport } from '../Shared/ReportViewer';
+import SignatureSettings from '../Shared/SignatureSettings';
 import { API_BASE_URL } from '../../config/api';
 import { authHeaders, errorFrom } from '../Shared/authHeaders';
 import { STAGES, stageOf } from '../Shared/caseStages';
@@ -105,6 +106,8 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
   const [systemConfig, setSystemConfig] = useState(null);
   const [assignments, setAssignments] = useState({});
   const [processingId, setProcessingId] = useState(null);
+  // Approving needs the admin's saved signature (it is printed on the report as the valuer's signature)
+  const [signFor, setSignFor] = useState(null);
   // The bank-format report opened in the in-app viewer
   const [viewing, setViewing] = useState(null);
 
@@ -276,10 +279,10 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
 
   const handleCreateNewTask = handleCreateOrUpdateTask;
 
-  const handleApprove = async (caseId) => {
+  const handleApprove = async (caseId, { confirmed = false } = {}) => {
     const cs = cases.find(x => x.id === caseId) || {};
     const flagged = (cs.preCheck?.checks || []).length;
-    if (!(await askConfirm({ title: `Approve ${cs.clientName || `case #${caseId}`}?`, message: `${cs.fileNumber ? `${cs.fileNumber} · ` : ''}${cs.bankName || ''}\nThe report becomes final, the engineer is told, and the report and invoice go to the bank.${flagged ? `\n\n⚠ ${flagged} check${flagged > 1 ? 's were' : ' was'} flagged at submit.` : ''}`, confirmText: 'Approve', tone: 'success' }))) return;
+    if (!confirmed && !(await askConfirm({ title: `Approve ${cs.clientName || `case #${caseId}`}?`, message: `${cs.fileNumber ? `${cs.fileNumber} · ` : ''}${cs.bankName || ''}\nThe report becomes final, the engineer is told, and the report and invoice go to the bank.${flagged ? `\n\n⚠ ${flagged} check${flagged > 1 ? 's were' : ' was'} flagged at submit.` : ''}`, confirmText: 'Approve', tone: 'success' }))) return;
     setProcessingId(caseId);
     try {
       const res = await fetch(`${API_BASE_URL}/api/cases/${caseId}`, {
@@ -287,6 +290,10 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
         headers: authHeaders(),
         body: JSON.stringify({ status: 'Approved' })
       });
+      if (res.status === 422) {
+        const d = await res.clone().json().catch(() => ({}));
+        if (d.code === 'NO_SIGNATURE') { setSignFor(caseId); return; }
+      }
       if (!res.ok) throw new Error(await errorFrom(res, 'Could not approve the case'));
       toast.success(`${cs.fileNumber || `Case #${caseId}`} approved — invoice made, report ready to send to the bank.`);
       fetchData();
@@ -563,6 +570,21 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
 
   return (
     <div className="animate-fade-in cs-page">
+      {signFor && (
+        <div role="dialog" aria-modal="true" aria-label="Add your signature" onClick={(e) => { if (e.target === e.currentTarget) setSignFor(null); }}
+          style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(15,23,42,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 460, maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 20px 50px rgba(0,0,0,.25)' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '18px 16px 10px' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 17, fontWeight: 700, color: '#0f172a' }}>Add your signature to approve</div>
+                <div style={{ fontSize: 13, color: '#64748b', marginTop: 4, lineHeight: 1.45 }}>It is printed on the report as the valuer’s signature. You save it once; after that every approval uses it.</div>
+              </div>
+              <button type="button" aria-label="Close" onClick={() => setSignFor(null)} style={{ border: 0, background: '#f1f5f9', borderRadius: 999, width: 30, height: 30, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={16} /></button>
+            </div>
+            <SignatureSettings onSaved={() => { const id = signFor; setSignFor(null); handleApprove(id, { confirmed: true }); }} />
+          </div>
+        </div>
+      )}
       <div className="cs-top">
         <div className="cs-search">
           <Search size={17} aria-hidden="true" />

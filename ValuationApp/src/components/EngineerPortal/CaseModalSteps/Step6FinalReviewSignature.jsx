@@ -1,10 +1,8 @@
 import React, { useMemo } from 'react';
 import { CheckSquare, Eye, UploadCloud, PenTool, Coins, TrendingDown, Building } from 'lucide-react';
-import SignatureCanvas from 'react-signature-canvas';
 import toast from 'react-hot-toast';
 import { getPageDisplayInfo } from './caseModalHelpers';
 import { calculateValuation } from '../../../utils/valuationCalculator';
-import DrawSignature from './DrawSignature';
 
 export default function Step6FinalReviewSignature({
   clientName,
@@ -38,8 +36,6 @@ export default function Step6FinalReviewSignature({
   onFixCheck,
   onSignatureSaved
 }) {
-  const [applySignature, setApplySignature] = React.useState(false);
-  const [drawing, setDrawing] = React.useState(false);
   const totalDocPages = Object.values(uploadedDocs).flat().reduce((sum, p) => sum + (p.pageCount || 1), 0);
 
   const valSummary = useMemo(() => {
@@ -227,7 +223,7 @@ export default function Step6FinalReviewSignature({
               </div>
             ))}
           </div>
-          <p style={{ margin: '10px 0 0', fontSize: '12px', color: '#4b5563' }}>Sign below — you’ll see the full bank report before it is submitted.</p>
+          <p style={{ margin: '10px 0 0', fontSize: '12px', color: '#4b5563' }}>You’ll see the full bank report before it is submitted.</p>
         </div>
       ) : !valSummary ? (
         <div style={{ padding: '14px 16px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '24px', fontSize: '13px', color: '#475569', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -291,28 +287,6 @@ export default function Step6FinalReviewSignature({
       </div>
 
       )}
-
-      <div style={{ marginBottom: '24px' }} data-testid="final-signature">
-        <h4 style={{ margin: '0 0 12px 0', fontSize: '15px', color: 'var(--text-primary)' }}>Digital Signature</h4>
-        {(drawing || (!savedSignature && onSignatureSaved)) ? (
-          <DrawSignature
-            onSaved={(url) => { onSignatureSaved && onSignatureSaved(url); setApplySignature(true); setDrawing(false); }}
-            onCancel={savedSignature ? () => setDrawing(false) : undefined}
-          />
-        ) : savedSignature ? (
-          <label style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px', borderRadius: '12px', border: applySignature ? '2px solid var(--primary)' : '1px solid var(--border-color)', backgroundColor: applySignature ? 'rgba(0,82,204,0.04)' : '#fff', cursor: 'pointer' }}>
-            <input type="checkbox" checked={applySignature} onChange={e => setApplySignature(e.target.checked)} style={{ width: '22px', height: '22px', cursor: 'pointer' }} data-testid="apply-signature" />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' }}>Apply my digital signature to this report</div>
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>Saved in Settings → Digital Signature</div>
-            </div>
-            <img src={savedSignature} alt="Your signature" style={{ height: '48px', maxWidth: '120px', objectFit: 'contain', background: '#fff', borderRadius: '6px' }} />
-          </label>
-        ) : null}
-        {savedSignature && !drawing && onSignatureSaved && (
-          <button type="button" onClick={() => setDrawing(true)} style={{ marginTop: '8px', border: 0, background: 'none', color: 'var(--primary)', fontWeight: 700, fontSize: '13px', padding: 0, cursor: 'pointer' }}>Sign again instead</button>
-        )}
-      </div>
 
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', marginBottom: '24px', padding: '16px', backgroundColor: 'rgba(234, 179, 8, 0.05)', borderRadius: '12px', border: '1px solid #fef08a' }}>
         <input 
@@ -383,18 +357,17 @@ export default function Step6FinalReviewSignature({
         className="btn-primary" 
         onClick={() => {
           if (missingDocs.length) { toast.error('Upload the missing documents first.'); return; }
-          if (!savedSignature) { toast.error('Sign in the box above first.'); return; }
-          if (!applySignature) { toast.error('Tick “Apply my digital signature” to sign this report.'); return; }
           if (!termsAccepted) { toast.error('Tick the declaration (“I have thoroughly reviewed…”) to continue.'); return; }
-          setSignatureDataUrl(savedSignature);
-          // Preview the finished bank report with the signature; submit from the preview
-          if (onReviewReport) onReviewReport(savedSignature); else setShowSubmitModal(true);
+          // The engineer does not sign: the report carries only the valuer's signature
+          setSignatureDataUrl('');
+          // Preview the finished bank report; submit from the preview
+          if (onReviewReport) onReviewReport(''); else setShowSubmitModal(true);
         }} 
-        aria-disabled={missingDocs.length > 0 || !termsAccepted || !savedSignature || !applySignature}
-        style={{ opacity: (missingDocs.length > 0 || !termsAccepted || !savedSignature || !applySignature) ? 0.5 : 1, marginTop: 'auto' }}
+        aria-disabled={missingDocs.length > 0 || !termsAccepted}
+        style={{ opacity: (missingDocs.length > 0 || !termsAccepted) ? 0.5 : 1, marginTop: 'auto' }}
         data-testid="preview-submit"
       >
-        <PenTool size={18} /> {onReviewReport ? 'Preview Report & Submit' : 'Sign & Submit Application'}
+        <PenTool size={18} /> {onReviewReport ? 'Preview Report & Submit' : 'Submit Application'}
       </button>
 
       {/* Submit Confirmation Modal */}
@@ -402,7 +375,7 @@ export default function Step6FinalReviewSignature({
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(255,255,255,0.95)', zIndex: 300, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px', animation: 'fadeIn 0.2s ease-out' }}>
           <h3 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '12px', textAlign: 'center' }}>Are you sure you want to submit?</h3>
           <p style={{ fontSize: '14px', color: 'var(--text-muted)', textAlign: 'center', marginBottom: '32px', lineHeight: '1.5' }}>
-            By clicking "Yes", this application will be digitally signed and securely submitted to the Admin Portal. This action cannot be undone.
+            By clicking "Yes", this application will be securely submitted to the Admin Portal. This action cannot be undone.
           </p>
           <div style={{ display: 'flex', gap: '16px', width: '100%' }}>
             <button type="button" className="btn-secondary" style={{ flex: 1 }} onClick={() => setShowSubmitModal(false)}>Cancel</button>

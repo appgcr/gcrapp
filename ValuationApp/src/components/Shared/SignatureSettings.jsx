@@ -3,8 +3,9 @@ import SignatureCanvas from 'react-signature-canvas';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../../config/api';
 
-/** Engineer's digital signature: drawn or uploaded once, saved on the account, applied to every report. */
-export default function SignatureSettings() {
+/** The valuer's digital signature (admins): drawn or uploaded once, saved on the account,
+ *  printed on every report they approve. */
+export default function SignatureSettings({ onSaved } = {}) {
   const [saved, setSaved] = useState('');
   const [mode, setMode] = useState('draw');
   const [upload, setUpload] = useState('');
@@ -35,7 +36,19 @@ export default function SignatureSettings() {
     let dataUrl = '';
     if (mode === 'draw') {
       if (!pad.current || pad.current.isEmpty()) { toast.error('Please draw your signature first.'); return; }
-      dataUrl = pad.current.getTrimmedCanvas().toDataURL('image/png');
+      // Crop to the ink (the library's getTrimmedCanvas is broken in this build)
+      const src = pad.current.getCanvas();
+      const { width, height } = src;
+      const px = src.getContext('2d').getImageData(0, 0, width, height).data;
+      let x0 = width; let y0 = height; let x1 = 0; let y1 = 0;
+      for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+        if (px[(y * width + x) * 4 + 3] > 10) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      }
+      const m = 8; x0 = Math.max(0, x0 - m); y0 = Math.max(0, y0 - m); x1 = Math.min(width, x1 + m); y1 = Math.min(height, y1 + m);
+      const out = document.createElement('canvas');
+      out.width = Math.max(1, x1 - x0); out.height = Math.max(1, y1 - y0);
+      out.getContext('2d').drawImage(src, x0, y0, out.width, out.height, 0, 0, out.width, out.height);
+      dataUrl = out.toDataURL('image/png');
     } else {
       if (!upload) { toast.error('Please choose your signature image first.'); return; }
       dataUrl = upload;
@@ -48,7 +61,8 @@ export default function SignatureSettings() {
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || 'Could not save the signature.');
       setSaved(dataUrl); setUpload(''); if (pad.current) pad.current.clear();
-      toast.success('Digital signature saved. It will be used on your reports.');
+      toast.success('Signature saved. It is printed on every report you approve.');
+      if (onSaved) onSaved(dataUrl);
     } catch (err) { toast.error(err.message); } finally { setBusy(false); }
   };
 
@@ -91,7 +105,7 @@ export default function SignatureSettings() {
       )}
       <button type="button" className="btn-primary" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save signature'}</button>
       <p style={{ fontSize: 12, color: '#6b7280', margin: 0, lineHeight: 1.45 }}>
-        At the last step of a case you tick “Apply my digital signature”, preview the bank report with it, and submit.
+        When you approve a case, this signature is printed on the bank report as the valuer’s signature.
       </p>
     </div>
   );

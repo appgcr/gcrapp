@@ -11,7 +11,7 @@ export const CASE_STEPS = [
   { id: 'check', short: 'Check', hint: 'Check what Gouru AI read from your documents.' },
   { id: 'site', short: 'Site', hint: 'What you see at the site: boundaries, building, extras.' },
   { id: 'photos', short: 'Photos', hint: 'Geo-tagged site photos.' },
-  { id: 'sign', short: 'Sign', hint: 'Review the values, sign and submit.' },
+  { id: 'sign', short: 'Submit', hint: 'Review the values and submit.' },
 ];
 
 /** Office sheet route: the filled sheet replaces Docs, Check and Site */
@@ -19,7 +19,7 @@ export const SHEET_STEPS = [
   { id: 'setup', short: 'Setup', hint: 'Customer, bank and report type.' },
   { id: 'sheet', short: 'Sheet', hint: 'Upload the filled office sheet and check what Gouru AI read.' },
   { id: 'photos', short: 'Photos', hint: 'Geo-tagged site photos and your selfie at the site.' },
-  { id: 'sign', short: 'Sign', hint: 'Review the values, sign and submit.' },
+  { id: 'sign', short: 'Submit', hint: 'Review the values and submit.' },
 ];
 export function sheetStepIndex(modalStep) {
   if (modalStep <= 1) return 0;
