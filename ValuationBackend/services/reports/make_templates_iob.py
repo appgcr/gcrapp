@@ -339,4 +339,92 @@ def open_site(doc):
     whole(doc, '14.502860, 78.788098', T('gpsDecimal'))
 
 
-FORMATS = {'house': house, 'apartment': apartment, 'open_site': open_site}
+# --------------------------------------------------------------------------- AGRICULTURE LAND
+def agriculture(doc):
+    """Agriculture open land (sample: 4 owners, four 1-B khata entries, 8 sale deeds).
+    The deed boundary block repeats once per land item ({{ld.*}}); the 1-B lines on page one hold
+    up to four khata entries (unused ones are dropped)."""
+    t = doc.tables
+    span(doc, 'FILE NO', '2606187', 'fileNo')
+    span(doc, 'LIC HFL', 'Vijay', 'engineerInitials')
+    span(doc, 'District   :', 'Y.S.R', 'districtShort')
+    span(doc, 'Branch   :', 'BADVEL', 'bankBranchUpper')
+    whole(doc, 'Sri P. Nagendra Babu, S/o', T('ownerLine1'))
+    whole(doc, 'Sri P. Subbaiah, S/o Sri P. Nagaiah', T('ownerLine2'))
+    whole(doc, 'Smt P. Subbalakshumamma, W/o', T('ownerLine3'))
+    whole(doc, 'Sri P. Suresh Kumar, W/o', T('ownerLine4'))
+    whole(doc, 'Chinnakesampalli Post', T('owner1Addr'))
+    span(doc, 'Khata No : 197, 203', '197, 203, 336, 337', 'khataNos')
+    span_re(doc, 'Valuation Report of Agriculture', r'Agriculture Land In .*', 'agTitle')
+    span(doc, 'Valuation: Rs', '1,10,60,000', 'fmv')
+    span(doc, '(RUPEES', 'ONE CRORE TEN LAKHS SIXTY THOUSAND', 'fmvWordsCoreUpper')
+    whole(doc, 'Badvel Mandal  of', T('mandalLine'))
+    # Page one: the 1-B (khata) entries, one group of four lines per applicant
+    for n, (who, khata, survey, total) in enumerate((
+            ('Applicant : P. Nagendra Babu', 'Khata No : 197, Survey', 'Survey No : 42-7', 'Total Extent : Ac 5.74'),
+            ('Applicant : P. Suresh Kumar', 'Khata No : 203, Survey', 'Survey No : 26-F', 'Total Extent : Ac 5.42'),
+            ('Applicant : P. Subbaiah', 'Khata No : 336', 'Survey No : 47-2, 46-3', 'Total Extent : Ac 3.451'),
+            ('Applicant : P. Subbalakshumamma', 'Khata No : 337', 'Survey No : 214, 47-1', 'Total Extent : Ac 3.824')), 1):
+        whole(doc, who, T(f'kb{n}Applicant'))
+        whole(doc, khata, T(f'kb{n}Khata'))
+        whole(doc, survey, T(f'kb{n}Survey'))
+        whole(doc, total, T(f'kb{n}Total'))
+    whole(doc, 'Total Extent : Ac 18.435', T('kbGrandTotal'))
+    span(doc, 'Fair Market Value Of Above', '1,10,60,000', 'fmv')
+    span(doc, 'The Realizable value', '99,54,000', 'realizable')
+    span(doc, 'The distress value', '88,50,000', 'distress')
+
+    a = t[0]
+    for r, key in ((1, 'purpose'), (2, 'inspectionDate'), (3, 'valuationDate'), (5, 'deedListText'), (6, 'planLine'),
+                   (7, 'mvCertificate'), (9, 'agDesc'), (11, 'surveyLine'), (12, 'doorNo'), (13, 'villageLine'),
+                   (14, 'panchayatLine'), (15, 'mandalLineAt'), (16, 'postalAddress'), (17, 'cityTown'),
+                   (18, 'areaResidential'), (19, 'areaCommercial'), (20, 'areaIndustrial'), (22, 'areaClass'),
+                   (23, 'areaUrban'), (24, 'localBodyType'), (25, 'govtEnactments'), (26, 'agriConversion')):
+        cell(a, r, 6, key)
+    cell(a, 8, 6, '=Belongs To :-', 'owner1NameLine', 'owner1RelLine', 'owner2NameLine', 'owner2RelLine',
+         'owner3NameLine', 'owner3RelLine', 'owner4NameLine', 'owner4RelLine', 'owner1Addr')
+    # One deed block (heading + North/South/East/West + Extent), copied per land item
+    cell(a, 28, 5, '=As Per Deed & Actual (' + T('ld.deed') + ')')
+    for r, side in ((29, 'north'), (30, 'south'), (31, 'east'), (32, 'west')):
+        cell(a, r, 5, f'ld.{side}')
+        cell(a, r, 6, 'ld.extent')
+    cell(a, 33, 5, 'ld.extent')
+    drop_rows(a, *range(34, 76))                # the sample's deeds 2–7
+    b = t[1]
+    cell(b, 7, 3, '=As Per Total Documents Total Extent : ' + T('docTotalLine'))
+    cell(b, 8, 3, '=As Per 1-B Report Total Extent : ' + T('kbTotalLine'))
+    for r in (9, 10):
+        cell(b, r, 8, 'gpsDms', 'gpsDecimal', '= ')
+    cell(b, 11, 7, 'extentDeed')
+    cell(b, 12, 7, 'extentConsidered')
+    cell(b, 13, 7, 'occupancy')
+    for i, key in enumerate(CHARS):
+        cell(b, 15 + i, 7, key)
+    cell(b, 33, 7, 'advantage1')
+    cell(b, 35, 7, 'specialRemarks')
+    cell(b, 39, 6, 'landShape')
+    for r in (40, 41, 42):
+        cell(b, r, 6, 'extentConsidered')
+    cell(b, 43, 6, '= ', 'marketRateLine')
+    cell(b, 44, 6, 'guidelineRateLine')
+    cell(b, 45, 6, 'adoptedRateLine')
+    cell(b, 46, 6, 'landValueLine')
+    drop_rows(b, *range(0, 7))                  # the sample's deed 8 (continued on the next page)
+    ab = t[2]
+    cell(ab, 0, 3, 'absA')
+    cell(ab, 6, 3, 'absTotal', 'absSayAs')
+    d = t[3]
+    cell(d, 1, 2, 'declBackground')
+    cell(d, 2, 2, 'declPurpose')
+    cell(d, 5, 2, 'declDates1', 'declDates2', 'declDates3')
+
+    span(doc, 'personally inspected', '26-05-2026', 'inspectionDate')
+    replace_all_body(doc, '26-05-2026', 'reportDate')
+    places(doc)
+    mark_images(doc, 'PHOTOS', 'photo', stop_text='LOCATION MAP')
+    location_map(doc, 'LOCATION MAP', '14°41', close_up=False)
+    whole(doc, '14°41', T('gpsDms'))
+    whole(doc, '14.698518, 79.042709', T('gpsDecimal'))
+
+
+FORMATS = {'house': house, 'apartment': apartment, 'open_site': open_site, 'agriculture': agriculture}

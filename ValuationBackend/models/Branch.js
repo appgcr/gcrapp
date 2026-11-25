@@ -27,6 +27,21 @@ const branchSchema = new mongoose.Schema({
     office: { type: String, default: '' },
     address: { type: String, default: '' },
   },
+  // Where this branch's invoices are paid: account, UPI and an optional QR picture (PhonePe / GPay merchant QR).
+  // Empty = the firm's default payment details. Changed by this branch's admin or the Super Admin; every change is
+  // kept in history and both are told.
+  payment: {
+    accountName: { type: String, default: '' },
+    bankName: { type: String, default: '' },
+    accountNo: { type: String, default: '' },
+    ifsc: { type: String, default: '' },
+    upi: { type: String, default: '' },
+    qrDataUrl: { type: String, default: '' },
+    updatedAt: { type: Date, default: null },
+    updatedBy: { type: String, default: '' },
+    updatedByName: { type: String, default: '' },
+    history: { type: [mongoose.Schema.Types.Mixed], default: [] }, // last 20 changes: { at, by, byName, changed: [...] }
+  },
   // Super Admin switch: this branch's engineers may upload the filled office data sheet
   // (GOURU VALUATION – OFFICE) instead of the 5 documents + check + site steps
   sheetBypass: { type: Boolean, default: false },

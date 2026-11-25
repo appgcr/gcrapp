@@ -180,7 +180,7 @@ def build_house(case, temps, bank=None):
     # Building — one row per floor, 1% depreciation per year of age
     age = int(num(pd.get('buildingAge')))
     life = int(num(rep.get('totalLife'), 60)) or 60
-    dep_pct = min(age * num(rep.get('depreciationPerYear'), 1.0), 70.0)
+    dep_pct = apgb.dep_percent(age, rep.get('depreciationPerYear'))
     rate = num(rep.get('constructionRate')) or num((case.get('valuation') or {}).get('constructionRate')) or 3000
     rows, codes, plinth_lines, carpet_lines, building = [], [], [], [], 0
     for fl in (pd.get('siteValue') or {}).get('floors') or []:
@@ -337,7 +337,7 @@ def build_apartment(case, temps, bank=None):
     rate = num(rep.get('constructionRate')) or num((case.get('valuation') or {}).get('constructionRate')) or 2200
     age = int(num(pd.get('buildingAge')))
     life = int(num(rep.get('totalLife'), 60)) or 60
-    dep_pct = min(age * num(rep.get('depreciationPerYear'), 1.0), 70.0)
+    dep_pct = apgb.dep_percent(age, rep.get('depreciationPerYear'))
     bld = money(plinth * rate)
     dep = money(bld * dep_pct / 100)
     net = bld - dep

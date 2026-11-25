@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Search, ChevronRight, Plus, Loader2, Paperclip, X, Camera } from 'lucide-react';
+import { FileText, Search, ChevronRight, Plus, Loader2, Paperclip, X, Camera, Mic } from 'lucide-react';
 import { DOC_ACCEPT, uploadDocumentFile } from '../../utils/docFiles';
 import { createPortal } from 'react-dom';
 import { useBanks, matchBank } from '../../utils/banks';
@@ -9,6 +9,8 @@ import IconTile from '../Shared/IconTile';
 import './AttendanceView.css';
 import { API_BASE_URL } from '../../config/api';
 import CaseCreationModal from './CaseModalSteps/CaseCreationModal';
+import VoiceSheetFill from './CaseModalSteps/VoiceSheetFill';
+import { EMPTY_SHEET, sheetMissing } from './CaseModalSteps/OfficeSheetStep';
 import { ensureCheckedIn } from '../../utils/dutyCheck';
 
 export default function CaseListView({ onOpenCase, currentUser }) {
@@ -200,7 +202,7 @@ function bankFromText(banks, text) {
 function SelfCaseSheet({ currentUser, onClose, onCreated }) {
   // Office sheet route: only when the Super Admin has switched it on for this engineer's branch
   const [sheetAllowed, setSheetAllowed] = useState(false);
-  const [mode, setMode] = useState('docs'); // 'docs' | 'sheet'
+  const [mode, setMode] = useState('docs'); // 'docs' | 'sheet' | 'audio' (the sheet route, filled by voice)
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/branches`).then((r) => (r.ok ? r.json() : [])).then((list) => {
       const mine = Array.isArray(list) ? list.find((b) => b.id === currentUser?.branchId) : null;
@@ -272,6 +274,55 @@ function SelfCaseSheet({ currentUser, onClose, onCreated }) {
     } finally { setReading(false); }
   };
 
+  // Audio: what Gouru AI heard fills the customer, bank and address here, and the whole office sheet in the case
+  const [voiceSheet, setVoiceSheet] = useState({});
+  const voiceNotes = React.useRef([]); // recordings, saved to the case's files after Create // everything voice filled (for "Still needed")
+  const voiceMeta = React.useRef({ unsure: [], checks: [], values: {} });
+  const voiceTyped = React.useRef({}); // New Case field → what voice wrote (a change by the engineer is learned from)
+  const applyVoice = (v, meta = {}) => {
+    const purchase = v.dealType === 'Purchase';
+    const bank = v.bank ? bankFromText(banks, v.bank) : null;
+    const got = {
+      clientName: purchase ? v.applicantName : v.ownerName,
+      clientFatherName: purchase ? v.applicantRelation : v.ownerRelation,
+      clientPhone: /^\d{10}$/.test(String(v.mobile || '').replace(/\D/g, '')) ? String(v.mobile).replace(/\D/g, '') : '',
+      bankName: bank ? bank.name : '',
+      bankBranch: v.bankBranch || '',
+      address: v.address || (purchase ? v.applicantAddress : v.ownerAddress) || '',
+    };
+    const filledList = [];
+    const skipped = [];
+    const patch = {};
+    for (const [k, val] of Object.entries(got)) {
+      if (!String(val || '').trim()) continue;
+      if (typed.current.has(k)) { skipped.push(`${FILL_LABEL[k]} (you typed it)`); continue; }
+      patch[k] = String(val).trim();
+      filledList.push({ key: k, label: FILL_LABEL[k], value: patch[k] });
+    }
+    if (v.bank && !bank) skipped.push(`Bank "${v.bank}" — not in the list, choose it below`);
+    setF((x) => ({ ...x, ...patch }));
+    setFilled((prev) => [...new Set([...prev, ...Object.keys(patch)])]);
+    Object.assign(voiceTyped.current, patch);
+    const vm = voiceMeta.current;
+    voiceMeta.current = {
+      unsure: [...new Set([...vm.unsure, ...(meta.unsure || [])])],
+      checks: [...vm.checks.filter((c) => !(meta.checks || []).some((x) => x.field === c.field)), ...(meta.checks || [])],
+      values: { ...vm.values, ...Object.fromEntries(Object.entries(v).flatMap(([k, val]) => (val && typeof val === 'object' ? Object.entries(val).map(([sd, x]) => [`${k}.${sd}`, x]) : [[k, val]]))) },
+    };
+    // Kept for the case's office sheet (later recordings add to it)
+    const prev = uploaded.current.__sheetFields || {};
+    const merged = { ...prev };
+    for (const [k, val] of Object.entries(v)) {
+      if (k === 'measurements' || k === 'boundaries') merged[k] = { ...(prev[k] || {}), ...val };
+      else if (!['mobile', 'bankBranch', 'district'].includes(k)) merged[k] = val;
+    }
+    uploaded.current.__sheetFields = merged;
+    setVoiceSheet(merged);
+    const extra = Object.keys(v).filter((k) => !['ownerName', 'ownerRelation', 'applicantName', 'applicantRelation', 'bank', 'bankBranch', 'mobile', 'address', 'ownerAddress', 'applicantAddress'].includes(k)).length;
+    if (extra) filledList.push({ key: '_sheet', label: 'Office sheet', value: `${extra} more detail${extra === 1 ? '' : 's'} — shown in the case after Create` });
+    return { filled: filledList, skipped };
+  };
+
   const addFiles = (id, list) => {
     const next = setDocs((d) => ({ ...d, [id]: [...(d[id] || []), ...list] }));
     if (READ_FROM.includes(id)) readDocs(next);
@@ -289,9 +340,12 @@ function SelfCaseSheet({ currentUser, onClose, onCreated }) {
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || 'Could not create the case');
       // The office sheet goes straight into the case (already uploaded and read)
-      const useSheet = sheetAllowed && mode === 'sheet';
+      const useSheet = sheetAllowed && (mode === 'sheet' || mode === 'audio');
       const sheetFiles = useSheet ? (docs.officeSheet || []).map((file) => uploaded.current[keyOf(file)]?.meta).filter(Boolean) : [];
-      const sheetInit = useSheet ? { mode: 'sheet', files: sheetFiles, fields: uploaded.current.__sheetFields || null } : null;
+      const sheetInit = useSheet ? { mode: 'sheet', source: mode === 'audio' ? 'audio' : 'file', files: sheetFiles, fields: uploaded.current.__sheetFields || null, voice: mode === 'audio' ? voiceMeta.current : null, voiceNotes: mode === 'audio' ? voiceNotes.current : [] } : null;
+      // Names the engineer corrected after voice fill → taught to Gouru AI for next time
+      const learnItems = Object.entries(voiceTyped.current).filter(([k, heard]) => f[k] && String(f[k]).trim() !== String(heard).trim() && !['clientPhone'].includes(k)).map(([k, heard]) => ({ field: k, heard, fixed: String(f[k]).trim() }));
+      if (learnItems.length) fetch(`${API_BASE_URL}/api/assist/voice-learn`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ items: learnItems }) }).catch(() => {});
       const { officeSheet, ...rest } = docs; // eslint-disable-line no-unused-vars
       onCreated(d, useSheet ? {} : rest, sheetInit);
     } catch (err) {
@@ -302,7 +356,7 @@ function SelfCaseSheet({ currentUser, onClose, onCreated }) {
 
   const hl = (k) => (filled.includes(k) ? { background: '#eef2ff', borderRadius: 8 } : undefined);
   const row = (k, label, input) => (
-    <label className="fs-row" style={hl(k)}><span style={{ display: 'flex', flexDirection: 'column', whiteSpace: 'nowrap', flexShrink: 0, lineHeight: 1.25 }}>{label}{filled.includes(k) && <small style={{ color: '#4f46e5', fontWeight: 700, fontSize: 11.5 }}>from document</small>}</span>{input}</label>
+    <label className="fs-row" style={hl(k)}><span style={{ display: 'flex', flexDirection: 'column', whiteSpace: 'nowrap', flexShrink: 0, lineHeight: 1.25 }}>{label}{filled.includes(k) && <small style={{ color: '#4f46e5', fontWeight: 700, fontSize: 11.5 }}>{mode === 'audio' ? 'from voice' : 'from document'}</small>}</span>{input}</label>
   );
 
   return createPortal(
@@ -317,19 +371,26 @@ function SelfCaseSheet({ currentUser, onClose, onCreated }) {
         {sheetAllowed && (
           <>
             <div className="fs-section">How will you fill this case?</div>
-            <div className="ems-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, margin: '0 0 4px' }}>
-              {[['docs', 'Upload documents', '5 documents, check, site details'], ['sheet', 'Office sheet', 'Upload the filled sheet, photos + selfie']].map(([k, t, sub]) => (
+            <div className="ems-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, margin: '0 0 4px' }}>
+              {[['docs', 'Upload documents', '5 documents, check, site details'], ['sheet', 'Office sheet', 'Upload the filled sheet, photos + selfie'], ['audio', 'Audio', 'Upload a recording or speak the details']].map(([k, t, sub]) => (
                 <button key={k} type="button" onClick={() => setMode(k)} aria-pressed={mode === k}
                   style={{ textAlign: 'left', border: `1.5px solid ${mode === k ? '#2563eb' : '#cbd5e1'}`, background: mode === k ? '#eff6ff' : 'var(--bg-card, #fff)', borderRadius: 12, padding: '10px 12px', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', flexDirection: 'column', gap: 2, boxShadow: mode === k ? '0 0 0 3px rgba(37,99,235,.12)' : 'none' }}>
-                  <b style={{ fontSize: 14.5, color: mode === k ? '#1d4ed8' : 'var(--text-primary, #0f172a)' }}>{t}</b>
+                  <b style={{ fontSize: 14.5, color: mode === k ? '#1d4ed8' : 'var(--text-primary, #0f172a)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>{k === 'audio' && <Mic size={15} />}{t}</b>
                   <small style={{ fontSize: 12, color: '#64748b', lineHeight: 1.3 }}>{sub}</small>
                 </button>
               ))}
             </div>
           </>
         )}
-        <div className="fs-section">{mode === 'sheet' ? 'Office sheet' : 'Documents'} <small style={{ textTransform: 'none' }}>· start here</small></div>
-        <div className="fs-group">
+        <div className="fs-section">{mode === 'audio' ? 'Voice' : mode === 'sheet' ? 'Office sheet' : 'Documents'} <small style={{ textTransform: 'none' }}>· start here</small></div>
+        {mode === 'audio' && (
+          <div style={{ margin: '0 0 4px' }}>
+            <VoiceSheetFill allowUpload big apply={applyVoice} storeKey={`voice:${currentUser?.id || 'me'}:newcase`} onVoiceNote={(doc) => { voiceNotes.current = [...voiceNotes.current, doc]; }}
+              missing={[...(!f.clientName.trim() ? ['Name'] : []), ...(!f.address.trim() ? ['Address'] : []), ...(!f.bankName ? ['Bank'] : []), ...sheetMissing({ ...EMPTY_SHEET, ...voiceSheet })]}
+              example="Client Siva, S/o Ramaiah, mobile 98765 43210, bank APGB, branch Kadapa Main, address door number 2/240-45 Chemmumiahpeta Kadapa, deed number 123 by 2025, survey number 114…" />
+          </div>
+        )}
+        <div className="fs-group" style={mode === 'audio' ? { display: 'none' } : undefined}>
           <input ref={fileInput} type="file" multiple hidden accept={DOC_ACCEPT}
             onChange={(e) => { const list = Array.from(e.target.files || []); if (pickFor && list.length) addFiles(pickFor, list); e.target.value = ''; }} />
           <input ref={camInput} type="file" hidden accept="image/*" capture="environment"
@@ -355,12 +416,12 @@ function SelfCaseSheet({ currentUser, onClose, onCreated }) {
             </div>
           ))}
         </div>
-        <p className="fs-foot" style={{ marginBottom: 4 }}>
+        {mode !== 'audio' && <p className="fs-foot" style={{ marginBottom: 4 }}>
           {reading ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#4f46e5', fontWeight: 600 }}><Loader2 size={14} className="spin" /> Gouru AI is reading the documents…</span>
             : readNote || (mode === 'sheet'
               ? 'Add the filled office sheet (Word, PDF or photos). Gouru AI fills the customer, bank and address below.'
               : 'Add the sale deed or tax receipt and Gouru AI fills the customer and address below. You can also type them.')}
-        </p>
+        </p>}
 
         <div className="fs-section">Customer</div>
         <div className="fs-group">
@@ -380,7 +441,9 @@ function SelfCaseSheet({ currentUser, onClose, onCreated }) {
           {row('address', 'Address', <input value={f.address} onChange={set('address')} placeholder="Required" autoComplete="off" />)}
           <label className="fs-row"><span>Note</span><input value={f.note} onChange={set('note')} placeholder="Optional" autoComplete="off" /></label>
         </div>
-        <p className="fs-foot">{mode === 'sheet'
+        <p className="fs-foot">{mode === 'audio'
+          ? 'After Create, the case opens with everything Gouru AI heard already filled in. Check it, then add the site photos and selfie.'
+          : mode === 'sheet'
           ? 'After Create, the case opens on the office sheet, already filled in. Check it, then add the site photos and selfie.'
           : docCount
           ? `After Create, Gouru AI checks ${docCount === 1 ? 'this file' : `these ${docCount} files`} in the case. Then add the photos and details and submit it to your admin.`

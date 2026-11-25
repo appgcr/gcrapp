@@ -41,8 +41,8 @@ Reply with ONLY this JSON:
  "plinthArea": null, "floors": [{"floor": "Ground Floor", "area": null}],
  "marketRatePerCent": null, "landRatePerSqyd": null, "ratePerAcre": null
 }}`;
-    const out = await askJson(prompt, [audio], { timeoutMs: 70000 });
-    if (!out) return res.status(503).json({ error: 'Gouru AI is busy. Please try again in a minute or type the details.' });
+    const out = await askJson(prompt, [audio], { timeoutMs: 70000, fast: true });
+    if (!out) return res.status(503).json({ error: require('../services/aiStatus').failMessage('Gouru AI is busy. Please try again in a minute or type the details.') });
     const okList = (k, v) => (v && o[k].includes(v) ? v : null);
     const f = out.fields || {};
     const clean = {
@@ -73,9 +73,13 @@ router.post('/voice-sheet', async (req, res) => {
     if (!aiOn()) return res.status(503).json({ error: 'Voice fill needs Gouru AI, which is switched off on this server.' });
     const ist = new Date(Date.now() + 5.5 * 3600 * 1000);
     const today = `${String(ist.getUTCDate()).padStart(2, '0')}-${String(ist.getUTCMonth() + 1).padStart(2, '0')}-${ist.getUTCFullYear()}`;
+    // Words this office uses (banks, branches, engineers, areas, past names, learned corrections)
+    const vocab = await require('../services/voiceVocab').vocabFor(req.user);
     const prompt = `A property valuation engineer in Andhra Pradesh, India speaks the details of the "GOURU VALUATION - OFFICE" data sheet
 (English, Telugu or a mix; Telugu names are common). Today is ${today} (DD-MM-YYYY).
-Listen carefully and fill ONLY what was clearly said. Use "" for anything not said. Never guess or invent.
+${vocab ? `Words used in this office — when what you hear sounds like one of these, write it exactly this way (but never put in a word that was not said):
+${vocab}
+` : ''}Listen carefully and fill ONLY what was clearly said. Use "" for anything not said. Never guess or invent.
 Rules:
 - Names: write them properly capitalised, spelled the usual Indian / Telugu way (e.g. "chanikya reddy" → "Chanikya Reddy").
 - "S/o", "son of", "W/o", "wife of", "D/o", "daughter of", "C/o" → ownerRelation (or applicantRelation for the buyer) as "S/o Maheer", "W/o …", "D/o …".
@@ -85,20 +89,26 @@ Rules:
 - "extent …" / "site extent" / "document extent" → extentDocument. Use extentPlan / netExtentPlan only when "plan" is said with it.
 - "address …" said with the owner (or "owner address") → ownerAddress only. Put a number in doorNo, plotNo, surveyNo or wardNo ONLY when those words were said ("door number …", "plot number …", "survey number …", "ward …"); never copy the owner's address into them. "property address" / "site address" → address.
 - "engineer …" / "inspected by …" → engineerNames (all names, comma separated). "inspection date …" → inspectionDate.
+- "bank …" → bank (the bank or finance company's name as said, e.g. "SBI", "APGB", "Canara", "Shriram"). "branch …" → bankBranch (e.g. "RACPC", "Kadapa Main"). "district …" → district (e.g. "Kadapa", "Y.S.R"). "mobile …" / "phone …" / "cell …" → mobile (10 digits only, no spaces).
 - dealType "Purchase" only when a buyer / applicant is mentioned or "purchase" is said; "Mortgage" when said; else "".
 - Boundaries are what lies on each side ("east road, west house of Ramaiah"); measurements are side lengths with their unit ("east 40 feet").
+  Write each boundary in FULL exactly as said, ALWAYS with the person's name when one is said: "west plot number 121 site of K. Ramesh" → west "Plot No. 121 site of K. Ramesh";
+  "north Venkata Subbaiah gari house" → north "House of Venkata Subbaiah"; "south 30 feet road" → south "30 ft wide road". Never shorten a boundary or drop the name, the plot number or the road width.
+- Every name said anywhere (owner, applicant, S/o · W/o, neighbours in boundaries, engineers, tax name) must be kept — never leave a name out.
+- The transcript must contain everything that was said, names included, in order.
+- "unsure": list the keys of every value you are NOT fully sure you heard right (a name or number said fast, unclear, in noise, or that could be spelled more than one way). Use "boundaries.west", "measurements.north" … for sides. Leave it [] when you are sure of everything.
 - propertyType one of "Independent House","Open Site","Apartment","Open Agriculture Land","Industrial Unit"; structureType one of "RCC Framed structure","Load bearing","PEB structure";
   roadType one of "CC Road","BT Road","Metal Road"; flooringType one of "Tiles","Granite","Marble","Kadapa slab","Betham cherla" — or "".
 Reply with ONLY this JSON:
 {"transcript": "what was said, written in English letters",
  "dealType": "", "ownerName": "", "ownerRelation": "", "ownerAddress": "", "applicantName": "", "applicantRelation": "", "applicantAddress": "",
- "bank": "", "engineerNames": "", "inspectionDate": "", "deedNo": "", "deedDate": "", "surveyNo": "", "doorNo": "", "wardNo": "", "plotNo": "", "address": "",
+ "bank": "", "bankBranch": "", "district": "", "mobile": "", "engineerNames": "", "inspectionDate": "", "deedNo": "", "deedDate": "", "surveyNo": "", "doorNo": "", "wardNo": "", "plotNo": "", "address": "",
  "extentDocument": "", "extentPlan": "", "measurements": {"east": "", "west": "", "north": "", "south": ""}, "boundaries": {"east": "", "west": "", "north": "", "south": ""},
  "netExtentPlan": "", "roadAffectedArea": "", "baNumber": "", "baDate": "", "floorsArea": "", "guidelineRate": "", "assessmentNo": "", "taxAmount": "", "taxName": "",
  "propertyType": "", "structureType": "", "buildingAge": "", "marketRatePerCent": "", "constructionRate": "", "roadWidth": "", "roadType": "", "flooringType": "",
- "comments": "", "extras": ""}`;
-    const out = await askJson(prompt, [audio], { timeoutMs: 70000 });
-    if (!out) return res.status(503).json({ error: 'Gouru AI is busy. Please try again in a minute or type the details.' });
+ "comments": "", "extras": "", "unsure": []}`;
+    const out = await askJson(prompt, [audio], { timeoutMs: 70000, fast: true });
+    if (!out) return res.status(503).json({ error: require('../services/aiStatus').failMessage('Gouru AI is busy. Please try again in a minute or type the details.') });
     const { cleanSheet } = require('../services/officeSheet');
     const c = cleanSheet(out);
     // Only the fields that were actually said
@@ -110,10 +120,61 @@ Reply with ONLY this JSON:
         if (Object.keys(sides).length) fields[k] = sides;
       } else if (String(v || '').trim()) fields[k] = String(v).trim();
     }
-    res.json({ transcript: String(out.transcript || '').slice(0, 2000), fields, corrections: (c.corrections || []).slice(0, 12) });
+    // Case details that are not on the office sheet (Step 1 of the case: bank branch, district)
+    for (const k of ['bankBranch', 'district', 'mobile']) if (String(out[k] || '').trim()) fields[k] = String(out[k]).trim().slice(0, 120);
+    // Rule checks: safe fixes made, the rest returned for the engineer to look at
+    const Bank = require('../models/Bank');
+    const banks = require('mongoose').connection.readyState === 1 ? await Bank.find({}).select('name shortName aliases branches').lean().catch(() => []) : [];
+    const chk = require('../services/voiceChecks').checkVoice(fields, banks);
+    const has = (k) => { const [a, b] = k.split('.'); return b ? !!(chk.fields[a] && chk.fields[a][b]) : !!chk.fields[a]; };
+    const unsure = [...new Set((Array.isArray(out.unsure) ? out.unsure : []).map(String).filter(has))].slice(0, 30);
+    res.json({
+      transcript: String(out.transcript || '').slice(0, 2000),
+      fields: chk.fields,
+      unsure,
+      checks: chk.checks.slice(0, 15),
+      corrections: [...(c.corrections || []), ...chk.fixes].slice(0, 15),
+    });
   } catch (err) {
     console.error('POST /api/assist/voice-sheet', err);
     res.status(500).json({ error: 'Could not read the recording. Please try again.' });
+  }
+});
+
+// GET /api/assist/ai-status — admins: is Gouru AI working (quota / key)?
+router.get('/ai-status', (req, res) => {
+  if (!['ADMIN', 'SUPER_ADMIN'].includes(req.user && req.user.role)) return res.status(403).json({ error: 'Admins only.' });
+  res.json(require('../services/aiStatus').status());
+});
+
+// POST /api/assist/voice-learn { items: [{ field, heard, fixed }] } — the engineer corrected what voice fill wrote
+// (a name, a place, a branch…): kept for this branch, so Gouru AI writes it right next time.
+router.post('/voice-learn', async (req, res) => {
+  try {
+    const items = Array.isArray(req.body && req.body.items) ? req.body.items.slice(0, 25) : [];
+    const mongoose = require('mongoose');
+    if (!items.length || mongoose.connection.readyState !== 1) return res.json({ learned: 0 });
+    const VoiceWord = require('../models/VoiceWord');
+    const branchId = (req.user && req.user.branchId) || null;
+    let learned = 0;
+    for (const it of items) {
+      const heard = String(it.heard || '').replace(/\s+/g, ' ').trim();
+      const fixed = String(it.fixed || '').replace(/\s+/g, ' ').trim();
+      // Words only (names, places, branches): numbers and long text are not learned
+      if (!heard || !fixed || heard.length > 80 || fixed.length > 80 || heard.toLowerCase() === fixed.toLowerCase()) continue;
+      if ((fixed.replace(/[^0-9]/g, '').length / fixed.length) > 0.3) continue;
+      await VoiceWord.updateOne(
+        { branchId, heard: heard.toLowerCase(), fixed },
+        { $inc: { count: 1 }, $set: { lastAt: new Date(), field: String(it.field || '').slice(0, 40) } },
+        { upsert: true },
+      ).catch(() => {});
+      learned += 1;
+    }
+    if (learned) require('../services/voiceVocab').forget(branchId || '_all');
+    res.json({ learned });
+  } catch (err) {
+    console.error('POST /api/assist/voice-learn', err);
+    res.json({ learned: 0 });
   }
 });
 
@@ -238,7 +299,7 @@ Reply with ONLY: {"photos": [{"index": 0, "kind": "front", "note": "3 words max"
         });
       }
     }
-    if (!labels) return res.status(503).json({ error: 'Gouru AI is busy. Photo check skipped.' });
+    if (!labels) return res.status(503).json({ error: require('../services/aiStatus').failMessage('Gouru AI is busy. Photo check skipped.') });
     const have = new Set(labels.map((l) => l.kind));
     const missing = NEEDED[kind].filter((k) => !have.has(k)).map((k) => ({ kind: k, label: KINDS[k] }));
     res.json({ labels, missing });

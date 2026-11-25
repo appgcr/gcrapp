@@ -28,12 +28,13 @@ router.get('/:id/invoice.pdf', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const c = await load(req, res); if (!c) return;
-    const firm = await billing.firmDetails();
+    const firm = await billing.firmDetails(c.branchId);
     const b = c.billing;
     const due = billing.dueOf(b);
     const paid = due <= 0;
     const upi = billing.upiLink(firm, c);
-    const qr = upi && !paid ? `data:image/png;base64,${(await billing.upiQrPng(firm, c)).toString('base64')}` : '';
+    // The branch's own QR picture when uploaded, else a QR for the exact amount from the UPI ID
+    const qr = paid ? '' : (firm.qrDataUrl || (upi ? `data:image/png;base64,${(await billing.upiQrPng(firm, c)).toString('base64')}` : ''));
     const q = `e=${encodeURIComponent(req.query.e)}&s=${encodeURIComponent(req.query.s)}`;
     const bank = [firm.accountName && ['Account name', firm.accountName], firm.bankName && ['Bank', firm.bankName], firm.accountNo && ['Account no', firm.accountNo], firm.ifsc && ['IFSC', firm.ifsc], firm.upi && ['UPI ID', firm.upi]].filter(Boolean);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');

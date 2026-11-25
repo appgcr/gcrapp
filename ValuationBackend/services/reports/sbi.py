@@ -50,7 +50,7 @@ def build_apartment(case, temps, bank=None):
     c_rate = num(rep.get('constructionRate')) or 2700
     age = int(num(pd.get('buildingAge')))
     life = int(num(rep.get('totalLife'), 60)) or 60
-    dep_pct = min(age * num(rep.get('depreciationPerYear'), 1.0), 70.0)
+    dep_pct = apgb.dep_percent(age, rep.get('depreciationPerYear'))
     bld = apgb.money(plinth * c_rate)
     dep = apgb.money(bld * dep_pct / 100)
     net = bld - dep
@@ -224,7 +224,142 @@ def build_house(case, temps, bank=None):
     return job
 
 
-BUILDERS = {'apartment': build_apartment, 'house': build_house}
+# ---------------------------------------------------------------- AGRICULTURE LAND
+# From the bank's agriculture sample: land = acres x rate per acre (4.95 x 10,00,000 = 49,50,000), "Say" = land
+# rounded down to ₹10,000; realizable / distress = 90% / 80% of the Say, exact (44,55,000 / 39,60,000).
+AGRI_PCT = (0.90, 0.80)
+
+
+def build_agriculture(case, temps, bank=None):
+    from union import core_words
+    pd = case.get('propertyDetails') or {}
+    rep = pd.get('report') or {}
+    f = apgb.common_fields(case, rep, {'district': 'YSR', 'place': 'Kadapa'})
+    bob.owners(f, case, rep)
+    owner_fields(f, case, rep)
+    district = f['district']
+    village = rep.get('village') or pd.get('village') or '---'
+    panchayat = rep.get('panchayat') or f'{village} Grama Panchayath'
+    mandal = rep.get('mandal') or pd.get('mandal') or '---'
+    items = [i for i in (rep.get('items') or []) if i and (i.get('survey') or i.get('extent'))]
+    if items:
+        acres = sum(apgb.acres_of(i.get('extent')) if re.search(r'[a-z]', str(i.get('extent') or ''), re.I)
+                    else num(i.get('extent')) for i in items)
+        survey = ', '.join(str(i.get('survey')) for i in items if i.get('survey'))
+    else:
+        raw = rep.get('extentDeedRaw') or pd.get('netExtent')
+        acres = apgb.acres_of(raw) if re.search(r'[a-z]', str(raw or ''), re.I) else num(raw)
+        survey = f['surveyNo'] or '---'
+    rate = num(rep.get('ratePerAcre')) or num(pd.get('landRate'))
+    guide = num(rep.get('guidelineRatePerAcre'))
+    land = apgb.money(acres * rate)
+    fmv = int(land // 10000) * 10000
+    r_pct, d_pct = bob.rates_for(case, 'agriculture', *AGRI_PCT)
+    realizable, distress = round(fmv * r_pct), round(fmv * d_pct)
+    ac_txt = f'{acres:.2f}'
+    loc = (f'In Site Survey No : {survey}, In {village} Village, {panchayat}, {village} Village Field At {mandal} Mandal Of '
+           f'{dotted(district)}. Dist.')
+    rel = f.get('owner1Rel')
+    has_rel = rel not in (None, DROP, '')
+    branch = (case.get('bankBranch') or '---').strip()
+    f.update({
+        'districtShort': district, 'bankBranchUpperDot': branch.upper() + '.',
+        'ownerLine1': f'{f["owner1Name"]}, {rel}.' if has_rel else f'{f["owner1Name"]}.',
+        'totalAc': ac_txt, 'surveyNo': survey, 'agTitle': f'Agriculture Land, {loc}',
+        'fmv': inr(fmv), 'fmvWordsCoreUpper': core_words(fmv).replace('Crores', 'Crore').upper(),
+        'realizable': inr(realizable), 'distress': inr(distress),
+        'villageMandalLine': f'{village} Village & GP, {mandal} Mandal, {dotted(district)}. (Dt).',
+        'branchAddrLine': f'State Bank of India, {branch}, {dotted(district)}. (Dt). ',
+        'custNameLine': f'{f["owner1Name"]},', 'custRelLine': f'{rel}.' if has_rel else ' ',
+        'agLocation': loc, 'nearByLine': rep.get('nearBy') or f'{village} Village',
+        'extentAcLine': f'Ac {ac_txt} Cents', 'approvedLandUse': rep.get('approvedLandUse') or 'Agriculture',
+        'propertyKind': rep.get('propertyKind') or 'Agriculture Land', 'constructionStage': rep.get('constructionStage') or ' Vacant Land ',
+        'guidelineLine': f'Rs {inr(guide)}/-  Per Acre' if guide else '---', 'rateAcre': inr(rate), 'landValue': inr(land),
+        'declBackground': f'Ac {ac_txt} Cents of freehold land belonging to the client. The land Bearing At {loc}',
+        'declPurpose': f'For collateral security. Manager, SBI, {branch}, {district} (Dt)',
+        'declDates1': f'Date of appointment : {f["inspectionDate"]} ', 'declDates2': f'Valuation date  : {f["reportDate"]} ',
+        'declDates3': f'Date of report   : {f["reportDate"]}',
+    })
+    images = apgb.geo_and_photos(case, rep, f, temps, 4)
+    apply_overrides(f, rep)
+    return {'fields': f, 'rows': {}, 'images': images}
+
+
+# ---------------------------------------------------------------- OPEN SITE
+# From the bank's open-site sample (Annexure-XI Format-A): land = cents x rate per cent (11.00 x 18,50,000 =
+# 2,03,50,000); FMV = land rounded down to ₹10,000; realizable / distress = 90% / 80% of FMV, exact.
+SITE_PCT = (0.90, 0.80)
+
+
+def build_open_site(case, temps, bank=None):
+    from union import core_words
+    pd = case.get('propertyDetails') or {}
+    rep = pd.get('report') or {}
+    f = apgb.common_fields(case, rep, {'district': 'Y.S.R', 'place': 'Kadapa'})
+    bob.owners(f, case, rep)
+    owner_fields(f, case, rep)
+    district = f['district']
+    lb = rep.get('localBodyName') or f.get('localBodyName') or 'Kadapa Municipal Corporation'
+    deed_c = apgb.extent_in_cents(rep.get('extentDeedRaw') or pd.get('netExtent'))
+    plan_c = apgb.extent_in_cents(rep.get('netExtentPlanRaw')) or deed_c
+    road_c = apgb.extent_in_cents(rep.get('roadAffectedRaw'))
+    net_c = max(plan_c - road_c, 0)
+    cons_c = apgb.extent_in_cents(rep.get('consideredExtentRaw')) or net_c
+    rate = num(rep.get('marketRatePerCent')) or num(pd.get('landRate')) * SQYD_PER_CENT
+    land = apgb.money(cons_c * rate)
+    fmv = num(rep.get('sayValue')) or int(land // 10000) * 10000
+    r_pct, d_pct = bob.rates_for(case, 'openSite', *SITE_PCT)
+    realizable, distress = round(fmv * r_pct), round(fmv * d_pct)
+    guide = num(rep.get('guidelineRatePerSqyd')) or num(pd.get('guidelineRate'))
+
+    def ydc(c):
+        return f'{trunc2(c * SQYD_PER_CENT):.2f} Sqyds (or) {cents_txt(c)} Cents'
+    survey, door, ward = f['surveyNo'] or '---', pd.get('doorNo') or '', rep.get('wardNo') or pd.get('wardNo') or ''
+    street, near = rep.get('street') or '', rep.get('nearBy') or ''
+    village = rep.get('village') or pd.get('village') or f.get('place') or 'Kadapa'
+    loc = (f'Site Survey No : {survey},' + (f' Door No : {door},' if door else '') + (f' Ward No : {ward},' if ward else '')
+           + (f' {street},' if street else '') + (f' Beside {near},' if near else '')
+           + f' {village} Village Field, {lb} Of {dotted(district)} (Dt).')
+    rel = f.get('owner1Rel')
+    has_rel = rel not in (None, DROP, '')
+    branch = (case.get('bankBranch') or '---').strip()
+    rate_txt = f'Rs {inr(rate)}/- Cent'
+    cons_txt = cents_txt(cons_c)
+    f.update({
+        'districtDotted': dotted(district), 'bankBranchName': branch, 'bankBranchUpper': branch.upper(),
+        'ownerLine1': f'{f["owner1Name"]}  {rel}.' if has_rel else f'{f["owner1Name"]}.',
+        'deedNo': pd.get('deedNo') or '---', 'deedDate': apgb.ddmmyyyy(pd.get('deedDate')) or '---',
+        'extentCents': cons_txt,
+        'doorSurveyFront': (f'Door No  :   {door}           ' if door else '') + f'Survey No     :   {survey}',
+        'siteTitle': f'{rep.get("siteKind") or "Residential"} Vacant Site At {loc}',
+        'siteNote': rep.get('siteNote') or DROP,
+        'fmv': inr(fmv), 'fmvWordsCoreUpper': core_words(fmv).replace('Crores', 'Crore').upper(),
+        'localBodyLine': f'{lb} of {dotted(district)} (Dt).',
+        'locationLine': loc, 'nearByLine': f'Near {near}' if near else '---',
+        'accessLine': rep.get('accessLine') or f'Yes, {rep.get("roadWidth") or pd.get("roadWidth") or "Wide Road"}',
+        'extentDeedYdC': ydc(deed_c), 'extentPlanYdC': ydc(plan_c), 'roadAffected': ydc(road_c) if road_c else '0.00',
+        'netExtentYdC': ydc(net_c), 'consYdC': ydc(cons_c), 'consCentsLine': f'{cons_txt} Cents',
+        'marketRateLine': rate_txt, 'adoptedRateLine': f'{cons_txt} Cents X {rate_txt}',
+        'landValueRs': f'Rs {inr(land)}/-', 'fmvRs': f'Rs {inr(fmv)}/-',
+        'realizableRs': f'Rs {inr(realizable)}/-', 'distressRs': f'Rs {inr(distress)}/-',
+        'guidelineLine': rep.get('guidelineLine') or (f'Rs {inr(apgb.money(cons_c * SQYD_PER_CENT * guide))}/-' if guide else 'Copy Enclosed'),
+        'placeTown': rep.get('placeTown') or village, 'sroPlace': rep.get('sroPlace') or f.get('place') or 'Kadapa',
+        'engineerInitials': apgb.engineer_initials(case),
+        'declBackground': (f'Extent {cons_txt} Cents of free hold land belonging to the client. The land bearing At {loc}'),
+        'declPurpose': f'For collateral security. Manager, State Bank Of India, {branch}.',
+        'declDates1': f'Date of appointment: {f["inspectionDate"]}, ', 'declDates2': f'Valuation date: {f["reportDate"]},',
+        'declDates3': f'Date of report: {f["reportDate"]}.',
+    })
+    for side in ('North', 'South', 'East', 'West'):
+        f[f'dimDeed{side}'] = rep.get(f'dimDeed{side}') or '---'
+        f[f'dimActual{side}'] = rep.get(f'dimActual{side}') or f[f'dimDeed{side}']
+    images = apgb.geo_and_photos(case, rep, f, temps, 6)
+    f['latLine'], f['lngLine'] = f.get('latitude') or ' ', f.get('longitude') or ' '
+    apply_overrides(f, rep)
+    return {'fields': f, 'rows': {}, 'images': images}
+
+
+BUILDERS = {'apartment': build_apartment, 'house': build_house, 'agriculture': build_agriculture, 'open_site': build_open_site}
 TEMPLATES = {name: f'sbi_{name}.docx' for name in BUILDERS}
 format_for = apgb.format_for
 

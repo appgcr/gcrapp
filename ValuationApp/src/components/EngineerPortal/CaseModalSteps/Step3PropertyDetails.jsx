@@ -6,6 +6,7 @@ import LandRateCard, { landRateField } from './LandRateCard';
 import VoiceFill from './VoiceFill';
 import { useBanks, matchBank } from '../../../utils/banks';
 import { plotFromRoads } from '../caseValidationHelpers';
+import { ageYears, depPercentFor, tooOldText, MAX_BUILDING_AGE } from '../../../utils/buildingAge';
 
 export default function Step3PropertyDetails({
   propertyDetails = {},
@@ -731,6 +732,9 @@ export default function Step3PropertyDetails({
             style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none' }}
           />
           {renderConflictOptions && renderConflictOptions('buildingAge')}
+          {String(propertyDetails.buildingAge ?? '').trim() !== '' && (ageYears(propertyDetails.buildingAge) > MAX_BUILDING_AGE
+            ? <div style={{ marginTop: 4, fontSize: 11.5, fontWeight: 700, color: '#dc2626' }}>{tooOldText(ageYears(propertyDetails.buildingAge))}</div>
+            : <div style={{ marginTop: 4, fontSize: 11.5, color: '#64748b' }}>Depreciation {depPercentFor(propertyDetails.buildingAge)}%{ageYears(propertyDetails.buildingAge) <= 3 ? ' (none for the first 3 years)' : ''}</div>)}
         </div>
         )}
         <div style={{ flex: 1 }}>

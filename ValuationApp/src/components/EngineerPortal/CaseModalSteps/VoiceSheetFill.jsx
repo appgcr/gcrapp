@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Mic, Pause, Play, Check, Trash2, Loader2 } from 'lucide-react';
+import { Mic, Pause, Play, Check, Trash2, Loader2, Upload } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../../../config/api';
 import { authHeaders } from '../../Shared/authHeaders';
 import { requestMic, openMicSettings } from '../../../utils/micPermission';
 import askConfirm from '../../Shared/askConfirm';
 import localforage from 'localforage';
+import { uploadDocumentFile } from '../../../utils/docFiles';
 
 /**
  * Speak the office-sheet details — "owner name Mahesh, S/o Maheer, address 2/240-45, engineer Chanikya Reddy,
@@ -13,7 +14,37 @@ import localforage from 'localforage';
  * Only what was said is changed; every filled field is listed (and highlighted) to check.
  */
 const MAX_SEC = 240; // 4 minutes in all (pauses don't count)
+// Audio files people actually have: phone recorder, WhatsApp (".mpeg", ".opus", ".ogg"), iPhone (".m4a", ".caf"), others
+const AUDIO_EXT = /\.(m4a|mp3|mpeg|mpga|mp2|mp4|aac|wav|wave|ogg|oga|opus|webm|weba|3gp|3gpp|amr|flac|caf|aif|aiff)$/i;
+const AUDIO_ACCEPT = 'audio/*,video/mpeg,video/mp4,video/3gpp,.m4a,.mp3,.mpeg,.mpga,.mp2,.mp4,.aac,.wav,.wave,.ogg,.oga,.opus,.webm,.weba,.3gp,.3gpp,.amr,.flac,.caf,.aif,.aiff';
 const fmt = (t) => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+
+// Long quiet stretches (thinking, walking, waiting) → cut to a short pause, so there is less to send and to listen to.
+// Speech and short pauses between words are kept as they are.
+function trimSilence(x, rate) {
+  const frame = Math.round(rate * 0.02); // 20 ms
+  const frames = Math.floor(x.length / frame);
+  if (frames < 50) return x;
+  const rms = new Float32Array(frames);
+  for (let f = 0; f < frames; f++) { let sum = 0; for (let i = f * frame, e = i + frame; i < e; i++) sum += x[i] * x[i]; rms[f] = Math.sqrt(sum / frame); }
+  const sorted = Array.from(rms).sort((a, b) => a - b);
+  const floor = sorted[Math.floor(frames * 0.15)] || 0;
+  const loud = sorted[Math.floor(frames * 0.95)] || 0;
+  const th = Math.max(0.006, floor * 2.5, loud * 0.06); // above the background noise
+  const keep = new Uint8Array(frames);
+  const pad = 12; // keep 240 ms around speech
+  for (let f = 0; f < frames; f++) if (rms[f] > th) for (let k = Math.max(0, f - pad), e = Math.min(frames, f + pad + 1); k < e; k++) keep[k] = 1;
+  // Quiet runs: up to 0.35 s of each is kept (natural pause), the rest is cut
+  const maxQuiet = Math.round(0.35 / 0.02);
+  const out = new Float32Array(x.length);
+  let o = 0; let quiet = 0;
+  for (let f = 0; f < frames; f++) {
+    if (keep[f]) quiet = 0; else if (++quiet > maxQuiet) continue;
+    out.set(x.subarray(f * frame, f * frame + frame), o); o += frame;
+  }
+  // Almost nothing loud (a very quiet recording): send it as it is
+  return o < x.length * 0.15 ? x : out.subarray(0, o);
+}
 
 // All recorded pieces → one 16 kHz mono WAV (pieces from before and after a pause or a call are joined)
 async function piecesToWav(blobs) {
@@ -34,8 +65,13 @@ async function piecesToWav(blobs) {
     parts.push(new Float32Array(Math.round(rate * 0.4))); // a short silence between pieces
   }
   try { ctx.close && ctx.close(); } catch { /* ignore */ }
-  const n = parts.reduce((a, p) => a + p.length, 0);
-  if (!n) throw new Error('The recording could not be opened. Please record again.');
+  const total = parts.reduce((a, p) => a + p.length, 0);
+  if (!total) throw new Error('The recording could not be opened. Please record again.');
+  const all = new Float32Array(total);
+  { let at = 0; for (const p of parts) { all.set(p, at); at += p.length; } }
+  const trimmed = trimSilence(all, rate);
+  parts.length = 0; parts.push(trimmed);
+  const n = trimmed.length;
   const view = new DataView(new ArrayBuffer(44 + n * 2));
   const w = (o, str) => { for (let i = 0; i < str.length; i++) view.setUint8(o + i, str.charCodeAt(i)); };
   w(0, 'RIFF'); view.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt ');
@@ -74,11 +110,18 @@ export function sheetFilledList(f) {
 // apply(fields) (optional): put the values somewhere else (e.g. the whole case) → { filled: [{key,label,value}], skipped: [labels] }
 // storeKey (optional): where the recording is kept on the phone while it is being made, so a call, the app
 // closing or the phone switching off never loses it — it is offered again (Resume / Fill now) next time.
-export default function VoiceSheetFill({ setSheet, emptySheet, onFilled, apply, example, storeKey }) {
+// allowUpload: also offer "Upload audio" (a recording made earlier — WhatsApp voice note, phone recorder…)
+// big: shown as the main way to fill the case (Audio route) — with a heading
+// missing: what the case still needs after filling (shown with a "Speak these" button)
+// onFilled(keys, { unsure, checks, values }): unsure = keys Gouru AI was not sure of; checks = [{ field, text }]
+// onVoiceNote(doc): the recording, saved to the case's files (the admin can listen to it with what Gouru AI heard)
+export default function VoiceSheetFill({ setSheet, emptySheet, onFilled, apply, example, storeKey, allowUpload = false, big = false, missing = [], onVoiceNote }) {
+  const pickRef = useRef(null);
   const [state, setState] = useState('idle'); // idle | rec | paused | busy
   const [secs, setSecs] = useState(0);
   const [note, setNote] = useState('');
   const [result, setResult] = useState(null);
+  const [stage, setStage] = useState(''); // what Gouru AI is doing while busy
   const rec = useRef(null);
   const stream = useRef(null);
   const segments = useRef([]);   // finished pieces (Blobs)
@@ -204,20 +247,48 @@ export default function VoiceSheetFill({ setSheet, emptySheet, onFilled, apply, 
     }
   };
 
-  const send = async () => {
+  // An audio file picked from the phone → read by Gouru AI the same way as a spoken recording
+  const uploadAudio = async (file) => {
+    if (!file) return;
+    if (state !== 'idle') { toast.error('Finish or delete the recording you are making first.'); return; }
+    // WhatsApp saves voice notes as ".mpeg" / ".opus" and some phones as ".mp4" / ".3gp" — these are audio too
+    if (!/^(audio|video)\//i.test(file.type || '') && !AUDIO_EXT.test(file.name || '')) { toast.error('Please choose an audio file (m4a, mp3, mpeg, wav, ogg, opus…).'); return; }
+    if (file.size > 50 * 1024 * 1024) { toast.error('That file is over 50 MB. Please choose a shorter recording.'); return; }
+    setResult(null); setNote('');
+    segments.current = [file]; savedSecs.current = 0; setSecs(0);
+    await send({ fromFile: file.name || 'the audio file' });
+  };
+
+  const send = async ({ fromFile } = {}) => {
     const pieces = segments.current;
     if (!pieces.length) { setState('idle'); toast.error('Nothing was recorded. Please try again.'); return; }
     setState('busy');
+    setStage('Preparing the audio…');
     try {
       const audio = await piecesToWav(pieces);
-      const r = await fetch(`${API_BASE_URL}/api/assist/voice-sheet`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ audio }) });
+      const mb = (audio.length * 0.75) / 1048576;
+      setStage(mb > 1 ? `Sending ${mb.toFixed(1)} MB…` : 'Sending…');
+      const listenT = setTimeout(() => setStage('Gouru AI is listening…'), Math.min(9000, 1500 + mb * 1500));
+      // 16 kHz mono WAV = 32,000 bytes a second
+      const secsLong = Math.round((audio.length * 0.75 - 44) / 32000);
+      if (secsLong > MAX_SEC + 5) {
+        segments.current = []; setState('idle');
+        toast.error(`${fromFile ? 'That recording' : 'The recording'} is ${fmt(secsLong)} long. Up to ${fmt(MAX_SEC)} can be read at once — please send a shorter one.`, { duration: 7000 });
+        return;
+      }
+      let r;
+      try { r = await fetch(`${API_BASE_URL}/api/assist/voice-sheet`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ audio }) }); }
+      finally { clearTimeout(listenT); }
+      setStage('Filling the details…');
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || 'Could not read the recording.');
       const f = d.fields || {};
+      const unsure = Array.isArray(d.unsure) ? d.unsure : [];
+      const checks = Array.isArray(d.checks) ? d.checks : [];
       let filled = [];
       let skipped = [];
       if (apply) {
-        ({ filled = [], skipped = [] } = apply(f) || {});
+        ({ filled = [], skipped = [] } = apply(f, { unsure, checks }) || {});
       } else {
         setSheet((prev) => {
           const out = { ...emptySheet, ...prev };
@@ -230,16 +301,46 @@ export default function VoiceSheetFill({ setSheet, emptySheet, onFilled, apply, 
         });
         filled = sheetFilledList(f);
       }
-      onFilled && onFilled(filled.map((x) => x.key));
+      onFilled && onFilled(filled.map((x) => x.key), { unsure, checks, values: Object.fromEntries(sheetFilledList(f).map((x) => [x.key, x.value])) });
       // Done: the recording is no longer needed on the phone
       segments.current = []; savedSecs.current = 0; setSecs(0); setNote('');
       await forget();
-      setResult({ transcript: d.transcript, filled, skipped });
+      const labelOf = (k) => { const [a, b] = k.split('.'); return b ? `${a === 'boundaries' ? 'Boundary' : 'Measurement'} ${b}` : (SHEET_LABELS[a] || ({ bankBranch: 'Branch', district: 'District', mobile: 'Mobile' })[a] || a); };
+      const checkFields = new Set(checks.map((c) => c.field));
+      const doubts = [...checks.map((c) => c.text), ...unsure.filter((k) => !checkFields.has(k)).map((k) => `${labelOf(k)}: "${(filled.find((x) => x.key === k) || {}).value || ''}" — Gouru AI was not fully sure it heard this right.`)];
+      setResult({ transcript: d.transcript, filled, skipped, doubts, fixes: Array.isArray(d.corrections) ? d.corrections : [] });
+      // Keep the recording with the case (in the background — the form is already filled)
+      if (onVoiceNote) {
+        const original = fromFile ? pieces[0] : null;
+        const transcript = String(d.transcript || '');
+        const filledCount = filled.length;
+        (async () => {
+          try {
+            const stamp = new Date();
+            const blob = original || await (await fetch(audio)).blob();
+            const name = original ? (original.name || 'Voice note') : `Voice note ${stamp.toLocaleDateString('en-IN')} ${stamp.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}.wav`;
+            const file = original || new File([blob], name, { type: 'audio/wav' });
+            const url = await uploadDocumentFile(file);
+            const size = file.size || blob.size || 0;
+            onVoiceNote({
+              id: `voice_${stamp.getTime()}`, name, url, isAudio: true, size,
+              sizeFormatted: size < 1048576 ? `${Math.max(1, Math.round(size / 1024))} KB` : `${(size / 1048576).toFixed(1)} MB`,
+              extension: (name.split('.').pop() || 'WAV').toUpperCase(), uploadedAt: stamp.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }),
+              at: stamp.toISOString(), seconds: secsLong, transcript, filled: filledCount, source: original ? 'upload' : 'spoken',
+            });
+          } catch (e) { console.warn('Voice note not saved:', e && e.message); }
+        })();
+      }
       setState('idle');
       if (filled.length) toast.success(`Filled ${filled.length} detail${filled.length === 1 ? '' : 's'}. Please check them.`);
       else toast('Nothing to fill was heard. Speak closer to the phone and say the field name first, e.g. "deed number 123 by 2025".', { duration: 6000 });
     } catch (err) {
       // Kept on the phone: try again when there's signal
+      if (fromFile && /could not be opened/i.test(err.message || '')) {
+        segments.current = []; setNote(''); setState('idle');
+        toast.error(`${fromFile} could not be opened on this phone. Try an m4a, mp3 or wav file.`, { duration: 7000 });
+        return;
+      }
       setNote(`${err.message || 'Could not read the recording.'} Your recording is kept — tap Fill now to try again.`);
       setState('paused');
     }
@@ -248,7 +349,14 @@ export default function VoiceSheetFill({ setSheet, emptySheet, onFilled, apply, 
   const time = fmt(secs);
   return (
     <div className="vsf">
-      {state === 'idle' && <button type="button" className="vsf-btn" onClick={() => record(true)}><Mic size={18} /> {result ? 'Speak more details' : 'Speak the details'}</button>}
+      {big && <div className="vsf-h"><b>Fill this case by voice</b><small>Speak now, or upload a recording you made at the site. English, Telugu or a mix.</small></div>}
+      {allowUpload && <input ref={pickRef} type="file" hidden accept={AUDIO_ACCEPT} onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; uploadAudio(f); }} />}
+      {state === 'idle' && (
+        <div className="vsf-row">
+          <button type="button" className="vsf-btn" onClick={() => record(true)}><Mic size={18} /> {result ? 'Speak more details' : 'Speak the details'}</button>
+          {allowUpload && <button type="button" className="vsf-btn up" onClick={() => pickRef.current?.click()}><Upload size={18} /> Upload audio</button>}
+        </div>
+      )}
       {state === 'rec' && (
         <div className="vsf-row">
           <button type="button" className="vsf-btn rec" onClick={() => pause('')} aria-label="Pause"><Pause size={17} /> Pause · {time}</button>
@@ -262,7 +370,7 @@ export default function VoiceSheetFill({ setSheet, emptySheet, onFilled, apply, 
           <button type="button" className="vsf-x" onClick={discard} aria-label="Delete recording"><Trash2 size={17} /></button>
         </div>
       )}
-      {state === 'busy' && <button type="button" className="vsf-btn" disabled><Loader2 size={18} className="spin" /> Gouru AI is filling…</button>}
+      {state === 'busy' && <button type="button" className="vsf-btn" disabled><Loader2 size={18} className="spin" /> {stage || 'Gouru AI is filling…'}</button>}
       {note && <div className="vsf-pnote">{note}</div>}
       <div className="vsf-hint">
         {state === 'rec'
@@ -271,6 +379,13 @@ export default function VoiceSheetFill({ setSheet, emptySheet, onFilled, apply, 
             ? 'Paused. What you said is kept. Resume to say more, or Fill now.'
             : `Say the field name, then the value. e.g. "${example || 'Owner name Mahesh, S/o Maheer, address 2/240-45, engineer Chanikya Reddy, inspection date today, deed number 123 by 2025, deed date 23-04-24, survey number 114'}"`}
       </div>
+      {result && state === 'idle' && missing.length > 0 && (
+        <div className="vsf-miss">
+          <b>Still needed ({missing.length})</b>
+          <div>{missing.join(' · ')}</div>
+          <button type="button" className="vsf-btn" onClick={() => record(true)}><Mic size={17} /> Speak these</button>
+        </div>
+      )}
       {result && state === 'idle' && (
         <div className="vsf-res">
           {result.transcript && <div className="vsf-heard"><b>Heard:</b> {result.transcript}</div>}
@@ -278,6 +393,10 @@ export default function VoiceSheetFill({ setSheet, emptySheet, onFilled, apply, 
             <ul>{result.filled.map((x) => <li key={x.key}><span>{x.label}</span><b>{x.value}</b></li>)}</ul>
           )}
           {result.skipped && result.skipped.length > 0 && <div className="vsf-skip">Not filled: {result.skipped.join(' · ')}</div>}
+          {result.fixes && result.fixes.length > 0 && <div className="vsf-fixed"><b>Auto-corrected</b>{result.fixes.map((x) => <span key={x}>{x}</span>)}</div>}
+          {result.doubts && result.doubts.length > 0 && (
+            <div className="vsf-doubt"><b>Please check ({result.doubts.length})</b><ul>{result.doubts.map((x) => <li key={x}>{x}</li>)}</ul><small>These are marked yellow on the form.</small></div>
+          )}
           {result.filled.length > 0 && <div className="vsf-note">Filled fields are highlighted. Correct anything that's wrong by typing.</div>}
         </div>
       )}
@@ -287,6 +406,10 @@ export default function VoiceSheetFill({ setSheet, emptySheet, onFilled, apply, 
         .vsf-row { display: flex; gap: 8px; align-items: center; }
         .vsf-row .vsf-btn { flex: 1; }
         .vsf-btn.go { background: #16a34a; flex: 0 0 auto; padding: 13px 18px; }
+        .vsf-btn.up { background: #fff; color: #4338ca; border: 1.5px solid #a5b4fc; }
+        .vsf-h { margin-bottom: 10px; display: flex; flex-direction: column; gap: 2px; }
+        .vsf-h b { font-size: 15.5px; color: #1e1b4b; } .vsf-h small { font-size: 12.5px; color: #4338ca; line-height: 1.4; }
+        body.dark-theme .vsf-btn.up { background: #2c2c2e; color: #a5b4fc; border-color: #4f46e5; } body.dark-theme .vsf-h b { color: #fff; } body.dark-theme .vsf-h small { color: #a5b4fc; }
         .vsf-x { width: 46px; height: 46px; flex-shrink: 0; border-radius: 50%; border: 1px solid #fecaca; background: #fff; color: #dc2626; display: grid; place-items: center; cursor: pointer; }
         .vsf-pnote { margin-top: 8px; font-size: 12.5px; font-weight: 600; color: #b45309; text-align: center; line-height: 1.4; }
         .vsf-btn.rec { background: #dc2626; animation: vsfPulse 1.4s ease-in-out infinite; }
@@ -300,6 +423,14 @@ export default function VoiceSheetFill({ setSheet, emptySheet, onFilled, apply, 
         .vsf-res li span { color: #64748b; flex-shrink: 0; }
         .vsf-res li b { text-align: right; word-break: break-word; }
         .vsf-skip { margin-top: 6px; font-size: 12px; color: #92400e; }
+        .vsf-fixed { margin-top: 8px; font-size: 12px; color: #166534; display: flex; flex-wrap: wrap; gap: 4px 8px; } .vsf-fixed b { width: 100%; }
+        .vsf-fixed span { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 1px 6px; }
+        .vsf-doubt { margin-top: 8px; background: #fefce8; border: 1px solid #fde047; border-radius: 10px; padding: 8px 10px; color: #713f12; font-size: 12.5px; }
+        .vsf-doubt ul { margin: 4px 0 2px; padding-left: 16px; display: block; } .vsf-doubt li { display: list-item; border: 0; padding: 2px 0; }
+        .vsf-doubt small { color: #a16207; }
+        .vsf-miss { margin-top: 10px; background: #fff7ed; border: 1px solid #fdba74; border-radius: 12px; padding: 10px 12px; color: #7c2d12; font-size: 13px; line-height: 1.45; display: flex; flex-direction: column; gap: 6px; }
+        .vsf-miss .vsf-btn { background: #ea580c; padding: 10px; font-size: 14.5px; }
+        body.dark-theme .vsf-doubt { background: #2a2410; color: #fde68a; border-color: #854d0e; } body.dark-theme .vsf-miss { background: #2a1a0e; color: #fed7aa; border-color: #9a3412; }
         .vsf-note { margin-top: 6px; font-size: 12px; color: #15803d; font-weight: 600; }
         body.dark-theme .vsf { background: #1c1c1e; border-color: #3a3a3c; }
         body.dark-theme .vsf-res { background: #2c2c2e; color: #fff; }

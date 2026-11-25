@@ -18,6 +18,7 @@ const BANKS = [
   { key: 'hdfc', label: 'HDFC Bank', match: [/hdfc/i], templates: {} },
   { key: 'icici', label: 'ICICI Bank', match: [/icici/i], templates: {} },
   { key: 'axis', label: 'Axis Bank', match: [/axis/i], templates: {} },
+  { key: 'shriram', label: 'Shriram Finance Ltd', match: [/shriram/i], templates: {} },
 ];
 
 function bankFor(bankName) {

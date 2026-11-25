@@ -46,7 +46,7 @@ const appConfigSchema = new mongoose.Schema({
   },
   plotTypes: {
     type: [String],
-    default: ["Corner plot", "Intermediary plot", "Road-facing plot"]
+    default: ["Intermittent Plot", "Corner Plot", "Double Corner Plot", "Island Plot"]
   },
   roadTypes: {
     type: [String],

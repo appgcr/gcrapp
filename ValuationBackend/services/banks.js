@@ -18,6 +18,7 @@ const FORMATS = [
   { key: 'indian', label: 'Indian Bank (bank’s own format)' },
   { key: 'sbi', label: 'State Bank of India (bank’s own format)' },
   { key: 'bom', label: 'Bank of Maharashtra (bank’s own format)' },
+  { key: 'shriram', label: 'Shriram Finance (lender’s own format)' },
 ];
 
 // Property types → policy slot
@@ -59,6 +60,8 @@ const SEED = [
   { name: 'Bank of Maharashtra', shortName: 'BOM', aliases: ['Bank of Maharastra'], format: 'bom',
     policies: { apartment: p(90, 80) } },
   { name: 'Indian Bank', format: 'indian', policies: { openSite: p(90, 80) } },
+  { name: 'Shriram Finance Ltd', shortName: 'Shriram', aliases: ['Shriram Finance', 'Shriram Finances Ltd', 'Shriram Finance Limited'],
+    format: 'shriram', policies: { openSite: p(90, 80) } },
 ];
 
 const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -90,7 +93,16 @@ async function ensureBanks() {
     clearCache();
     // A bank whose own format was installed later: switch it over unless the Super Admin already set it up
     for (const seed of SEED.filter((b) => b.format && b.format !== 'standard')) {
-      const bank = await findBank(seed.name);
+      let bank = await findBank(seed.name);
+      if (!bank && (seed.aliases || []).length) {
+        for (const a of seed.aliases) { bank = bank || await findBank(a); }
+      }
+      if (!bank) {   // a lender whose format was added later (e.g. Shriram Finance): add it to the list
+        await Bank.create({ id: await nextBankId(), ...seed });
+        console.log(`🏦 ${seed.name}: added with its own report format`);
+        clearCache();
+        continue;
+      }
       const untouched = bank && bank.format === 'standard' &&
         !Object.values(bank.policies || {}).some((p) => p && p.realizable != null);
       if (untouched) {

@@ -213,7 +213,7 @@ def build_apartment(case, temps):
     rate = num(rep.get('constructionRate')) or 1500
     age = int(num(pd.get('buildingAge')))
     life = int(num(rep.get('totalLife'), 60)) or 60
-    dep_pct = min(age * num(rep.get('depreciationPerYear'), 1.0), 70.0)
+    dep_pct = apgb.dep_percent(age, rep.get('depreciationPerYear'))
     bld = apgb.money(plinth * rate)
     dep = apgb.money(bld * dep_pct / 100)
     net = bld - dep
@@ -319,7 +319,8 @@ def build_open_site(case, temps):
         'consideredCents': f'{considered:.2f}',
         'extentDeed': extent_yd(deed_c), 'extentActual': extent_yd(deed_c), 'extentSite': extent_yd(deed_c),
         'netExtentPlan': extent_yd(plan_c), 'extentConsidered': extent_yd(considered),
-        'briefDescription': f'This House is Very Suitable for Residential Purpose it is In {location_line}',
+        # A vacant site, not a house (the report used to say "This House" for open sites)
+        'briefDescription': rep.get('briefDescription') or f'This Vacant Site is Very Suitable for Residential Purpose it is In {location_line}',
         'locationLine': location_line,
         'justificationPlace': f'{loc} ', 'govtValue': inr(apgb.money(guide * considered * SQYD_PER_CENT)) if guide else '---',
         'marketRateLine': f' Rs {inr(rate)}/- Cent', 'guidelineRateLine': f'Rs {inr(guide)}/- Sqyds' if guide else '---',

@@ -346,11 +346,16 @@ router.put('/:id', authenticateToken, async (req, res) => {
           const fc = require('../services/reportFormatCheck').checkFormat(await prep(merged));
           if (!fc.ok) return res.status(422).json({ error: fc.message, code: 'NO_FORMAT' });
         }
+        // Buildings over 30 years are not eligible for valuation
+        {
+          const old = require('../services/buildingAge').tooOldError(pd);
+          if (old) return res.status(422).json({ error: old, code: 'TOO_OLD' });
+        }
         if (pd.entryMode === 'sheet') {
           // Office sheet route: only when the Super Admin has switched it on for this branch
           const br = await Branch.findOne({ id: existingCase.branchId }).select('sheetBypass').lean();
           if (!br || !br.sheetBypass) return res.status(403).json({ error: 'Office sheet upload is not switched on for your branch. Please upload the 5 documents instead.' });
-          if (!has('officeSheet')) return res.status(422).json({ error: 'Please upload the filled office data sheet before submitting.' });
+          if (!has('officeSheet') && pd.sheetSource !== 'audio') return res.status(422).json({ error: 'Please upload the filled office data sheet before submitting.' });
           if (!(updateData.siteSelfie || existingCase.siteSelfie)) return res.status(422).json({ error: 'Please take your selfie at the site before submitting.' });
         } else {
           const NEED = [['saleDeed', 'Sale Deed'], ['buildingPlan', 'Approved Building Plan / Permit'], ['propertyTax', 'Property Tax receipt'], ['marketValue', 'Market Value / Guideline certificate'], ['layoutPlan', 'Layout / Approval plan']];
@@ -1302,7 +1307,7 @@ router.post('/ai-review/answer', authenticateToken, async (req, res) => {
     if (!/^data:audio\/[a-z0-9.+-]+(?:;[^;,]+=[^;,]*)*;base64,/i.test(String(audio || ''))) return res.status(400).json({ error: 'No recording received.' });
     if (String(audio).length > 8 * 1024 * 1024) return res.status(413).json({ error: 'Answer too long. Keep it under a minute.' });
     const out = await require('../services/aiReview').understandAnswer(audio, question || {});
-    if (!out) return res.status(503).json({ error: 'Gouru AI could not hear that. Please tap an answer instead.' });
+    if (!out) return res.status(503).json({ error: require('../services/aiStatus').failMessage('Gouru AI could not hear that. Please tap an answer instead.').replace('type the details', 'tap an answer') });
     res.json(out);
   } catch (err) {
     res.status(500).json({ error: 'Could not understand the answer. Please tap an answer instead.' });

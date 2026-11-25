@@ -98,17 +98,37 @@ def mark_images(doc, after_text, marker_prefix, stop_text=None):
         return ''.join(t.text or '' for t in el.iter(qn('w:t')))
     si = next(i for i, el in enumerate(kids) if el.tag == qn('w:p') and after_text in text_of(el))
     n = 0
-    for el in kids[si + 1:]:
+    VML = '{urn:schemas-microsoft-com:vml}'
+
+    def size_of(r):
+        """(w, h) in EMU of a picture run: DrawingML (w:drawing) or old VML (w:pict, from .doc files)."""
+        drawing = r.find(qn('w:drawing'))
+        if drawing is not None:
+            ext = drawing.find('.//' + qn('wp:extent'))
+            return int(ext.get('cx')), int(ext.get('cy'))
+        pict = r.find(qn('w:pict'))
+        if pict is not None and pict.find('.//' + VML + 'imagedata') is not None:
+            shape = pict.find('.//' + VML + 'shape')
+            style = (shape.get('style') if shape is not None else '') or ''
+            def pt(key):
+                m = re.search(key + r'\s*:\s*([\d.]+)\s*(pt|in|cm)?', style)
+                if not m:
+                    return 0
+                v, unit = float(m.group(1)), m.group(2) or 'pt'
+                return int(v * {'pt': 12700, 'in': 914400, 'cm': 360000}[unit])
+            return pt('width') or 2743200, pt('height') or 2057400
+        return None
+
+    for k, el in enumerate(kids[si:]):
         if el.tag != qn('w:p'):
             continue
-        if stop_text and stop_text in text_of(el):
+        if k and stop_text and stop_text in text_of(el):
             break
         for r in el.findall(qn('w:r')):
-            drawing = r.find(qn('w:drawing'))
-            if drawing is None:
+            size = size_of(r)
+            if size is None:
                 continue
-            ext = drawing.find('.//' + qn('wp:extent'))
-            w, h = int(ext.get('cx')), int(ext.get('cy'))
+            w, h = size
             n += 1
             for child in list(r):
                 if child.tag != qn('w:rPr'):
@@ -811,10 +831,23 @@ def engineer_initials(doc):
             replace_span(p, m.group(1), T('engineerInitials'), p.text[:p.text.rfind(m.group(1))].count(m.group(1)) + 1)
 
 
+def drop_unused_images(doc):
+    """Remove pictures the document no longer shows (the sample's site photos and maps after their
+    places became {{img:…}} markers), so no customer photo stays inside a template file."""
+    import re as _re
+    for part in [doc.part] + [s.part for s in doc.sections for s in (s.header, s.footer)]:
+        xml = part.element.xml if hasattr(part, 'element') else ''
+        used = set(_re.findall(r'r:(?:embed|id|link)="(rId\d+)"', xml))
+        for rid, rel in list(part.rels.items()):
+            if rel.reltype.endswith('/image') and rid not in used:
+                del part.rels[rid]
+
+
 def main(args):
     """python3 make_templates.py [apgb|bob] [format …]   (default: apgb, all formats)"""
     bank = 'apgb'
-    if args and args[0] in ('apgb', 'bob', 'boi', 'bom', 'canara', 'cbi', 'indian', 'iob', 'karnataka', 'pnb', 'sbi', 'union', 'uco'):
+    if args and args[0] in ('apgb', 'bob', 'boi', 'bom', 'canara', 'cbi', 'indian', 'iob', 'karnataka', 'pnb', 'sbi', 'union', 'uco',
+                            'shriram'):
         bank, args = args[0], args[1:]
     formats = FORMATS
     if bank != 'apgb':
@@ -829,6 +862,9 @@ def main(args):
         engineer_initials(doc)
         from bank_logo import add_logo
         add_logo(doc, bank)  # banks whose sample had no logo (APGB, Canara, Union, CBI, UCO, BoM, Indian Bank)
+        from letterhead import tidy_letterhead
+        tidy_letterhead(doc)  # right-hand letterhead column flush to the right margin
+        drop_unused_images(doc)  # the sample's own photos / maps must never stay in a template
         doc.save(out)
         print('built', out)
 

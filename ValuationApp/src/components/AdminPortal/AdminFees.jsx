@@ -3,7 +3,7 @@ import SendInvoice from './SendInvoice';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Document, Page, pdfjs } from 'react-pdf';
-import { FileText, Loader2, X, Plus, Building2, Undo2, Download, Pencil, Ban, FileSpreadsheet } from 'lucide-react';
+import { FileText, Loader2, X, Plus, Building2, Undo2, Download, Pencil, Ban, FileSpreadsheet, Landmark, QrCode, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../../config/api';
 import { isSuperAdmin } from '../../utils/session';
@@ -38,6 +38,7 @@ export default function AdminFees({ currentUser }) {
   const [feeEdit, setFeeEdit] = useState(null);
   const [pdfFor, setPdfFor] = useState(null);
   const [firmOpen, setFirmOpen] = useState(false);
+  const [payOpen, setPayOpen] = useState(false);
   const [cancelFor, setCancelFor] = useState(null);
 
   const load = useCallback(() => {
@@ -82,6 +83,7 @@ export default function AdminFees({ currentUser }) {
         </div>
         <div className="fee-topbtns">
           <button type="button" className="fee-firm" onClick={exportCsv}><FileSpreadsheet size={16} /> Excel</button>
+          <button type="button" className="fee-firm" onClick={() => setPayOpen(true)}><Landmark size={16} /> Payment details</button>
           <button type="button" className="fee-firm" onClick={() => setFirmOpen(true)}><Building2 size={16} /> Firm details</button>
         </div>
       </div>
@@ -165,6 +167,7 @@ export default function AdminFees({ currentUser }) {
       {pdfFor && <InvoiceViewer c={pdfFor} onClose={() => setPdfFor(null)} />}
       {cancelFor && <CancelSheet c={cancelFor} onClose={() => setCancelFor(null)} onSave={async (reason) => { const ok = await call(cancelFor.id, `/api/billing/${cancelFor.id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }, 'Invoice cancelled'); if (ok) setCancelFor(null); }} />}
       {firmOpen && <FirmSheet canEdit={isSuperAdmin(currentUser)} onClose={() => setFirmOpen(false)} />}
+      {payOpen && <PaymentSheet currentUser={currentUser} onClose={() => setPayOpen(false)} />}
 
       <style>{CSS}</style>
     </div>
@@ -260,10 +263,106 @@ export function PdfSheet({ url, title, fileName, onClose }) {
   );
 }
 
+// Where invoices are paid — per branch (its admin or the Super Admin) or the firm default (Super Admin)
+const PAY_FIELDS = [['accountName', 'Account name', 'As in the bank'], ['bankName', 'Bank', 'e.g. State Bank of India, Kadapa'], ['accountNo', 'Account number', 'Digits only'],
+  ['ifsc', 'IFSC', 'e.g. SBIN0001234'], ['upi', 'UPI ID', 'e.g. gouru@okaxis — a QR for the exact amount is made from it']];
+// A QR photo → a small PNG (under 1 MB)
+const shrinkImage = (file) => new Promise((resolve, reject) => {
+  const r = new FileReader();
+  r.onerror = () => reject(new Error('Could not read the picture.'));
+  r.onload = () => {
+    const img = new Image();
+    img.onerror = () => reject(new Error('That file is not a picture.'));
+    img.onload = () => {
+      const k = Math.min(1, 700 / Math.max(img.width, img.height));
+      const cv = document.createElement('canvas'); cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+      const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height); g.drawImage(img, 0, 0, cv.width, cv.height);
+      resolve(cv.toDataURL('image/png'));
+    };
+    img.src = r.result;
+  };
+  r.readAsDataURL(file);
+});
+function PaymentSheet({ currentUser, onClose }) {
+  const sup = isSuperAdmin(currentUser);
+  const [branches, setBranches] = useState([]);
+  const [scope, setScope] = useState(sup ? 'firm' : (currentUser?.branchId || ''));
+  const [d, setD] = useState(null);
+  const [f, setF] = useState({});
+  const [busy, setBusy] = useState(false);
+  const qrRef = React.useRef(null);
+  useEffect(() => { if (sup) fetch(`${API_BASE_URL}/api/branches`).then((r) => (r.ok ? r.json() : [])).then((l) => setBranches(Array.isArray(l) ? l : [])).catch(() => {}); }, [sup]);
+  useEffect(() => {
+    setD(null);
+    fetch(`${API_BASE_URL}/api/billing/payment?branchId=${encodeURIComponent(scope)}`).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error); return j; })
+      .then((j) => { setD(j); setF(j.payment || {}); }).catch((e) => { toast.error(e.message || 'Could not load.'); setD({ payment: {} }); });
+  }, [scope]);
+  const pickQr = async (file) => {
+    if (!file) return;
+    try { const url = await shrinkImage(file); setF((x) => ({ ...x, qrDataUrl: url })); } catch (e) { toast.error(e.message); }
+  };
+  const save = async () => {
+    const what = d?.scope === 'firm' ? 'the firm default (used by every branch without its own)' : `${d?.branchName || 'this'} branch`;
+    if (!(await askConfirm({ title: 'Change where invoices are paid?', message: `New payment details for ${what}.\nInvoices and pay links will show them from now on. The Super Admin and the branch admins are told about this change.`, confirmText: 'Save', tone: 'danger' }))) return;
+    setBusy(true);
+    try {
+      const r = await fetch(`${API_BASE_URL}/api/billing/payment`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...f, branchId: scope }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'Could not save.');
+      toast.success(j.unchanged ? 'Nothing changed' : 'Payment details saved'); onClose();
+    } catch (e) { toast.error(e.message); } finally { setBusy(false); }
+  };
+  const canEdit = !!d?.canEdit;
+  return (
+    <Sheet title="Payment details on invoices" onClose={onClose}>
+      {sup && (
+        <label className="fee-f"><span>For</span>
+          <select value={scope} onChange={(e) => setScope(e.target.value)}>
+            <option value="firm">Firm default (every branch without its own)</option>
+            {branches.map((b) => <option key={b.id} value={b.id}>{b.name} branch</option>)}
+          </select>
+        </label>
+      )}
+      {!d ? <div className="fee-empty"><Loader2 className="spin" size={20} /></div> : (
+        <>
+          {d.scope === 'branch' && d.usesFirm && <div className="fee-sub" style={{ marginTop: 10 }}>{d.branchName} uses the firm's default details now{d.firm?.accountNo ? ` (account ••••${String(d.firm.accountNo).slice(-4)})` : ''}. Fill these to give it its own.</div>}
+          {!canEdit && <div className="fee-sub">Only this branch's admin or the Super Admin can change these.</div>}
+          {PAY_FIELDS.map(([k, label, hint]) => (
+            <label className="fee-f" key={k}><span>{label}</span>
+              <input value={f[k] ?? ''} disabled={!canEdit} inputMode={k === 'accountNo' ? 'numeric' : undefined} autoCapitalize={k === 'ifsc' ? 'characters' : 'off'} autoComplete="off"
+                onChange={(e) => setF({ ...f, [k]: e.target.value })} />
+              <em>{hint}</em>
+            </label>
+          ))}
+          <div className="fee-f"><span>QR code picture (optional)</span>
+            <input ref={qrRef} type="file" accept="image/*" hidden onChange={(e) => { const x = e.target.files && e.target.files[0]; e.target.value = ''; pickQr(x); }} />
+            {f.qrDataUrl ? (
+              <div className="fee-qr">
+                <img src={f.qrDataUrl} alt="QR code on invoices" />
+                {canEdit && <div><button type="button" className="fee-firm" onClick={() => qrRef.current?.click()}><QrCode size={15} /> Change</button><button type="button" className="fee-firm" onClick={() => setF({ ...f, qrDataUrl: '' })}><Trash2 size={15} /> Remove</button></div>}
+              </div>
+            ) : canEdit && <button type="button" className="fee-firm" onClick={() => qrRef.current?.click()}><QrCode size={15} /> Upload QR (PhonePe / GPay / bank QR)</button>}
+            <em>If you upload one, invoices show this QR. Without it, a QR for the exact amount is made from the UPI ID.</em>
+          </div>
+          {d.updatedAt && <div className="fee-sub" style={{ marginTop: 12 }}>Last changed by {d.updatedByName || 'someone'} on {new Date(d.updatedAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</div>}
+          {Array.isArray(d.history) && d.history.length > 0 && (
+            <details className="fee-hist"><summary>Change history ({d.history.length})</summary>
+              {d.history.map((h, i) => (
+                <div key={i}><b>{new Date(h.at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: 'numeric', minute: '2-digit' })} · {h.byName}</b>
+                  {(h.changed || []).map((c, j) => <small key={j}>{c.field}: {c.from || '—'} → {c.to || '—'}</small>)}</div>
+              ))}
+            </details>
+          )}
+          {canEdit && <button type="button" className="fee-save" disabled={busy} onClick={save}>{busy ? <Loader2 className="spin" size={16} /> : 'Save'}</button>}
+        </>
+      )}
+    </Sheet>
+  );
+}
+
 const FIRM_FIELDS = [
   ['name', 'Firm name'], ['address', 'Address', 'area'], ['phone', 'Phone'], ['email', 'Email'],
   ['gstin', 'GSTIN', null, 'Leave empty if not GST registered — no GST is added then'], ['gstPercent', 'GST %'], ['pan', 'PAN'], ['sac', 'SAC code'],
-  ['accountName', 'Account name'], ['bankName', 'Bank'], ['accountNo', 'Account no'], ['ifsc', 'IFSC'], ['upi', 'UPI ID'],
   ['prefix', 'Invoice prefix', null, 'e.g. GV → GV/2026-27/0001'], ['terms', 'Note on invoice', 'area'],
 ];
 function FirmSheet({ canEdit, onClose }) {
@@ -284,6 +383,7 @@ function FirmSheet({ canEdit, onClose }) {
       {!f ? <div className="fee-empty"><Loader2 className="spin" size={20} /></div> : (
         <>
           {!canEdit && <div className="fee-sub">Only the Super Admin can change these.</div>}
+          <div className="fee-sub">Bank account, UPI and QR are in <b>Payment details</b> (each branch can have its own).</div>
           {FIRM_FIELDS.map(([k, label, kind, hint]) => (
             <label className="fee-f" key={k}><span>{label}</span>
               {kind === 'area'
@@ -348,6 +448,10 @@ const CSS = `
 .fee-f em { display: block; font-style: normal; font-size: 11.5px; color: #94a3b8; margin-top: 3px; }
 .fee-save { width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 16px; border: 0; border-radius: 12px; padding: 13px; background: #2563eb; color: #fff; font-size: 15px; font-weight: 800; cursor: pointer; }
 .fee-save:disabled { opacity: .5; }
+.fee-qr { display: flex; align-items: center; gap: 12px; } .fee-qr img { width: 120px; height: 120px; object-fit: contain; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; }
+.fee-qr div { display: flex; flex-direction: column; gap: 6px; }
+.fee-hist { margin-top: 8px; font-size: 12.5px; color: #475569; } .fee-hist summary { cursor: pointer; font-weight: 700; color: #1d4ed8; }
+.fee-hist > div { border-top: 1px solid #f1f5f9; padding: 6px 0; display: flex; flex-direction: column; gap: 2px; } .fee-hist small { color: #64748b; }
 .fee-save.danger { background: #dc2626; }
 .fee-topbtns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .fee-cxl { font-size: 12px; color: #b91c1c; align-self: center; }

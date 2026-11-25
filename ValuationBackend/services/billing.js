@@ -27,10 +27,41 @@ function slotFor(propertyType = '') {
   return 'house';
 }
 
-async function firmDetails() {
+const PAY_KEYS = ['accountName', 'bankName', 'accountNo', 'ifsc', 'upi', 'qrDataUrl'];
+/** Firm details for invoices. With a branch: that branch's own payment details (account, UPI, QR) when it has set any. */
+async function firmDetails(branchId = null) {
   const cfg = await AppConfig.findOne({ key: 'global' }).select('billing').lean();
   const b = (cfg && cfg.billing) || {};
+  const firm = await firmDefaults(b);
+  if (branchId) {
+    try {
+      const Branch = require('../models/Branch');
+      const br = await Branch.findOne({ id: branchId }).select('name payment valuer').lean();
+      const p = (br && br.payment) || {};
+      // The person who answers for this branch's work: its valuer (as on the reports), else its admin
+      const v = (br && br.valuer) || {};
+      let name = String(v.name || '').trim();
+      if (!name) {
+        const admin = await require('../models/User').findOne({ role: 'ADMIN', branchId, status: { $ne: 'Inactive' } }).select('name').lean().catch(() => null);
+        name = (admin && admin.name) || '';
+      }
+      if (name || (br && br.name)) {
+        firm.person = { name: name || firm.person.name, qual: name ? String(v.qualification || '') : firm.person.qual,
+          iiv: name ? String(v.iivNo || '') : firm.person.iiv, branch: (br && br.name) || '' };
+      }
+      if (p.accountNo || p.upi || p.qrDataUrl) {
+        PAY_KEYS.forEach((k) => { firm[k] = p[k] || ''; });
+        firm.paymentFrom = 'branch';
+      }
+    } catch { /* firm default */ }
+  }
+  return firm;
+}
+async function firmDefaults(b) {
   return {
+    qrDataUrl: b.qrDataUrl || '', paymentFrom: 'firm',
+    // The valuer printed on the bank reports' letterhead (Kadapa) — a branch with its own valuer / admin shows theirs
+    person: { name: 'Gouru Neelakanta Reddy', qual: 'B.Tech., MISTE.', iiv: 'F-13622', branch: '' },
     name: b.name || 'Gouru Valuations', address: b.address || '', phone: b.phone || '', email: b.email || '',
     gstin: b.gstin || '', pan: b.pan || '', sac: b.sac || '', gstPercent: b.gstPercent == null || b.gstPercent === '' ? 18 : Number(b.gstPercent),
     bankName: b.bankName || '', accountName: b.accountName || '', accountNo: b.accountNo || '', ifsc: b.ifsc || '', upi: b.upi || '',
@@ -186,7 +217,7 @@ const LOGO = path.join(__dirname, '..', 'assets', 'gouru_logo.png');
 
 async function invoicePdf(c, { link = '' } = {}) {
   const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
-  const firm = await firmDetails();
+  const firm = await firmDetails(c.branchId);
   const b = c.billing;
   const doc = await PDFDocument.create();
   const page = doc.addPage([595, 842]); // A4
@@ -208,6 +239,16 @@ async function invoicePdf(c, { link = '' } = {}) {
   text(firm.name, lx, y, { f: bold, size: 18, color: navy });
   right(firm.gstin ? 'TAX INVOICE' : 'INVOICE', 555, y, { f: bold, size: 14, color: navy });
   y -= 16;
+  // The valuer / branch head, highlighted
+  if (firm.person && firm.person.name) {
+    const who = `Er. ${firm.person.name}${firm.person.qual ? `, ${firm.person.qual}` : ''}`;
+    const sub = [firm.person.iiv ? `Approved Valuer (IIV ${firm.person.iiv})` : 'Approved Valuer', firm.person.branch && `${firm.person.branch} Branch`].filter(Boolean).join('  |  ');
+    const w = Math.max(bold.widthOfTextAtSize(ascii(who), 11), font.widthOfTextAtSize(ascii(sub), 8.5)) + 16;
+    page.drawRectangle({ x: lx - 4, y: y - (sub ? 19 : 6), width: Math.min(w, 330), height: sub ? 30 : 18, color: rgb(1, 0.97, 0.86), borderColor: rgb(0.96, 0.78, 0.3), borderWidth: 0.8 });
+    text(who, lx + 4, y, { f: bold, size: 11, color: rgb(0.47, 0.25, 0.02) });
+    if (sub) { y -= 12; text(sub, lx + 4, y, { size: 8.5, color: rgb(0.55, 0.36, 0.06) }); }
+    y -= 18;
+  }
   ascii(firm.address).split('\n').filter(Boolean).slice(0, 3).forEach((l) => { text(l, lx, y, { size: 9, color: grey }); y -= 12; });
   const contact = [firm.phone && `Ph: ${firm.phone}`, firm.email].filter(Boolean).join('  |  ');
   if (contact) { text(contact, lx, y, { size: 9, color: grey }); y -= 12; }
@@ -234,6 +275,30 @@ async function invoicePdf(c, { link = '' } = {}) {
   if (c.approvedAt) text(`Report approved: ${new Date(c.approvedAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}`, 320, y);
   y -= 24;
 
+  // Lines that wrap to a width
+  const wrap = (s, width, size = 9, f = font) => {
+    const out = []; let cur = '';
+    for (const w of ascii(s).split(/\s+/).filter(Boolean)) {
+      const t = cur ? `${cur} ${w}` : w;
+      if (f.widthOfTextAtSize(t, size) > width && cur) { out.push(cur); cur = w; } else cur = t;
+    }
+    if (cur) out.push(cur);
+    return out;
+  };
+  const pd = c.propertyDetails || {};
+  const sh = pd.sheet || {};
+  const ptype = pd.propertyType || sh.propertyType || 'Property';
+  // What was valued: the property, in one or two lines the bank can match to the report
+  const propIds = [
+    (pd.surveyNo || sh.surveyNo) && `Sy. No. ${pd.surveyNo || sh.surveyNo}`,
+    (pd.doorNo || sh.doorNo) && `Door No. ${pd.doorNo || sh.doorNo}`,
+    (pd.plotNo || sh.plotNo) && `Plot No. ${pd.plotNo || sh.plotNo}`,
+    (pd.netExtent || sh.extentDocument) && `Extent ${pd.netExtent || sh.extentDocument}`,
+  ].filter(Boolean).join(', ');
+  const deed = (pd.deedNo || sh.deedNo) ? `Sale deed ${pd.deedNo || sh.deedNo}${(pd.deedYear || sh.deedDate) && !String(pd.deedNo || sh.deedNo).includes('/') ? `/${pd.deedYear || sh.deedDate}` : ''}` : '';
+  const where = String(c.address || sh.address || pd.village || '').trim();
+  const purpose = pd.dealType || sh.dealType;
+
   // Table
   page.drawRectangle({ x: 40, y: y - 6, width: 515, height: 22, color: rgb(0.93, 0.95, 0.98) });
   text('Description', 48, y, { f: bold }); if (firm.sac) text('SAC', 360, y, { f: bold }); right('Amount', 547, y, { f: bold });
@@ -241,7 +306,15 @@ async function invoicePdf(c, { link = '' } = {}) {
   text('Professional fee for property valuation report', 48, y);
   if (firm.sac) text(firm.sac, 360, y);
   right(inr(b.fee), 547, y); y -= 14;
-  text(`${(c.propertyDetails || {}).propertyType || 'Property'} - ${c.clientName || ''}`, 48, y, { size: 9, color: grey }); y -= 18;
+  const desc = [
+    `Valuation of ${ptype}${c.clientName ? ` belonging to ${c.clientName}` : ''}${purpose ? ` (${purpose})` : ''}`,
+    where && `Situated at ${where}`,
+    propIds,
+    deed,
+    [c.bankName, c.bankBranch && `${c.bankBranch} Branch`].filter(Boolean).length && `Report for ${[c.bankName, c.bankBranch && `${c.bankBranch} Branch`].filter(Boolean).join(', ')}`,
+  ].filter(Boolean);
+  desc.forEach((d) => wrap(d, 300).slice(0, 3).forEach((l) => { text(l, 48, y, { size: 9, color: grey }); y -= 12; }));
+  y -= 6;
   line(y); y -= 18;
   const row = (label, val, o = {}) => { right(label, 440, y, o); right(val, 547, y, o); y -= 16; };
   row('Taxable value', inr(b.fee));
@@ -249,19 +322,55 @@ async function invoicePdf(c, { link = '' } = {}) {
   row('Total', inr(b.total), { f: bold, size: 12 });
   if (b.received) { row('Received', inr(b.received)); row('Balance due', inr(Math.max(0, b.total - b.received)), { f: bold }); }
   y -= 4;
-  text(`Amount in words: Rupees ${words(b.total)} Only`, 40, y, { size: 9.5 }); y -= 26;
+  text(`Amount in words: Rupees ${words(b.total)} Only`, 40, y, { size: 9.5 }); y -= 22;
 
-  if (firm.accountNo || firm.upi) {
+  // Valuation done: the figures in the approved report
+  const v = c.valuation || {};
+  const vals = [
+    v.landValue > 0 && ['Land value', v.landValue],
+    v.netStructureValue > 0 && ['Building value (after depreciation)', v.netStructureValue],
+    v.amenitiesValue > 0 && ['Other items', v.amenitiesValue],
+    v.fairMarketValue > 0 && ['Fair market value', v.fairMarketValue, true],
+    v.realizableValue > 0 && ['Realizable value', v.realizableValue],
+    v.distressSaleValue > 0 && ['Distress / forced sale value', v.distressSaleValue],
+  ].filter(Boolean);
+  if (vals.length) {
+    const h = 26 + vals.length * 15 + (v.fairMarketValue > 0 ? 14 : 0) + (v.fairMarketValue > 0 && b.total > 0 ? 16 : 0);
+    page.drawRectangle({ x: 40, y: y - h + 12, width: 515, height: h, color: rgb(0.97, 0.98, 1), borderColor: rgb(0.8, 0.85, 0.93), borderWidth: 0.7 });
+    text('Valuation done (as per the approved report)', 50, y, { f: bold, size: 10, color: navy });
+    if (v.buildingAge > 0 && v.netStructureValue > 0) right(`Building age ${v.buildingAge} yrs, depreciation ${v.depreciationPercent || 0}%`, 545, y, { size: 8.5, color: grey });
+    y -= 17;
+    vals.forEach(([label, amt, strong]) => {
+      text(label, 50, y, { size: strong ? 10.5 : 9.5, f: strong ? bold : font });
+      right(inr(amt), 545, y, { size: strong ? 10.5 : 9.5, f: strong ? bold : font });
+      y -= 15;
+    });
+    if (v.fairMarketValue > 0) { text(`Fair market value in words: Rupees ${words(Math.round(v.fairMarketValue))} Only`, 50, y, { size: 8.5, color: grey }); y -= 14; }
+    // Our fee next to the value it covers (a small share of the property's value)
+    if (v.fairMarketValue > 0 && b.total > 0) {
+      const pct = (b.total / v.fairMarketValue) * 100;
+      const share = pct < 0.01 ? 'less than 0.01%' : `only ${pct < 0.1 ? pct.toFixed(3) : pct.toFixed(2)}%`;
+      y -= 2;
+      text(`Our fee ${inr(b.total)} for a valuation of ${inr(v.fairMarketValue)} - ${share} of the property's value.`, 50, y, { f: bold, size: 9, color: rgb(0.08, 0.5, 0.24) });
+      y -= 14;
+    }
+    y -= 10;
+  } else y -= 4;
+
+  if (firm.accountNo || firm.upi || firm.qrDataUrl) {
     const top = y;
     text('Payment details', 40, y, { f: bold }); y -= 14;
     [firm.accountName && `Account name: ${firm.accountName}`, firm.bankName && `Bank: ${firm.bankName}`, firm.accountNo && `Account no: ${firm.accountNo}`,
       firm.ifsc && `IFSC: ${firm.ifsc}`, firm.upi && `UPI: ${firm.upi}`].filter(Boolean).forEach((l) => { text(l, 40, y, { size: 9.5 }); y -= 13; });
     // UPI QR for the exact amount due
-    if (firm.upi && b.status !== 'cancelled' && dueOf(b) > 0) {
+    if ((firm.upi || firm.qrDataUrl) && b.status !== 'cancelled' && dueOf(b) > 0) {
       try {
-        const qr = await doc.embedPng(await upiQrPng(firm, c));
+        // The branch's own QR picture (merchant QR) when uploaded; else a QR made from the UPI ID for the exact amount
+        const m = /^data:image\/(png|jpe?g);base64,(.+)$/i.exec(firm.qrDataUrl || '');
+        const qr = m ? (/png/i.test(m[1]) ? await doc.embedPng(Buffer.from(m[2], 'base64')) : await doc.embedJpg(Buffer.from(m[2], 'base64')))
+          : await doc.embedPng(await upiQrPng(firm, c));
         page.drawImage(qr, { x: 440, y: top - 112, width: 108, height: 108 });
-        right('Scan to pay with any UPI app', 555, top - 122, { size: 8.5, color: grey });
+        right(m ? 'Scan to pay' : 'Scan to pay with any UPI app', 555, top - 122, { size: 8.5, color: grey });
         right(`Rs. ${dueOf(b).toLocaleString('en-IN')}`, 555, top - 134, { f: bold, size: 9.5 });
         y = Math.min(y, top - 146);
       } catch { /* details only */ }
@@ -272,6 +381,7 @@ async function invoicePdf(c, { link = '' } = {}) {
   if (firm.terms) { text(firm.terms, 40, y, { size: 9, color: grey }); y -= 14; }
   if (!firm.gstin) { text('GST not charged (no GSTIN on record).', 40, y, { size: 8.5, color: grey }); }
   right(`For ${firm.name}`, 555, 120, { f: bold });
+  if (firm.person && firm.person.name) right(`Er. ${firm.person.name}`, 555, 92, { f: bold, size: 10.5, color: rgb(0.47, 0.25, 0.02) });
   right('Authorised signatory', 555, 80, { size: 9, color: grey });
   text('This is a computer-generated invoice.', 40, 50, { size: 8, color: grey });
   if (b.status === 'cancelled') {

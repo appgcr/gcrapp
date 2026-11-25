@@ -91,7 +91,9 @@ export default function AiReviewCall({ questions, onApply, onFinish, onCancel })
     }
     return voiceCache.current.get(key);
   };
+  const sayId = useRef(0); // each line Gouru AI says; stopping makes any line still loading stay silent
   const stopVoice = () => {
+    sayId.current += 1;
     try { playing.current && playing.current.stop(); } catch { /* ignore */ }
     playing.current = null;
     try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch { /* ignore */ }
@@ -100,12 +102,15 @@ export default function AiReviewCall({ questions, onApply, onFinish, onCancel })
   const say = async (msg) => {
     const text = typeof msg === 'string' ? msg : (msg[lang] || msg.en);
     stopVoice();
+    const my = sayId.current;
     if (mutedRef.current || !text) return;
     setSpeaking(true);
     try {
       const buf = await voiceFor(text);
+      if (my !== sayId.current) return; // the engineer started answering while this was loading: stay quiet
       if (buf && ctx.current && !mutedRef.current) {
         const audio = await ctx.current.decodeAudioData(buf.slice(0));
+        if (my !== sayId.current) return;
         const src = ctx.current.createBufferSource();
         src.buffer = audio;
         src.connect(ctx.current.destination);          // the engineer hears it
@@ -115,7 +120,7 @@ export default function AiReviewCall({ questions, onApply, onFinish, onCancel })
         if (playing.current === src) playing.current = null;
         return;
       }
-      if (window.speechSynthesis && !mutedRef.current) {
+      if (window.speechSynthesis && !mutedRef.current && my === sayId.current) {
         await new Promise((res) => {
           const u = new SpeechSynthesisUtterance(text);
           u.lang = lang === 'te' ? 'te-IN' : 'en-IN'; u.rate = 0.95; u.onend = res; u.onerror = res;
@@ -196,6 +201,8 @@ export default function AiReviewCall({ questions, onApply, onFinish, onCancel })
         stream.current = await navigator.mediaDevices.getUserMedia({ audio: true });
       }
       stopVoice();
+      // A moment for the phone speaker to go quiet, so Gouru AI's own voice is not in the answer
+      await new Promise((r) => setTimeout(r, 250));
       const mr = new MediaRecorder(stream.current);
       clipChunks.current = [];
       mr.ondataavailable = (e) => { if (e.data && e.data.size) clipChunks.current.push(e.data); };
@@ -209,7 +216,7 @@ export default function AiReviewCall({ questions, onApply, onFinish, onCancel })
           try { audio = await toWav(blob); } catch {
             audio = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob); });
           }
-          const r = await fetch(`${API_BASE_URL}/api/cases/ai-review/answer`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ audio, question: { text: q.text, label: q.label, current: q.current } }) });
+          const r = await fetch(`${API_BASE_URL}/api/cases/ai-review/answer`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ audio, question: { text: q.text, te: q.te, label: q.label, field: q.field, current: q.current, suggest: q.suggest } }) });
           const j = await r.json();
           if (!r.ok) throw new Error(j.error || 'Could not hear that.');
           setHeard(j);
@@ -283,6 +290,7 @@ export default function AiReviewCall({ questions, onApply, onFinish, onCancel })
           {heard && !heard.error && (
             <div className="arc-heard">
               <div>You said: “{heard.transcript}”</div>
+              {heard.sure === false && <div className="arc-unsure">{lang === 'te' ? 'సరిగా వినిపించలేదు — check చేసి tap చేయండి, లేదా మళ్ళీ చెప్పండి.' : 'Not fully clear — please check before you tap, or say it again.'}</div>}
               <div className="arc-heard-b">
                 {heard.decision === 'change' && heard.value && <button type="button" onClick={() => change(heard.value, 'voice', { transcript: heard.transcript, note: heard.note })}><Check size={16} /> Save “{heard.value}”</button>}
                 {heard.decision === 'keep' && <button type="button" onClick={() => { record({ decision: 'keep', after: q.current || '', via: 'voice', transcript: heard.transcript }); next(); }}><Check size={16} /> Yes, keep it</button>}
@@ -359,6 +367,7 @@ export default function AiReviewCall({ questions, onApply, onFinish, onCancel })
         .arc-opts { display: flex; flex-direction: column; gap: 8px; }
         .arc-opts button, .arc-heard-b button { display: flex; align-items: center; gap: 8px; text-align: left; border: 0; border-radius: 12px; padding: 13px 14px; background: #fff; color: #0f172a; font-size: 15px; font-weight: 700; cursor: pointer; font-family: inherit; }
         .arc-opts button.ghost, .arc-heard-b button.ghost { background: rgba(255,255,255,.12); color: #fff; }
+        .arc-unsure { margin-top: 4px; font-size: 12.5px; color: #fbbf24; font-weight: 700; }
         .arc-type { display: flex; gap: 8px; }
         .arc-type input { flex: 1; min-width: 0; padding: 12px; border-radius: 12px; border: 0; font-size: 16px; font-family: inherit; }
         .arc-type button { border: 0; border-radius: 12px; padding: 0 16px; background: #22c55e; color: #fff; font-weight: 800; font-family: inherit; }

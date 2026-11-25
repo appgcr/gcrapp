@@ -68,6 +68,77 @@ router.get('/', async (req, res) => {
   }
 });
 
+// ── Where invoices are paid: account, UPI and QR — per branch (its own admin or the Super Admin) or the firm default ──
+const maskAcc = (v) => (v ? `••••${String(v).slice(-4)}` : '');
+const PAY_LABELS = { accountName: 'Account name', bankName: 'Bank', accountNo: 'Account no', ifsc: 'IFSC', upi: 'UPI ID', qrDataUrl: 'QR picture' };
+function cleanPayment(body) {
+  const b = body || {};
+  const str = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+  const p = {
+    accountName: str(b.accountName, 120), bankName: str(b.bankName, 80), accountNo: str(b.accountNo, 30).replace(/[\s-]/g, ''),
+    ifsc: str(b.ifsc, 11).toUpperCase(), upi: str(b.upi, 80).replace(/\s/g, ''), qrDataUrl: String(b.qrDataUrl || ''),
+  };
+  if (p.accountNo && !/^\d{6,18}$/.test(p.accountNo)) throw Object.assign(new Error('Account number should be 6 to 18 digits.'), { status: 400 });
+  if (p.ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(p.ifsc)) throw Object.assign(new Error('IFSC should look like SBIN0001234 (11 characters, 5th is zero).'), { status: 400 });
+  if (p.upi && !/^[\w.-]{2,256}@[a-zA-Z][a-zA-Z0-9.]{1,63}$/.test(p.upi)) throw Object.assign(new Error('UPI ID should look like name@okaxis or 9876543210@ybl.'), { status: 400 });
+  if (p.qrDataUrl && (!/^data:image\/(png|jpe?g);base64,/i.test(p.qrDataUrl) || p.qrDataUrl.length > 1.5 * 1024 * 1024)) throw Object.assign(new Error('QR picture should be a PNG or JPG under 1 MB.'), { status: 400 });
+  if (p.accountNo && !p.ifsc) throw Object.assign(new Error('Please add the IFSC with the account number.'), { status: 400 });
+  return p;
+}
+const canEditBranch = (user, branchId) => isSuper(user) || (branchId && user && user.branchId === branchId);
+
+// GET /api/billing/payment?branchId=BR-001 (empty / "firm" = the firm default)
+router.get('/payment', async (req, res) => {
+  try {
+    const Branch = require('../models/Branch');
+    const firm = await billing.firmDetails();
+    const firmPay = { accountName: firm.accountName, bankName: firm.bankName, accountNo: firm.accountNo, ifsc: firm.ifsc, upi: firm.upi, qrDataUrl: firm.qrDataUrl };
+    let branchId = String(req.query.branchId || '');
+    if (!isSuper(req.user)) branchId = req.user.branchId || '';
+    if (!branchId || branchId === 'firm') return res.json({ scope: 'firm', canEdit: isSuper(req.user), payment: firmPay });
+    const br = await Branch.findOne({ id: branchId }).select('id name payment').lean();
+    if (!br) return res.status(404).json({ error: 'Branch not found.' });
+    const p = br.payment || {};
+    const own = !!(p.accountNo || p.upi || p.qrDataUrl);
+    res.json({ scope: 'branch', branchId: br.id, branchName: br.name, canEdit: canEditBranch(req.user, br.id), usesFirm: !own, firm: firmPay,
+      payment: own ? { accountName: p.accountName, bankName: p.bankName, accountNo: p.accountNo, ifsc: p.ifsc, upi: p.upi, qrDataUrl: p.qrDataUrl } : { accountName: '', bankName: '', accountNo: '', ifsc: '', upi: '', qrDataUrl: '' },
+      updatedAt: p.updatedAt, updatedByName: p.updatedByName, history: (p.history || []).slice(-10).reverse() });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/billing/payment { branchId | "firm", accountName, bankName, accountNo, ifsc, upi, qrDataUrl }
+router.put('/payment', async (req, res) => {
+  try {
+    const Branch = require('../models/Branch');
+    const { notify } = require('../services/notify');
+    const branchId = String((req.body || {}).branchId || '');
+    const p = cleanPayment(req.body);
+    const who = req.user.name || req.user.username || req.user.id;
+    if (!branchId || branchId === 'firm') {
+      if (!isSuper(req.user)) return res.status(403).json({ error: 'Only the Super Admin can change the firm default.' });
+      const set = Object.fromEntries(Object.entries(p).map(([k, v]) => [`billing.${k}`, v]));
+      await AppConfig.updateOne({ key: 'global' }, { $set: set }, { upsert: true });
+      notify({ to: 'ADMIN', title: 'Payment details changed', message: `${who} changed the firm's default payment details on invoices${p.accountNo ? ` (account ${maskAcc(p.accountNo)})` : ''}${p.upi ? `, UPI ${p.upi}` : ''}.`, type: 'billing', priority: 'urgent' }).catch(() => {});
+      return res.json({ ok: true });
+    }
+    if (!canEditBranch(req.user, branchId)) return res.status(403).json({ error: 'You can change only your own branch\'s payment details.' });
+    const br = await Branch.findOne({ id: branchId });
+    if (!br) return res.status(404).json({ error: 'Branch not found.' });
+    const old = (br.payment && br.payment.toObject ? br.payment.toObject() : br.payment) || {};
+    const changed = Object.keys(PAY_LABELS).filter((k) => String(old[k] || '') !== String(p[k] || ''));
+    if (!changed.length) return res.json({ ok: true, unchanged: true });
+    const entry = { at: new Date(), by: req.user.id, byName: who,
+      changed: changed.map((k) => ({ field: PAY_LABELS[k], from: k === 'accountNo' ? maskAcc(old[k]) : k === 'qrDataUrl' ? (old[k] ? 'picture' : '') : (old[k] || ''), to: k === 'accountNo' ? maskAcc(p[k]) : k === 'qrDataUrl' ? (p[k] ? 'new picture' : 'removed') : (p[k] || '') })) };
+    br.payment = { ...old, ...p, updatedAt: entry.at, updatedBy: req.user.id, updatedByName: who, history: [...(old.history || []), entry].slice(-20) };
+    await br.save();
+    // A change of where money goes: the Super Admin and this branch's admins are told at once
+    notify({ to: 'ADMIN', branchId, title: `Payment details changed — ${br.name}`,
+      message: `${who} changed ${changed.map((k) => PAY_LABELS[k]).join(', ')} on ${br.name} branch invoices${p.accountNo ? ` (account ${maskAcc(p.accountNo)})` : ''}${p.upi ? `, UPI ${p.upi}` : ''}.`,
+      type: 'billing', priority: 'urgent' }).catch(() => {});
+    res.json({ ok: true, changed: changed.map((k) => PAY_LABELS[k]) });
+  } catch (err) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
 // Firm details printed on invoices
 router.get('/settings', async (req, res) => {
   res.json(await billing.firmDetails());
@@ -89,6 +160,9 @@ router.put('/settings', async (req, res) => {
       accountNo: str(b.accountNo, 30).replace(/\s/g, ''), ifsc: str(b.ifsc, 11).toUpperCase(), upi: str(b.upi, 80),
       prefix: (str(b.prefix, 8).toUpperCase().replace(/[^A-Z0-9]/g, '') || 'GV'), terms: str(b.terms, 300),
     };
+    // The firm's default QR picture is changed in Payment details; keep it here
+    const cur = await AppConfig.findOne({ key: 'global' }).select('billing.qrDataUrl').lean();
+    next.qrDataUrl = (cur && cur.billing && cur.billing.qrDataUrl) || '';
     await AppConfig.updateOne({ key: 'global' }, { $set: { billing: next } }, { upsert: true });
     res.json(next);
   } catch (err) {

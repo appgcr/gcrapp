@@ -21,6 +21,7 @@ BANK_MODULES = {
     'indian': 'indian',  # Indian Bank
     'sbi': 'sbi',        # State Bank of India
     'bom': 'bom',        # Bank of Maharashtra
+    'shriram': 'shriram',  # Shriram Finance Ltd (NBFC)
 }
 NAME_HINTS = [(re.compile(r'grameena|\bapgb\b', re.I), 'apgb'), (re.compile(r'baroda|\bbob\b', re.I), 'bob'),
               (re.compile(r'^bank of india|\bboi\b', re.I), 'boi'),
@@ -32,7 +33,8 @@ NAME_HINTS = [(re.compile(r'grameena|\bapgb\b', re.I), 'apgb'), (re.compile(r'ba
               (re.compile(r'karnataka bank|\bkbl\b', re.I), 'karnataka'),
               (re.compile(r'^indian bank', re.I), 'indian'),
               (re.compile(r'state bank of india|\bsbi\b', re.I), 'sbi'),
-              (re.compile(r'maharas?h?tra|\bbom\b', re.I), 'bom')]
+              (re.compile(r'maharas?h?tra|\bbom\b', re.I), 'bom'),
+              (re.compile(r'shriram|sriram financ', re.I), 'shriram')]
 
 
 def bank_key(case):

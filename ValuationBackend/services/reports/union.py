@@ -505,7 +505,7 @@ def build_industrial(case, temps, bank=None):
     # Shed / building: one row per floor, 1.5% depreciation per year of age (Union's shed sample)
     age = int(num(pd.get('buildingAge')))
     life = int(num(rep.get('totalLife'), 60)) or 60
-    dep_pct = min(age * num(rep.get('depreciationPerYear'), 1.5), 70.0)
+    dep_pct = apgb.dep_percent(age, rep.get('depreciationPerYear') or 1.5)
     c_rate = num(rep.get('constructionRate')) or 400
     rows, codes, building, actual_total = [], [], 0, 0
     for fl in (pd.get('siteValue') or {}).get('floors') or []:

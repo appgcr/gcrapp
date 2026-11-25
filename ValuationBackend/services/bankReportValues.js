@@ -8,7 +8,7 @@ const { spawnSync } = require('child_process');
 const { bankInfoForReport } = require('./banks');
 
 // Banks whose own report format is installed (services/reports/registry.py)
-const INSTALLED = ['apgb', 'bob', 'boi', 'canara', 'union', 'pnb', 'iob', 'cbi', 'uco', 'karnataka', 'indian', 'sbi', 'bom'];
+const INSTALLED = ['apgb', 'bob', 'boi', 'canara', 'union', 'pnb', 'iob', 'cbi', 'uco', 'karnataka', 'indian', 'sbi', 'bom', 'shriram'];
 
 async function applyBankReportValues(caseObj, valuation) {
   if (!valuation || (valuation.valuationStatus && valuation.valuationStatus !== 'SUCCESS')) return valuation;

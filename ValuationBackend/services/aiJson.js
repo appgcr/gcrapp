@@ -11,16 +11,21 @@ const GEMINI_MODELS = () => [...new Set([config.GEMINI_MODEL, 'gemini-3.5-flash'
 const aiOn = () => Boolean(config.GEMINI_ENABLED && (config.GEMINI_API_KEY || process.env.GEMINI_API_KEY));
 
 /** parts: [{ text }] or data URLs ("data:audio/wav;base64,…") → parsed JSON, or null when the AI is unavailable */
-async function askJson(prompt, dataUrls = [], { timeoutMs = 60000 } = {}) {
+// fast: little 'thinking' before answering (listening to a recording and filling fields needs no long reasoning).
+// A model that does not accept that setting is asked again without it.
+async function askJson(prompt, dataUrls = [], { timeoutMs = 60000, fast = false } = {}) {
   if (!aiOn()) return null;
   const apiKey = config.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
   // "data:audio/webm;codecs=opus;base64,…" → mime "audio/webm" (parameters dropped)
   const files = dataUrls.map((u) => /^data:([^;,]+)(?:;[^;,]+=[^;,]*)*;base64,(.*)$/s.exec(String(u || ''))).filter(Boolean)
     .map((m) => ({ inlineData: { mimeType: m[1], data: m[2] } }));
-  const body = JSON.stringify({
+  const makeBody = (quick) => JSON.stringify({
     contents: [{ parts: [{ text: prompt }, ...files] }],
-    generationConfig: { responseMimeType: 'application/json', temperature: 0 },
+    generationConfig: { responseMimeType: 'application/json', temperature: 0, ...(quick ? { thinkingConfig: { thinkingLevel: 'low' } } : {}) },
   });
+  const body = makeBody(false);
+  const quickBody = fast ? makeBody(true) : null;
+  const noQuick = new Set(); // models that refused the quick setting
   const models = GEMINI_MODELS();
   const perTry = Math.max(50000, Math.round(timeoutMs * 0.6)); // plenty of time for multimodal PDF/image parsing
   const deadline = Date.now() + timeoutMs;
@@ -29,14 +34,24 @@ async function askJson(prompt, dataUrls = [], { timeoutMs = 60000 } = {}) {
       const left = deadline - Date.now();
       if (left < 3000) return null;
       try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: AbortSignal.timeout(Math.min(perTry, left)),
-        });
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const quick = quickBody && !noQuick.has(model);
+        let res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: quick ? quickBody : body, signal: AbortSignal.timeout(Math.min(perTry, left)) });
+        if (quick && res.status === 400) {
+          // This model does not take the quick setting: the same request without it
+          noQuick.add(model);
+          const left2 = deadline - Date.now();
+          if (left2 < 3000) return null;
+          res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: AbortSignal.timeout(Math.min(perTry, left2)) });
+        }
         if (!res.ok) {
-          console.warn(`AI (${model}) HTTP ${res.status}: ${(await res.text()).replace(/\s+/g, ' ').slice(0, 160)}`);
+          const errText = await res.text();
+          require('./aiStatus').note(res.status, errText);
+          console.warn(`AI (${model}) HTTP ${res.status}: ${errText.replace(/\s+/g, ' ').slice(0, 160)}`);
           if (res.status === 401 || res.status === 403) return null;
           continue;
         }
+        require('./aiStatus').note(res.status);
         const data = await res.json();
         const text = (data?.candidates?.[0]?.content?.parts || []).filter((p) => p.text && !p.thought).map((p) => p.text).join('').trim()
           .replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');

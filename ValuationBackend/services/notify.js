@@ -57,6 +57,7 @@ async function sendPush(users, { title, message, caseId, type, priority, notific
   const tokens = users.flatMap((u) => (u.pushTokens || []).map((t) => t.token)).filter(Boolean);
   if (tokens.length === 0) return { sent: 0, reason: 'no-devices' };
   if (!messaging) return { sent: 0, reason: 'fcm-disabled', devices: tokens.length };
+  if (require('./testServer').outgoingBlocked()) return { sent: 0, reason: 'test-server', devices: tokens.length }; // practice server: no real phone pushes
 
   const high = priority === 'urgent';
   const res = await messaging.sendEachForMulticast({

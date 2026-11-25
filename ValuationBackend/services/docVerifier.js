@@ -188,7 +188,9 @@ async function readWithAI(dataUrlOrList, expectedName) {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: AbortSignal.timeout(Math.min(timeout, left, bytes > 1e6 ? 70000 : 45000)), // a busy model hands over to the next
         });
         if (!res.ok) {
-          console.warn(`Document AI (${model}) HTTP ${res.status}: ${(await res.text()).replace(/\s+/g, ' ').slice(0, 160)}`);
+          const errText = await res.text();
+          require('./aiStatus').note(res.status, errText);
+          console.warn(`Document AI (${model}) HTTP ${res.status}: ${errText.replace(/\s+/g, ' ').slice(0, 160)}`);
           if (res.status === 400) return { badFile: true };                    // Google could not open the file
           if (res.status === 401 || res.status === 403) return null;          // key problem: retrying won't help
           continue;

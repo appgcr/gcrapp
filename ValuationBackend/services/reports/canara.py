@@ -165,7 +165,7 @@ def build_house(case, temps):
         area, rate_b = num(b.get('area')), num(b.get('rate')) or 2000
         year = int(num(b.get('year'))) or year_now
         age = max(year_now - year, 0)
-        pct = min(age * 1.0, 70.0)
+        pct = apgb.dep_percent(age)
         repl = money(area * rate_b)
         dep = money(repl * pct / 100)
         net = repl - dep
@@ -188,7 +188,7 @@ def build_house(case, temps):
         area_t = sum(num(b.get('area')) for b in blds)
         year = int(num(blds[0].get('year'))) or year_now
         age = max(year_now - year, 0)
-        pct = min(age * 1.0, 70.0)
+        pct = apgb.dep_percent(age)
         rate_b = num(blds[0].get('rate')) or 2000
         repl = money(area_t * rate_b)
         dep = money(repl * pct / 100)
@@ -359,7 +359,7 @@ def build_apartment(case, temps):
     rate = num(rep.get('constructionRate')) or 2800
     age = int(num(pd.get('buildingAge')))
     life = int(num(rep.get('totalLife'), 60)) or 60
-    dep_pct = min(age * 1.0, 70.0)
+    dep_pct = apgb.dep_percent(age)
     bld = money(plinth * rate)
     dep = money(bld * dep_pct / 100)
     net = bld - dep

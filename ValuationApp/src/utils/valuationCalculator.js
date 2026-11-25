@@ -260,7 +260,9 @@ export function calculateValuation(propertyDetails = {}, config = {}) {
       throw new Error(`Building age cannot be negative: ${p.buildingAge}`);
     }
     const buildingAge = parseInt(buildingAgeStr, 10) || 0;
-    const rawDepreciationPercent = Math.min(90, Math.round((buildingAge / buildingLife) * 100));
+    // Office rule (same as the bank reports): nothing for the first 3 completed years; from the 4th year the
+    // age in percent (4 → 4 %, 5 → 5 % … 30 → 30 %). Over 30 years the building is not eligible for valuation.
+    const rawDepreciationPercent = buildingAge <= 3 ? 0 : Math.min(buildingAge, 30);
 
     const depPaise = (replacementPaise * BigInt(rawDepreciationPercent) + 50n) / 100n;
     const depreciationAmount = Number((depPaise + 50n) / 100n);

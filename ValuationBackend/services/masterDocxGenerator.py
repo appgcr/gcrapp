@@ -160,7 +160,7 @@ def generate_master_docx(case_data, output_path, base_dir):
     bldg_age = str(p_details.get("buildingAge") or "5")
     road_width = str(p_details.get("roadWidth") or "30 ft")
     road_type = str(p_details.get("roadType") or "Metal Road")
-    plot_type = str(p_details.get("plotType") or "Intermediary Plot")
+    plot_type = str(p_details.get("plotType") or "Intermittent Plot").replace("Intermediary", "Intermittent")
     structure_type = str(p_details.get("structureType") or "RCC Framed Structure")
     flooring_type = str(p_details.get("flooringType") or "Vitrified Tiles")
     
@@ -408,7 +408,11 @@ def _exact_bank_format(case_data, output_path):
     # Corner / intermittent plot worked out from the road sides (unless typed into the report by hand)
     from apgb import plot_position
     _rep = ((case_data.get("propertyDetails") or {}).get("report") or {})
+    # Road written in the site boundaries → the office rule decides; else the engineer's own choice
     _pos = plot_position(case_data)
+    if not _pos:
+        from apgb import plot_name
+        _pos = plot_name((case_data.get("propertyDetails") or {}).get("plotType"))
     if _pos and not str(_rep.get("cornerPlot") or "").strip():
         fields["cornerPlot"] = _pos
     job_path = output_path + ".job.json"

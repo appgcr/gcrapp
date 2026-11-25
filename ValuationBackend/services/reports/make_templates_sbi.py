@@ -1,10 +1,9 @@
 """
 State Bank of India: fill-in templates from the bank's own sample reports (sbi_source/*.docx).
 
-Run:  python3 make_templates.py sbi [apartment|house]
+Run:  python3 make_templates.py sbi [apartment|house|agriculture|open_site]
 Only the sample values are swapped for {{tags}}; the letterhead, tables, fonts, colours and
-fixed wording stay exactly as the bank's file. (Open site and agriculture samples are old .doc
-files — they are added once the bank's files are re-saved as .docx.)
+fixed wording stay exactly as the bank's file. 
 """
 from make_templates import (T, span, span_re, whole, cell, mark_images, replace_all_body)
 from docx_tools import find_para, replace_span
@@ -235,4 +234,138 @@ def house(doc):
     p is not None and replace_span(p, T('reportDate'), T('inspectionDate'))
 
 
-FORMATS = {'apartment': apartment, 'house': house}
+# --------------------------------------------------------------------------- AGRICULTURE LAND
+def agriculture(doc):
+    """SBI's newer one-page-table format for open agriculture land (acres x rate per acre)."""
+    t = doc.tables
+    replace_all_body(doc, '2610102', 'fileNo')
+    span(doc, 'District   :', 'YSR', 'districtShort')
+    span_re(doc, 'Branch : SME', r'SME BRANCH, KADAPA\.', 'bankBranchUpperDot')
+    whole(doc, 'Venkata Sailaja, W/o', T('ownerLine1'))
+    whole(doc, '8/260-Up Stair', T('owner1Addr'))
+    span(doc, '2009/2026', '2009/2026', 'deedNo')
+    span(doc, 'Ac 4.95 Cents', '4.95', 'totalAc')
+    span(doc, '470-1-P2', '470-1-P2', 'surveyNo')
+    span_re(doc, 'Valuation Report of Agriculture', r'Agriculture Land, .*', 'agTitle')
+    span(doc, 'Valuation  : Rs', '49,50,000', 'fmv')
+    span_re(doc, '(RUPEES', r'(?<=\(RUPEES ).*(?= ONLY)', 'fmvWordsCoreUpper')
+    whole(doc, 'Nallaballe Village & GP', T('villageMandalLine'))
+    span_re(doc, 'Name & Address of Branch', r'State Bank of India, .*', 'branchAddrLine')
+    span_re(doc, 'Name of Customer', r'(?<=:  ).*', 'custNameLine')
+    span_re(doc, '(for which valuation report is sought)', r'W/o\..*', 'custRelLine')
+    span(doc, 'personally inspected', '06-11-2026', 'inspectionDate')
+
+    a, b, c, d3, e = t[0], t[1], t[2], t[3], t[5]
+    cell(a, 1, 4, '=Belongs To:', 'ownerLine1', 'owner1Addr')
+    cell(a, 4, 5, 'agLocation')
+    cell(a, 5, 5, 'nearByLine')
+    cell(a, 6, 5, 'gpsDms', 'gpsDecimal', '= ')
+    for r, side in ((15, 'East'), (16, 'West'), (17, 'North'), (18, 'South')):
+        cell(a, r, 3, f'bdDeed{side}')
+        cell(a, r, 7, f'bdActual{side}')
+    for r in (20, 21, 22, 23):
+        cell(a, r, 4, '= ', '= ', '=       ' + T('extentAcLine'))
+        cell(a, r, 7, '= ', 'extentAcLine')
+    cell(a, 24, 4, 'extentAcLine')
+    cell(a, 24, 7, 'extentAcLine')
+    cell(b, 0, 17, 'approvedLandUse')
+    cell(b, 0, 20, 'propertyKind')
+    cell(b, 3, 11, 'agLocation')
+    cell(b, 9, 11, '=The Agriculture Land  ' + T('agLocation'))
+    cell(b, 13, 5, 'constructionStage')
+    cell(b, 17, 6, 'extentAcLine')
+    cell(b, 20, 6, 'extentAcLine')
+    cell(c, 0, 5, 'guidelineLine')
+    cell(c, 1, 1, '=Land:   ' + T('extentAcLine') + ' X  ' + T('rateAcre') + '/- Acer')
+    cell(c, 1, 5, '== Rs ' + T('landValue') + '/-')
+    cell(c, 2, 5, '== Rs ' + T('fmv') + '/-')
+    cell(c, 3, 1, '=Fair Market value               =  Rs ' + T('fmv') + '/-',
+         '=Realizable value                  =  Rs ' + T('realizable') + '/-',
+         '=Forced/Distress Sale value =  Rs ' + T('distress') + '/-')
+    cell(c, 5, 4, '=The property was inspected by the undersigned on ', 'inspectionDate',
+         '=The undersigned does not have any direct/indirect interest in the above property. : NO',
+         '=The information furnished herein is true and correct to the best of our knowledge.',
+         '=I have submitted Valuation report directly to the Bank. : YES')
+    cell(d3, 0, 3, '= ', '= ', '= ', '= ', '=Date of Valuation :   ' + T('reportDate'))
+    cell(e, 1, 2, 'declBackground')
+    cell(e, 2, 2, 'declPurpose')
+    cell(e, 5, 2, 'declDates1', 'declDates2', 'declDates3')
+
+    replace_all_body(doc, '06-11-2026', 'reportDate')
+    places(doc)
+    mark_images(doc, 'PHOTO’S', 'photo', stop_text='GOOGLE MAP')
+    mark_images(doc, 'GOOGLE MAP', 'map')
+    whole(doc, '14°39', T('gpsDms'))
+    whole(doc, '14.655472, 78.398222', T('gpsDecimal'))
+
+
+# --------------------------------------------------------------------------- OPEN SITE
+def open_site(doc):
+    """SBI's newer Annexure-XI 'Format-A' for a vacant site (land per cent; Parts C–F left blank)."""
+    t = doc.tables
+    replace_all_body(doc, '2611131', 'fileNo')
+    span(doc, 'District   :', 'Y.S.R', 'districtDotted')
+    span(doc, 'Branch   :    SME', 'SME BRANCH', 'bankBranchUpper')
+    whole(doc, 'Sathya Narayana  S/o', T('ownerLine1'))
+    whole(doc, 'Door No: 6/122', T('owner1Addr'))
+    whole(doc, 'Cell No : 9849840448', T('ownerPhoneLine'))
+    span(doc, '1362/2020', '1362/2020', 'deedNo')
+    span(doc, 'Deed No', '11.00', 'extentCents')
+    whole(doc, 'Demolished D.No', T('doorSurveyFront'))
+    span_re(doc, 'Valuation Report of Residential Vacant Site', r'Residential Vacant Site .*', 'siteTitle')
+    whole(doc, 'Note : Even Though', T('siteNote'))
+    span(doc, 'Valuation : Rs', '2,03,50,000', 'fmv')
+    span_re(doc, '(RUPEES', r'(?<=\(RUPEES ).*(?= ONLY)', 'fmvWordsCoreUpper')
+    whole(doc, 'Kadapa Municipal Corporation of Y.S.R (Dt).', T('localBodyLine'))
+    span(doc, 'personally inspected', '25-11-2026', 'inspectionDate')
+
+    a, b, c, s9, s10, s11, s12 = t[0], t[1], t[2], t[9], t[10], t[11], t[12]
+    cell(a, 0, 7, '=SBI  ' + T('bankBranchName') + ',')
+    cell(a, 1, 7, 'owner1NameLine', 'owner1RelLine')
+    cell(a, 3, 7, '=Belongs To :-  ', 'owner1NameLine', 'owner1RelLine', 'owner1Addr', 'ownerPhoneLine')
+    cell(a, 6, 7, 'locationLine')
+    cell(a, 7, 9, 'latLine', '= ', 'lngLine', '= ')   # one merged cell beside Latitude / Longitude
+    cell(a, 9, 7, 'nearByLine')
+    cell(a, 11, 7, 'accessLine')
+    cell(a, 17, 8, '=Deed No: ' + T('deedNo') + ', Date: ' + T('deedDate') + '.')
+    for r, side in ((3, 'East'), (4, 'West'), (5, 'North'), (6, 'South')):
+        cell(b, r, 2, f'bdDeed{side}')
+        cell(b, r, 3, f'bdActual{side}')
+    for r, side in ((4, 'East'), (5, 'West'), (6, 'North'), (7, 'South')):
+        cell(c, r, 2, f'dimDeed{side}')
+        cell(c, r, 8, f'dimActual{side}')
+    cell(c, 8, 2, 'extentDeedYdC')
+    for r, key in ((9, 'extentPlanYdC'), (10, 'roadAffected'), (11, 'netExtentYdC'), (12, 'consYdC')):
+        cell(c, r, 6, key)
+    cell(c, 16, 1, '=d)Saleable Area :  ' + T('consCentsLine'))
+    for r, key in ((21, 'consYdC'), (22, 'marketRateLine'), (23, 'adoptedRateLine'), (24, 'landValueRs')):
+        cell(c, r, 3, key)
+    cell(c, 27, 4, 'guidelineLine')
+    for r, key in ((1, 'landValueRs'), (7, 'landValueRs'), (8, 'fmvRs'), (9, 'realizableRs'), (10, 'distressRs')):
+        cell(s9, r, 3, key)
+    cell(s10, 8, 1, '=i) The property was inspected by the undersigned on  ' + T('inspectionDate'))
+    cell(s10, 14, 4, '= ', '= ', '= ', '= ', '= ', '=      Date of Valuation: ', '=     ' + T('reportDate'), '= ')
+    cell(s11, 7, 2, '=Note:-I my Self Verified the Property values in Portals like Magic Bricks.com, 99 acres.com, '
+                    'Housing Com etc. and found that ' + T('placeTown') + ' is not appearing in the respective above sites '
+                    '& Hence we have considering the Local Market Values compared to S.R.O ' + T('sroPlace') + '   ')
+    cell(s12, 1, 2, 'declBackground')
+    cell(s12, 2, 2, 'declPurpose')
+    cell(s12, 5, 2, 'declDates1', 'declDates2', 'declDates3')
+
+    replace_all_body(doc, '25-11-2026', 'reportDate')
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    for p in doc.paragraphs[:20]:            # 'Date : …' was pushed right with ~120 spaces; it wraps on narrow fonts
+        if p.text.strip().startswith('Date :') and p.text.startswith('   '):
+            for r in p.runs:                 # drop the leading spaces, run by run, up to the first text
+                text = r.text.lstrip()
+                r.text = text
+                if text:
+                    break
+            p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            break
+    places(doc)
+    location_map(doc, 'LOCATION MAP', 'PHOTO’S', close_up=False)
+    mark_images(doc, 'PHOTO’S', 'photo', stop_text='Sri Gouru. Neelakanta Reddy')
+
+
+FORMATS = {'apartment': apartment, 'house': house, 'agriculture': agriculture, 'open_site': open_site}

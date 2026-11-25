@@ -131,3 +131,157 @@ def apply_branch(doc, branch):
     if branch.get('letterhead'):   # first: the blocks are found by the Kadapa valuer's name
         apply_letterhead(doc, branch['letterhead'])
     apply_valuer(doc, branch.get('valuer') or {})
+
+
+SEP = re.compile(r'(?<=\S)([  ]*\t[\s ]*|[  ]{3,})(?=\S)')
+
+
+SAMPLE = {'{{fileNo}}': 'GOURU/KDP/2026/11/0000', '{{engineerInitials}}': 'GCR Field Engineer'}
+
+
+def _width_cm(text, size_pt, em=0.55):
+    """Rough printed width of bold serif text (letterhead fonts), generous so nothing wraps."""
+    for k, v in SAMPLE.items():
+        text = text.replace(k, v)
+    text = re.sub(r'\{\{[^}]*\}\}', 'XXXXXXXXXX', text)
+    return len(text) * size_pt * em * 0.03528
+
+
+def tidy_letterhead(doc):
+    """Line up the right-hand column of the letterhead (Cell, Off, Door No, address, engineer, FILE NO).
+    The samples pushed each line into place with a different mix of tabs and spaces, so the column
+    zig-zags and a long FILE NO wraps. Each line gets one tab to the same left-aligned stop, placed so
+    the longest right-hand line ends at the margin. (Left stops, not right ones: the in-app report
+    viewer does not support right-aligned tabs.)"""
+    from docx.shared import Cm
+    from docx.enum.text import WD_TAB_ALIGNMENT
+    from docx.text.paragraph import Paragraph
+    sec = doc.sections[0]
+    text_w = (sec.page_width - sec.left_margin - sec.right_margin) / 360000
+    n = 0
+    for els, last in find_blocks(doc):
+        lines = []
+        for el in els + ([last] if last is not None else []):
+            if not el.tag.endswith('}p'):
+                continue
+            p = Paragraph(el, doc._body)
+            runs = list(p.runs)
+            text = ''.join(r.text for r in runs)
+            if len(text) > 160:   # a whole letterhead squeezed into one line (spaced, not tabbed): leave it
+                continue
+            # the real gap between the two columns is the widest one (a sample may have a stray tab
+            # inside the bank list, e.g. 'Canara Bank,<tab>PNB')
+            gaps = list(SEP.finditer(text))
+            m = max(gaps, key=lambda g: (len(g.group(0).expandtabs(8)), g.start())) if gaps else None  # tie → the later gap
+            if not m:
+                for r in reversed(p.runs):  # left text only: drop trailing tabs/spaces that could wrap
+                    stripped = r.text.rstrip()
+                    if stripped:
+                        r.text = stripped
+                        break
+                    r.text = ''
+                continue
+            a, b = m.span()
+            pos = 0
+            for r in runs:  # stray tabs on the left side become spaces (only one tab per line)
+                e = pos + len(r.text)
+                if pos < a and '\t' in r.text[:max(0, a - pos)]:
+                    r.text = r.text[:max(0, a - pos)].replace('\t', ' ') + r.text[max(0, a - pos):]
+                pos = e
+            text = ''.join(r.text for r in runs)
+            pos = 0
+            right_size = 0
+            for r in runs:  # replace the separator with one tab, keeping each run's formatting
+                t = r.text
+                s0, e = pos, pos + len(t)
+                pos = e
+                if e > b and r.font.size:
+                    right_size = max(right_size, r.font.size.pt)
+                if e <= a or s0 >= b:
+                    continue
+                keep_before = t[:max(0, a - s0)]
+                keep_after = t[max(0, b - s0):] if b < e else ''
+                r.text = keep_before + ('\t' if s0 <= a < e else '') + keep_after
+            for r in reversed(p.runs):  # no trailing spaces after the right-hand text
+                stripped = r.text.rstrip()
+                if stripped:
+                    r.text = stripped
+                    break
+                r.text = ''
+            left, right = ''.join(r.text for r in p.runs).split('\t', 1)
+            lines.append((p, left, right, right_size or 11))
+        if not lines:
+            continue
+        # The FILE NO line has no size of its own in some samples and prints larger than the rest
+        # of the letterhead, so it wraps: give it the letterhead's usual size
+        from collections import Counter
+        from docx.shared import Pt
+        def eff(p, r):
+            if r.font.size:
+                return r.font.size.pt
+            return p.style.font.size.pt if p.style is not None and p.style.font.size else 11
+        sizes = Counter(eff(p, r) for p, _, _, _ in lines if p._p is not last for r in p.runs if r.text.strip())
+        usual = sizes.most_common(1)[0][0] if sizes else 11
+        if last is not None:
+            for p, _, _, _ in lines:
+                if p._p is last:
+                    for r in p.runs:
+                        r.font.size = Pt(usual)
+
+        def sides(p):
+            style_pt = p.style.font.size.pt if p.style is not None and p.style.font.size else 12
+            lw = rw = 0.0
+            right = False
+            for r in p.runs:
+                pt = r.font.size.pt if r.font.size else style_pt
+                wide = 1.12 if re.search(r'Gothic|Arial|Verdana|Tahoma', r.font.name or '', re.I) else 1.0
+                pt *= wide
+                t = r.text
+                if '\t' in t and not right:
+                    before, after = t.split('\t', 1)
+                    lw += _width_cm(before, pt, 0.47)
+                    rw += _width_cm(after, pt, 0.52)
+                    right = True
+                elif right:
+                    rw += _width_cm(t, pt, 0.52)
+                else:
+                    lw += _width_cm(t, pt, 0.47)
+            return lw, rw
+        main = [p for p, _, _, _ in lines if p._p is not last]
+        file_line = next((p for p, _, _, _ in lines if p._p is last), None)
+        widths = [sides(p) for p in main] or [sides(file_line)]
+        left_w = max(w[0] for w in widths)
+        right_w = max(w[1] for w in widths)
+        # right column as far right as the longest right-hand line allows, but clear of the left text
+        stop = min(max(text_w - right_w - 0.1, left_w + 0.3), text_w - 4.0)
+        stop_of = {p._p: stop for p in main}
+        if file_line is not None:
+            # best: one column for every line, FILE NO included, when the left text leaves room
+            flw, frw = sides(file_line)
+            together = text_w - max(right_w, frw) - 0.1
+            if together >= max(left_w, flw) + 0.3:
+                stop = together
+                stop_of = {p._p: stop for p in main}
+        if file_line is not None:
+            # FILE NO: same column when it fits; else its own stop (ending at the margin), a size smaller if needed
+            for pt in (usual, 11, 10.5, 10):
+                if pt != usual:
+                    for r in file_line.runs:
+                        r.font.size = Pt(pt)
+                lw, rw = sides(file_line)
+                if stop + rw <= text_w - 0.1:
+                    stop_of[file_line._p] = stop
+                    break
+                if lw + 0.3 + rw <= text_w - 0.1:
+                    stop_of[file_line._p] = text_w - rw - 0.1
+                    break
+            else:
+                stop_of[file_line._p] = max(lw + 0.3, text_w - rw - 0.1)
+        for p, _, _, _ in lines:
+            indent = (p.paragraph_format.left_indent or 0) / 360000
+            stops = p.paragraph_format.tab_stops
+            for _ in list(stops):
+                del stops[0]
+            stops.add_tab_stop(Cm(stop_of[p._p] - indent), WD_TAB_ALIGNMENT.LEFT)
+            n += 1
+    return n

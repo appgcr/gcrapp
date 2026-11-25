@@ -69,7 +69,7 @@ const VOICE_MAP = [
   ['assessmentNo', 'assessmentNo'], ['baNumber', 'approvalPlanNo'], ['baDate', 'approvalPlanDate'], ['extentDocument', 'netExtent'],
 ];
 
-export default function Step3CheckDetails({ voiceApply, voiceKey, propertyDetails = {}, setPropertyDetails, setManuallyModifiedFields, onNext }) {
+export default function Step3CheckDetails({ voiceApply, voiceKey, onVoiceNote, propertyDetails = {}, setPropertyDetails, setManuallyModifiedFields, onNext }) {
   const [editing, setEditing] = useState(null);
   const rows = fieldsFor(toFieldValue(propertyDetails.propertyType) || '');
   const value = (k) => String(toFieldValue(getPath(propertyDetails, k)) ?? '').trim();
@@ -150,7 +150,7 @@ export default function Step3CheckDetails({ voiceApply, voiceKey, propertyDetail
           </div>
         </div>
 
-        <VoiceSheetFill apply={voiceApply || applyVoice} storeKey={voiceKey} onFilled={(keys) => setVoiceKeys(new Set(keys))}
+        <VoiceSheetFill apply={voiceApply || applyVoice} storeKey={voiceKey} onVoiceNote={onVoiceNote} onFilled={(keys) => setVoiceKeys(new Set(keys))}
           example="Deed number 123 by 2025, deed date 23-04-24, survey number 114, extent 200 square yards, door number 2/240-45, east road, west house of Ramaiah" />
 
         <div className="c3-type"><span>Report type</span><b>{toFieldValue(propertyDetails.propertyType) || 'Not chosen — go back to Step 1'}</b></div>

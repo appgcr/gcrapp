@@ -38,7 +38,8 @@ async function speak(text, { voice } = {}) {
       const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: AbortSignal.timeout(30000),
       });
-      if (!r.ok) continue;
+      if (!r.ok) { require('./aiStatus').note(r.status, await r.text().catch(() => '')); continue; }
+      require('./aiStatus').note(r.status);
       const d = await r.json();
       const part = (d?.candidates?.[0]?.content?.parts || []).find((p) => p.inlineData && p.inlineData.data);
       if (!part) continue;

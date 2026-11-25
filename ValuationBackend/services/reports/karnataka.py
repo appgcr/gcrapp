@@ -122,7 +122,7 @@ def build_house(case, temps, bank=None):
     codes = [next((v for k, v in bob.FLOOR_CODES.items() if k in lbl.lower()), lbl) for lbl, _ in floors]
     area = sum(a for _, a in floors)
     cost = apgb.money(area * c_rate)
-    dep_pct = min(age * num(rep.get('depreciationPerYear'), 1.0), 70.0)
+    dep_pct = apgb.dep_percent(age, rep.get('depreciationPerYear'))
     dep = apgb.money(cost * dep_pct / 100)
     total = land + cost
     fmv, _, _ = bob.final_values(f, case, rep, 'house', total, step=10000, bank=BANK)

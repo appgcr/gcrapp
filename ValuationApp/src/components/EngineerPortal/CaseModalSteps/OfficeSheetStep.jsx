@@ -6,6 +6,7 @@ import { authHeaders } from '../../Shared/authHeaders';
 import { uploadDocumentFile, resolveDocUrl, formatMB } from '../../../utils/docFiles';
 import { ListMessage } from '../../Shared/AppToaster';
 import VoiceSheetFill from './VoiceSheetFill';
+import { ageYears, depPercentFor, tooOldText, MAX_BUILDING_AGE } from '../../../utils/buildingAge';
 
 // The filled GOURU VALUATION – OFFICE sheet: upload it (Word / PDF / photo), Gouru AI reads it, the
 // engineer checks every value here, then goes on to the site photos.
@@ -44,19 +45,44 @@ export function sheetMissing(s) {
   if (isBuilt(s.propertyType)) {
     if (!s.structureType) m.push('Type of structure');
     if (!s.buildingAge) m.push('Age of the building');
+    else if (ageYears(s.buildingAge) > MAX_BUILDING_AGE) m.push(`Age of the building: ${tooOldText(ageYears(s.buildingAge))}`);
     if (!s.floorsArea) m.push('GF area & other floors');
     if (!s.constructionRate) m.push('Construction rate per sqft');
   }
   return m;
 }
 
-export default function OfficeSheetStep({ voiceKey, sheet, setSheet, sheetFiles = [], setSheetFiles, locked = {}, onNext, onPreview }) {
+// audioMode: the case is filled by voice (spoken, or an uploaded recording) — the voice card comes first and the paper sheet is optional
+// initialVoice: { unsure, checks, values } from a recording made earlier (Step 1 / New Case) — marked here too
+export default function OfficeSheetStep({ voiceKey, sheet, setSheet, sheetFiles = [], setSheetFiles, audioMode = false, initialVoice = null, onVoiceNote, locked = {}, onNext, onPreview }) {
   const fileRef = useRef(null);
   const camRef = useRef(null);
   const [busy, setBusy] = useState('');
-  const [voiceKeys, setVoiceKeys] = useState(() => new Set()); // fields just filled by voice (highlighted)
+  const [voiceKeys, setVoiceKeys] = useState(() => new Set(Object.keys(initialVoice?.values || {}))); // fields just filled by voice (highlighted)
+  const [doubtKeys, setDoubtKeys] = useState(() => new Set([...(initialVoice?.unsure || []), ...((initialVoice?.checks || []).map((c) => c.field).filter(Boolean))])); // to be checked (yellow)
+  const voiceVals = useRef({ ...(initialVoice?.values || {}) }); // what voice wrote in each field — a change by the engineer is learned from
   const s = { ...EMPTY_SHEET, ...sheet, measurements: { ...EMPTY_SHEET.measurements, ...(sheet?.measurements || {}) }, boundaries: { ...EMPTY_SHEET.boundaries, ...(sheet?.boundaries || {}) } };
-  const unmark = (k) => setVoiceKeys((prev) => { if (!prev.has(k)) return prev; const n = new Set(prev); n.delete(k); return n; });
+  const unmark = (k) => {
+    setVoiceKeys((prev) => { if (!prev.has(k)) return prev; const n = new Set(prev); n.delete(k); return n; });
+    setDoubtKeys((prev) => { if (!prev.has(k)) return prev; const n = new Set(prev); n.delete(k); return n; });
+  };
+  const onVoice = (keys, meta = {}) => {
+    setVoiceKeys(new Set(keys));
+    setDoubtKeys(new Set([...(meta.unsure || []), ...((meta.checks || []).map((c) => c.field).filter(Boolean))]));
+    voiceVals.current = { ...voiceVals.current, ...(meta.values || {}) };
+  };
+  // Names / places the engineer corrected after voice fill → taught to Gouru AI for next time
+  const learn = () => {
+    const items = [];
+    for (const [k, heard] of Object.entries(voiceVals.current)) {
+      const [a, b] = k.split('.');
+      const now = b ? s[a]?.[b] : s[a];
+      if (heard && now && String(now).trim() !== String(heard).trim()) items.push({ field: k, heard, fixed: String(now).trim() });
+    }
+    if (!items.length) return;
+    fetch(`${API_BASE_URL}/api/assist/voice-learn`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ items }) }).catch(() => {});
+    voiceVals.current = {};
+  };
   const set = (k, v) => { unmark(k); setSheet((prev) => ({ ...EMPTY_SHEET, ...prev, [k]: v })); };
   const setSide = (group, side, v) => unmark(`${group}.${side}`) || setSheet((prev) => ({ ...EMPTY_SHEET, ...prev, [group]: { ...EMPTY_SHEET[group], ...(prev?.[group] || {}), [side]: v } }));
 
@@ -113,20 +139,24 @@ export default function OfficeSheetStep({ voiceKey, sheet, setSheet, sheetFiles 
   const remove = (id) => setSheetFiles(sheetFiles.filter((f) => f.id !== id));
 
   const next = () => {
-    if (!sheetFiles.length) { toast.error('Please upload the filled office sheet first.'); return; }
+    if (!sheetFiles.length && !audioMode) { toast.error('Please upload the filled office sheet first.'); return; }
     const missing = sheetMissing(s);
     if (missing.length) {
       toast.error(<ListMessage title={`Fill ${missing.length === 1 ? 'this' : `these ${missing.length}`} to continue`} items={missing} />, { id: 'sheet-missing', duration: 7000 });
       return;
     }
+    learn();
     onNext(s);
   };
 
-  const p = { s, set, hl: voiceKeys };
+  const p = { s, set, hl: voiceKeys, dbt: doubtKeys };
   const built = isBuilt(s.propertyType);
+
+  const voiceCard = <VoiceSheetFill storeKey={voiceKey} setSheet={setSheet} emptySheet={EMPTY_SHEET} onFilled={onVoice} allowUpload big={audioMode} missing={sheetMissing(s)} onVoiceNote={onVoiceNote} />;
 
   return (
     <div className="os">
+      {audioMode && voiceCard}
       <input ref={fileRef} type="file" hidden multiple accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*" onChange={(e) => { const fs = Array.from(e.target.files || []); e.target.value = ''; add(fs); }} />
       <input ref={camRef} type="file" hidden accept="image/*" capture="environment" onChange={(e) => { const fs = Array.from(e.target.files || []); e.target.value = ''; add(fs); }} />
 
@@ -151,7 +181,7 @@ export default function OfficeSheetStep({ voiceKey, sheet, setSheet, sheetFiles 
           </>
         ) : (
           <>
-            <div className="os-up-t">Upload the filled office sheet</div>
+            <div className="os-up-t">{audioMode ? 'Office sheet (optional)' : 'Upload the filled office sheet'}</div>
             <div className="os-up-s">GOURU VALUATION – OFFICE sheet: Word (.docx), PDF or clear photos — choose all the pages together. Gouru AI fills the details below.</div>
             <div className="os-up-b">
               <button type="button" onClick={() => fileRef.current?.click()}><FileUp size={17} /> Choose files</button>
@@ -161,7 +191,7 @@ export default function OfficeSheetStep({ voiceKey, sheet, setSheet, sheetFiles 
         )}
       </div>
 
-      <VoiceSheetFill storeKey={voiceKey} setSheet={setSheet} emptySheet={EMPTY_SHEET} onFilled={(keys) => setVoiceKeys(new Set(keys))} />
+      {!audioMode && voiceCard}
 
       {Array.isArray(s.corrections) && s.corrections.length > 0 && (
         <div className="os-fix">
@@ -214,8 +244,8 @@ export default function OfficeSheetStep({ voiceKey, sheet, setSheet, sheetFiles 
         {SIDES.map((sd) => (
           <div key={sd} className="os-side">
             <b>{sd.toUpperCase()}</b>
-            <input className={voiceKeys.has(`measurements.${sd}`) ? 'os-hl' : ''} value={s.measurements[sd]} placeholder="40 ft" onChange={(e) => setSide('measurements', sd, e.target.value)} aria-label={`${sd} measurement`} />
-            <input className={voiceKeys.has(`boundaries.${sd}`) ? 'os-hl' : ''} value={s.boundaries[sd]} placeholder="Road / Plot no / House of…" onChange={(e) => setSide('boundaries', sd, e.target.value)} aria-label={`${sd} boundary`} />
+            <input className={doubtKeys.has(`measurements.${sd}`) ? 'os-dbt' : voiceKeys.has(`measurements.${sd}`) ? 'os-hl' : ''} value={s.measurements[sd]} placeholder="40 ft" onChange={(e) => setSide('measurements', sd, e.target.value)} aria-label={`${sd} measurement`} />
+            <input className={doubtKeys.has(`boundaries.${sd}`) ? 'os-dbt' : voiceKeys.has(`boundaries.${sd}`) ? 'os-hl' : ''} value={s.boundaries[sd]} placeholder="Road / Plot no / House of…" onChange={(e) => setSide('boundaries', sd, e.target.value)} aria-label={`${sd} boundary`} />
           </div>
         ))}
       </div>
@@ -239,6 +269,11 @@ export default function OfficeSheetStep({ voiceKey, sheet, setSheet, sheetFiles 
       </>)}
       <div className="os-grid">
         {built && <Field {...p} k="buildingAge" label="Age of the building" ph="8 years" />}
+        {built && String(s.buildingAge || '').trim() && (
+          <div className={`os-age ${ageYears(s.buildingAge) > MAX_BUILDING_AGE ? 'bad' : ''}`}>
+            {ageYears(s.buildingAge) > MAX_BUILDING_AGE ? tooOldText(ageYears(s.buildingAge)) : `Depreciation ${depPercentFor(s.buildingAge)}%${ageYears(s.buildingAge) <= 3 ? ' — none for the first 3 years' : ''}`}
+          </div>
+        )}
         <Field {...p} k="marketRatePerCent" label="Market rate per cent (Rs)" num ph="14,25,000" />
         {built && <Field {...p} k="constructionRate" label="Construction rate per sqft (Rs)" num ph="2,500" />}
         <Field {...p} k="roadWidth" label="Road width (ft)" num ph="30" />
@@ -293,6 +328,10 @@ export default function OfficeSheetStep({ voiceKey, sheet, setSheet, sheetFiles 
         .os-f.hl input, .os-f.hl textarea, .os-side input.os-hl { border-color: #6366f1; background: #eef2ff; box-shadow: 0 0 0 2px rgba(99,102,241,.18); }
         .os-f.hl span::after { content: ' · by voice'; color: #4f46e5; font-weight: 700; }
         .os-chips.hl button.on { box-shadow: 0 0 0 3px rgba(99,102,241,.35); }
+        .os-age { grid-column: 1 / -1; margin-top: -4px; font-size: 12px; color: #64748b; } .os-age.bad { color: #dc2626; font-weight: 700; }
+        .os-f.dbt input, .os-f.dbt textarea, .os-side input.os-dbt { border-color: #eab308; background: #fefce8; box-shadow: 0 0 0 2px rgba(234,179,8,.25); }
+        .os-f.dbt span::after { content: ' · please check'; color: #a16207; font-weight: 700; }
+        body.dark-theme .os-f.dbt input, body.dark-theme .os-f.dbt textarea, body.dark-theme .os-side input.os-dbt { background: #2a2410; border-color: #ca8a04; }
         body.dark-theme .os-f.hl input, body.dark-theme .os-f.hl textarea, body.dark-theme .os-side input.os-hl { background: #23234a; border-color: #6366f1; }
         .os-sides { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
         .os-sides-h, .os-side { display: grid; grid-template-columns: 52px 0.8fr 1.4fr; gap: 6px; align-items: center; }
@@ -309,16 +348,16 @@ export default function OfficeSheetStep({ voiceKey, sheet, setSheet, sheetFiles 
   );
 }
 
-function Field({ s, set, hl, k, label, ph, wide, num, area }) {
+function Field({ s, set, hl, dbt, k, label, ph, wide, num, area }) {
   return (
-    <label className={`os-f ${wide ? 'wide' : ''} ${hl && hl.has(k) ? 'hl' : ''}`}>
+    <label className={`os-f ${wide ? 'wide' : ''} ${dbt && dbt.has(k) ? 'dbt' : hl && hl.has(k) ? 'hl' : ''}`}>
       <span>{label}</span>
       {area ? <textarea rows={2} value={s[k]} placeholder={ph} onChange={(e) => set(k, e.target.value)} />
         : <input value={s[k]} placeholder={ph} inputMode={num ? 'decimal' : undefined} onChange={(e) => set(k, e.target.value)} />}
     </label>
   );
 }
-function Chips({ s, set, hl, k, options, labels }) {
+function Chips({ s, set, hl, dbt, k, options, labels }) { // eslint-disable-line no-unused-vars
   return (
     <div className={`os-chips ${hl && hl.has(k) ? 'hl' : ''}`}>
       {options.map((o) => <button type="button" key={o} className={s[k] === o ? 'on' : ''} onClick={() => set(k, s[k] === o ? '' : o)}>{labels?.[o] || o}</button>)}

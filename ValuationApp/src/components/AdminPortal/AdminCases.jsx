@@ -1,6 +1,6 @@
 import askConfirm from '../Shared/askConfirm';
 import React, { useState, useEffect } from 'react';
-import { Search, MapPin, FileText, CheckCircle2, Loader2, ChevronDown, Plus, X, Edit2, Navigation, RotateCcw, History, AlertTriangle, Download, Phone, CalendarClock, User } from 'lucide-react';
+import { Search, MapPin, FileText, CheckCircle2, Loader2, ChevronDown, Plus, X, Edit2, Navigation, RotateCcw, History, AlertTriangle, Download, Phone, CalendarClock, User, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
 import LiveTrackingMap from './LiveTrackingMap';
 import SuggestedEngineer from './SuggestedEngineer';
@@ -14,6 +14,7 @@ import { STAGES, stageOf } from '../Shared/caseStages';
 import { isSuperAdmin, getBranchScope } from '../../utils/session';
 import { useBanks, matchBank, searchBanks } from '../../utils/banks';
 import { reportFileName } from '../../utils/reportFileName';
+import { useProvideScreenActions } from '../../utils/screenActions';
 
 
 export default function AdminCases({ defaultFilter = '', currentUser }) {
@@ -339,6 +340,21 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
   const ts = (c) => new Date(c.createdAt).getTime() || 0;
   Object.keys(byTab).forEach(k => byTab[k].sort((x, y) => (k === 'DONE' ? ts(y) - ts(x) : ts(x) - ts(y))));
   const newTasks = byTab.NEW;
+
+  // Assistive Touch: a report under review is open → Approve / Return / Close; on the Review tab → Review next
+  const reviewOpen = viewing && viewing.status === 'Reviewing';
+  const nextReview = byTab.REVIEW.find((c) => !viewing || c.id !== viewing.id);
+  useProvideScreenActions('admin-cases', reviewOpen ? [
+    { key: 'approve', label: 'Approve', Icon: CheckCircle2, run: async () => { const id = viewing.id; await handleApprove(id); setViewing(null); }, disabled: processingId === viewing.id },
+    { key: 'return', label: 'Return', Icon: RotateCcw, run: () => { const c = viewing; setViewing(null); setReturningCase(c); setCorrectionComment(''); setReturnModalOpen(true); } },
+    nextReview
+      ? { key: 'next', label: 'Next report', Icon: Eye, run: () => setViewing(nextReview) }
+      : { key: 'close', label: 'Close report', Icon: X, run: () => setViewing(null) },
+  ] : byTab.REVIEW.length ? [
+    { key: 'review', label: `Review next`, Icon: Eye, run: () => { setActiveTab('REVIEW'); setViewing(byTab.REVIEW[0]); }, badge: byTab.REVIEW.length },
+    { key: 'new', label: 'New Case', Icon: Plus, run: () => { setActiveTab('NEW'); setIsCreateFormOpen(true); } },
+    { key: 'tab', label: 'Review tab', Icon: CheckCircle2, run: () => setActiveTab('REVIEW') },
+  ] : [], [reviewOpen, viewing?.id, nextReview?.id, byTab.REVIEW.length, processingId, cases]);
   const engineers = users.filter(u => u.role === 'ENGINEER');
   // Engineers are always from the case's own branch
   const engineersFor = (branchId) => (branchId ? engineers.filter(u => u.branchId === branchId) : engineers);

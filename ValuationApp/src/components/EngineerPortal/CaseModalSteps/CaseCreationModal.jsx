@@ -2,7 +2,7 @@ import askConfirm from '../../Shared/askConfirm';
 import { ListMessage } from '../../Shared/AppToaster';
 import { ensureCheckedIn } from '../../../utils/dutyCheck';
 import React, { useState, useRef, useEffect } from 'react';
-import { ChevronLeft, X, Loader2, FileText } from 'lucide-react';
+import { ChevronLeft, X, Loader2, FileText, Mic } from 'lucide-react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
@@ -30,11 +30,13 @@ import Step3CheckDetails, { missingDocDetails } from './Step3CheckDetails';
 import { voiceToCase } from './voiceToCase';
 import CaseStepper, { stepIndex, SHEET_STEPS, sheetStepIndex } from './CaseStepper';
 import OfficeSheetStep, { EMPTY_SHEET, sheetToCase, sheetMissing } from './OfficeSheetStep';
+import VoiceSheetFill, { sheetFilledList } from './VoiceSheetFill';
 import AiReviewCall from './AiReviewCall';
 import Step4SiteImages from './Step4SiteImages';
 import Step5ExtractedDataReview from './Step5ExtractedDataReview';
 import Step6FinalReviewSignature from './Step6FinalReviewSignature';
 import { getPageDisplayInfo, formatFileSize, isBuiltProperty, REQUIRED_DOCS } from './caseModalHelpers';
+import { oldestBuildingAge, tooOldText, MAX_BUILDING_AGE } from '../../../utils/buildingAge';
 import { MAX_SITE_PHOTOS, currentPosition, addressFor, drawStamp, fileHash, readExifGps, imageToCanvas } from '../../../utils/sitePhotos';
 
 import {
@@ -56,7 +58,8 @@ import {
   applyExtractedMeta,
   mapSaleDeedToPropertyDetails,
   sanitizePropertyDetails,
-  plotFromRoads
+  plotFromRoads,
+  withOfficePlotTypes
 } from '../caseValidationHelpers';
 
 export default function CaseCreationModal({
@@ -501,7 +504,7 @@ export default function CaseCreationModal({
         if (!cfg) return;
         setDynamicConfig(cfg);
         if (Array.isArray(cfg.propertyTypes) && cfg.propertyTypes.length > 0) setPropertyTypes(cfg.propertyTypes);
-        if (Array.isArray(cfg.plotTypes) && cfg.plotTypes.length > 0) setPlotTypes(cfg.plotTypes);
+        if (Array.isArray(cfg.plotTypes) && cfg.plotTypes.length > 0) setPlotTypes(withOfficePlotTypes(cfg.plotTypes));
         if (Array.isArray(cfg.roadTypes) && cfg.roadTypes.length > 0) setRoadTypes(cfg.roadTypes);
         // The office sheet's own choices are always offered, whatever list is saved in settings
         const withSheet = (list, extra) => [...list, ...extra.filter((x) => !list.some((y) => y.toLowerCase() === x.toLowerCase()))];
@@ -627,7 +630,75 @@ export default function CaseCreationModal({
   const sheetFiles = uploadedDocs.officeSheet || []; // every page / file of the office sheet
   const sheetFile = sheetFiles[0] || null;
   const setSheetFiles = (list) => setUploadedDocs(prev => ({ ...prev, officeSheet: Array.isArray(list) ? list : [] }));
-  const setEntryMode = (mode) => setPropertyDetails(prev => ({ ...prev, entryMode: mode }));
+  // 'docs' | 'sheet' | 'audio' — audio is the sheet route filled by voice (spoken or an uploaded recording); the paper sheet is optional
+  const audioMode = sheetMode && propertyDetails.sheetSource === 'audio';
+  const setEntryMode = (mode) => setPropertyDetails(prev => ({ ...prev, entryMode: mode === 'audio' ? 'sheet' : mode, sheetSource: mode === 'audio' ? 'audio' : mode === 'sheet' ? 'file' : prev.sheetSource }));
+
+  // Audio route: what Gouru AI heard fills Step 1 (client, bank, branch, district, report type) and the whole office sheet
+  const matchBank = (said) => {
+    const n = (x) => String(x || '').toLowerCase().replace(/[^a-z]/g, '');
+    const ALIAS = { sbi: 'state bank of india', apgb: 'andhra pradesh grameena bank', boi: 'bank of india', bob: 'bank of baroda', pnb: 'punjab national bank', iob: 'indian overseas bank', ubi: 'union bank of india', uco: 'uco bank', bom: 'bank of maharashtra', cbi: 'central bank of india' };
+    const sd = n(said);
+    if (!sd) return '';
+    const t = ALIAS[sd] ? n(ALIAS[sd]) : sd;
+    const initials = (b) => b.split(/\s+/).filter((w) => !/^(of|the|ltd|limited)$/i.test(w)).map((w) => w[0]).join('').toLowerCase();
+    // The bank list's own short names and aliases first (SBI, APGB, KBL, "United Commercial Bank"…)
+    const rec = (bankRecords || []).find((r) => n(r.shortName) === sd || (r.aliases || []).some((a) => n(a) === sd));
+    if (rec && rec.name) return rec.name;
+    return availableBanks.find((b) => n(b) === t)
+      || availableBanks.find((b) => n(b).startsWith(t) || t.startsWith(n(b)))
+      || availableBanks.find((b) => initials(b) === sd)
+      || availableBanks.find((b) => n(b).includes(t))
+      || '';
+  };
+  // Every voice note (spoken or uploaded) is kept in the case's files: the admin can listen to it
+  const addVoiceNote = (doc) => setUploadedDocs((prev) => ({ ...prev, voiceNotes: [...(prev.voiceNotes || []), doc] }));
+  const [voiceMeta, setVoiceMeta] = useState(null); // { unsure, checks, values } of the last recording (marked on the sheet step)
+  const applyAudio = (f, meta = {}) => {
+    const filled = [];
+    const skipped = [];
+    setVoiceMeta((prev) => ({
+      unsure: [...new Set([...(prev?.unsure || []), ...(meta.unsure || [])])],
+      checks: [...(prev?.checks || []).filter((c) => !(meta.checks || []).some((x) => x.field === c.field)), ...(meta.checks || [])],
+      values: { ...(prev?.values || {}), ...Object.fromEntries(sheetFilledList(f).map((x) => [x.key, x.value])) },
+    }));
+    // The office sheet (seen and checked on the Audio step)
+    setSheet((prev) => {
+      const out = { ...EMPTY_SHEET, ...(prev || {}) };
+      for (const [k, v] of Object.entries(f)) {
+        if (k === 'measurements' || k === 'boundaries') out[k] = { ...EMPTY_SHEET[k], ...(prev?.[k] || {}), ...v };
+        else if (k in EMPTY_SHEET) out[k] = v;
+      }
+      return out;
+    });
+    // Step 1
+    const purchase = (f.dealType || sheet.dealType) === 'Purchase';
+    const name = purchase ? (f.applicantName || '') : (f.ownerName || '');
+    const rel = purchase ? (f.applicantRelation || '') : (f.ownerRelation || '');
+    if (name) {
+      if (lockedFields.clientName) skipped.push('Client name (set by your admin)');
+      else { setClientName(name); filled.push({ key: 'clientName', label: 'Client name', value: name }); }
+    }
+    if (rel) { setClientFatherName(rel); filled.push({ key: 'clientFatherName', label: "Father's / Husband's name", value: rel }); }
+    if (f.bank) {
+      const b = matchBank(f.bank);
+      if (lockedFields.bankName) skipped.push('Bank (set by your admin)');
+      else if (b) { setBankName(b); filled.push({ key: 'bankName', label: 'Bank', value: b }); }
+      else skipped.push(`Bank "${f.bank}" — not in the bank list, please pick it`);
+    }
+    if (f.bankBranch) {
+      if (lockedFields.bankBranch) skipped.push('Branch (set by your admin)');
+      else { setBankBranch(f.bankBranch); filled.push({ key: 'bankBranch', label: 'Branch', value: f.bankBranch }); }
+    }
+    if (f.district) { setBankDistrict(f.district); filled.push({ key: 'district', label: 'District', value: f.district }); }
+    if (f.propertyType) {
+      const pt = propertyTypes.find((x) => x.toLowerCase() === String(f.propertyType).toLowerCase());
+      if (pt) { setPropertyDetails((prev) => ({ ...prev, propertyType: pt })); filled.push({ key: 'propertyType', label: 'Report type', value: pt }); }
+    }
+    // Everything else the sheet got
+    sheetFilledList(f).filter((x) => !['bank', 'propertyType'].includes(x.key)).forEach((x) => filled.push(x));
+    return { filled, skipped };
+  };
 
   // While a case is open, keep the page behind it still (scrolling the form must not move the case list)
   useEffect(() => {
@@ -657,10 +728,14 @@ export default function CaseCreationModal({
     if (files.length) setUploadedDocs((prev) => ({ ...prev, officeSheet: files }));
     const f = initialSheet.fields || {};
     const s = { ...EMPTY_SHEET, ...f, measurements: { ...EMPTY_SHEET.measurements, ...(f.measurements || {}) }, boundaries: { ...EMPTY_SHEET.boundaries, ...(f.boundaries || {}) } };
-    const missing = files.length ? sheetMissing(s) : ['the office sheet'];
+    const fromAudio = initialSheet.source === 'audio';
+    if (initialSheet.voice) setVoiceMeta(initialSheet.voice);
+    if (Array.isArray(initialSheet.voiceNotes) && initialSheet.voiceNotes.length) setUploadedDocs((prev) => ({ ...prev, voiceNotes: [...(prev.voiceNotes || []).filter((x) => !initialSheet.voiceNotes.some((v) => v.id === x.id)), ...initialSheet.voiceNotes] }));
+    const src = fromAudio ? 'audio' : 'file';
+    const missing = files.length || fromAudio ? sheetMissing(s) : ['the office sheet'];
     if (!missing.length) {
       // Everything the report needs was read: straight on to the site photos (the sheet stays one tap away)
-      setPropertyDetails((prev) => sheetToCase(s, { ...prev, entryMode: 'sheet', sheet: s }));
+      setPropertyDetails((prev) => sheetToCase(s, { ...prev, entryMode: 'sheet', sheetSource: src, sheet: s }));
       const name = s.dealType === 'Purchase' ? s.applicantName : s.ownerName;
       if (name && !lockedFields.clientName) setClientName(name);
       const rel = s.dealType === 'Purchase' ? s.applicantRelation : s.ownerRelation;
@@ -668,9 +743,9 @@ export default function CaseCreationModal({
       setSheetReadCount(Object.entries(s).filter(([k, v]) => k !== 'corrections' && (typeof v === 'object' ? Object.values(v || {}).some((x) => String(x || '').trim()) : String(v || '').trim())).length);
       setModalStep(4);
     } else {
-      setPropertyDetails((prev) => ({ ...prev, entryMode: 'sheet', sheet: s }));
+      setPropertyDetails((prev) => ({ ...prev, entryMode: 'sheet', sheetSource: src, sheet: s }));
       setModalStep(8);
-      if (files.length) toast(`Fill ${missing.length === 1 ? 'this' : `these ${missing.length}`} on the sheet, then go on to the photos: ${missing.join(', ')}`, { duration: 7000 });
+      if (files.length || fromAudio) toast(`Fill ${missing.length === 1 ? 'this' : `these ${missing.length}`} on the sheet, then go on to the photos: ${missing.join(', ')}`, { duration: 7000 });
     }
   }, [loadedAt, editingCaseId, initialSheet, bypassAllowed]);
   const [sheetReadCount, setSheetReadCount] = useState(0); // >0: the case skipped the sheet step (read in New Case)
@@ -1307,6 +1382,8 @@ export default function CaseCreationModal({
       (p.siteValue?.floors || []).forEach(f => { if (!String(f.value || '').trim()) missing.push(`${f.label} area`); });
     }
     if (landRateMissing(p)) missing.push('Market land rate');
+    // Over 30 years: not eligible for valuation
+    if (built && oldestBuildingAge(p) > MAX_BUILDING_AGE) { toast.error(tooOldText(oldestBuildingAge(p)), { id: 'too-old', duration: 8000 }); return; }
     if (missing.length) {
       toast.error(<ListMessage title={`Fill ${missing.length === 1 ? 'this' : `these ${missing.length}`} to continue`} items={missing} hint={noSides.length ? "Boundaries: as seen at the site today." : undefined} />, { id: 'step-missing', duration: 7000 });
       return;
@@ -1411,7 +1488,7 @@ export default function CaseCreationModal({
 
   // All 5 documents must be on the case before it goes to the admin (they may be added in any order)
   const missingRequiredDocs = sheetMode
-    ? (sheetFile ? [] : [{ id: 'officeSheet', label: 'Office data sheet' }])
+    ? (sheetFile || audioMode ? [] : [{ id: 'officeSheet', label: 'Office data sheet' }])
     : REQUIRED_DOCS.filter(d => !(uploadedDocs[d.id]?.length > 0));
   // A field corrected during the review call
   const applyReview = (field, value) => {
@@ -1484,7 +1561,9 @@ export default function CaseCreationModal({
           size: p.size,
           sizeFormatted: p.sizeFormatted,
           extension: p.extension,
-          uploadedAt: p.uploadedAt
+          uploadedAt: p.uploadedAt,
+          // Voice notes: what Gouru AI heard, when, how long (shown to the admin with the recording)
+          ...(key === 'voiceNotes' ? { isAudio: true, at: p.at, seconds: p.seconds, transcript: p.transcript, filled: p.filled, source: p.source } : {}),
         }));
       }
     }
@@ -1731,6 +1810,10 @@ export default function CaseCreationModal({
 
   // Step 4 → final step. Documents were already checked/extracted when uploaded in Step 2.
   const handleRunSecurityExtraction = () => {
+    if (isBuiltProperty(propertyDetails.propertyType) && oldestBuildingAge(propertyDetails) > MAX_BUILDING_AGE) {
+      toast.error(tooOldText(oldestBuildingAge(propertyDetails)), { id: 'too-old', duration: 8000 });
+      return;
+    }
     if (sheetMode && !siteSelfie) {
       toast.error('Please take your selfie at the site (Take selfie).');
       return;
@@ -1915,7 +1998,7 @@ export default function CaseCreationModal({
             {/* Step-by-step progress */}
             {modalStep >= 1 && (
               <CaseStepper
-                steps={sheetMode ? SHEET_STEPS : undefined}
+                steps={sheetMode ? (audioMode ? SHEET_STEPS.map((x) => (x.id === 'sheet' ? { ...x, short: 'Audio', hint: 'Speak the details or upload a recording, then check what Gouru AI filled.' } : x)) : SHEET_STEPS) : undefined}
                 current={sheetMode ? sheetStepIndex(modalStep) : stepIndex(modalStep, step3Phase)}
                 onGo={(i) => {
                   if (sheetMode) { setModalStep([1, 8, 4][i] || 1); return; }
@@ -1935,6 +2018,9 @@ export default function CaseCreationModal({
                 setSheet={setSheet}
                 sheetFiles={sheetFiles}
                 setSheetFiles={setSheetFiles}
+                audioMode={audioMode}
+                initialVoice={voiceMeta}
+                onVoiceNote={addVoiceNote}
                 locked={lockedFields}
                 onNext={finishSheet}
                 onPreview={(f) => setPreviewImage(f)}
@@ -1953,14 +2039,18 @@ export default function CaseCreationModal({
                   <button type="button" className={!sheetMode ? 'on' : ''} onClick={() => setEntryMode('docs')}>
                     <b>Upload documents</b><small>5 documents, check, site details</small>
                   </button>
-                  <button type="button" className={sheetMode ? 'on' : ''} onClick={() => setEntryMode('sheet')}>
+                  <button type="button" className={sheetMode && !audioMode ? 'on' : ''} onClick={() => setEntryMode('sheet')}>
                     <b>Office sheet</b><small>Upload the filled sheet, photos + selfie</small>
+                  </button>
+                  <button type="button" className={audioMode ? 'on' : ''} onClick={() => setEntryMode('audio')}>
+                    <b><Mic size={15} style={{ verticalAlign: '-2px', marginRight: 4 }} />Audio</b><small>Upload a recording or speak the details</small>
                   </button>
                 </div>
                 <style>{`
                   .ems { margin: -4px 0 14px; }
                   .ems-t { font-size: 13px; font-weight: 800; color: #475569; margin-bottom: 7px; }
-                  .ems-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+                  .ems-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+                  @media (max-width: 560px) { .ems-row { grid-template-columns: 1fr 1fr; } .ems-row button:last-child { grid-column: 1 / -1; } }
                   .ems-row button { text-align: left; border: 1.5px solid #cbd5e1; background: #fff; border-radius: 12px; padding: 10px 12px; cursor: pointer; font-family: inherit; display: flex; flex-direction: column; gap: 2px; }
                   .ems-row button b { font-size: 14.5px; color: #0f172a; }
                   .ems-row button small { font-size: 12px; color: #64748b; line-height: 1.3; }
@@ -1970,6 +2060,19 @@ export default function CaseCreationModal({
                   body.dark-theme .ems-row button.on { background: rgba(10,132,255,.16); border-color: #0a84ff; box-shadow: 0 0 0 3px rgba(10,132,255,.22); } body.dark-theme .ems-row button.on b { color: #64b5ff; } body.dark-theme .ems-t { color: #aeaeb2; }
                 `}</style>
               </div>
+                  )}
+                  {audioMode && (
+                    <div style={{ marginBottom: 14 }}>
+                      <VoiceSheetFill
+                        allowUpload
+                        big
+                        apply={applyAudio}
+                        onVoiceNote={addVoiceNote}
+                        missing={[...(!clientName.trim() ? ['Client name'] : []), ...(!bankName ? ['Bank'] : []), ...(!propertyDetails.propertyType ? ['Report type'] : []), ...sheetMissing({ ...EMPTY_SHEET, ...sheet, propertyType: sheet.propertyType || propertyDetails.propertyType || '' })]}
+                        storeKey={`voice:${currentUser?.id || 'me'}:${editingCaseId || 'new'}:setup`}
+                        example="Client Siva, S/o Ramaiah, bank APGB, branch Kadapa Main, district Kadapa, open site, deed number 123 by 2025, survey number 114, east road, west house of Ramaiah…"
+                      />
+                    </div>
                   )}
                   {editingCaseId && <div style={{ marginBottom: 12 }}><TellCustomer caseId={editingCaseId} /></div>}
                 </>}
@@ -2030,6 +2133,7 @@ export default function CaseCreationModal({
             {modalStep === 3 && step3Phase === 'check' && (
               <Step3CheckDetails
                 voiceApply={applyVoiceToCase}
+                onVoiceNote={addVoiceNote}
                 voiceKey={`voice:${currentUser?.id || 'me'}:${editingCaseId || 'new'}:check`}
                 propertyDetails={propertyDetails}
                 setPropertyDetails={setPropertyDetails}

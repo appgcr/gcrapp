@@ -12,6 +12,7 @@ import ChatSystem from './ChatSystem';
 import { API_BASE_URL } from '../../config/api';
 import { authHeaders } from './authHeaders';
 import { isAdminRole, isSuperAdmin } from '../../utils/session';
+import { useScreenActions } from '../../utils/screenActions';
 
 // Gouru Assistive Touch — modelled on iPhone (Settings › Accessibility › Touch › AssistiveTouch).
 //
@@ -53,6 +54,7 @@ export default function GlobalChatWidget({ currentUser, unreadChats = 0 }) {
   const [position, setPosition] = useState(loadPosition);
   const [isDragging, setIsDragging] = useState(false);
   const [menu, setMenu] = useState(null); // null | 'root' | 'work' | 'device' | 'controls'
+  const screen = useScreenActions(); // actions of the screen on view → the top row
   const [showMini, setShowMini] = useState(false);
   const [idle, setIdle] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(() => Boolean(document.fullscreenElement));
@@ -216,10 +218,18 @@ export default function GlobalChatWidget({ currentUser, unreadChats = 0 }) {
   const v = nextVisit;
   const visitLabel = v === undefined ? 'Loading…' : v ? (v.c.clientName || `Case #${v.c.id}`).split(' ').slice(-1)[0] : 'No visit';
   const address = v?.c ? (v.c.address || v.c.locationData || '') : '';
+  // Top row: what can be done on the screen on view (it changes with the screen); the other two rows never move
+  const screenRow = (fallback) => {
+    const a = screen?.actions || [];
+    if (!a.length) return fallback;
+    return [0, 1, 2].map((i) => (a[i] ? item(`scr_${a[i].key}`, a[i].label, a[i].Icon, run(a[i].run), { badge: a[i].badge, loading: a[i].disabled, ctx: true }) : null));
+  };
   const fieldMenu = [
-    item('attendance', 'Attendance', CalendarCheck, run(() => quick('attendance'))),
-    item('visit', v ? `Next: ${visitLabel}` : 'Next Visit', MapPin, run(() => v && quick({ action: 'open_case', caseId: v.c.id })), { loading: !v }),
-    item('navigate', 'Navigate', Navigation, run(() => address && window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`, '_blank', 'noopener')), { loading: !address }),
+    ...screenRow([
+      item('attendance', 'Attendance', CalendarCheck, run(() => quick('attendance'))),
+      item('visit', v ? `Next: ${visitLabel}` : 'Next Visit', MapPin, run(() => v && quick({ action: 'open_case', caseId: v.c.id })), { loading: !v }),
+      item('navigate', 'Navigate', Navigation, run(() => address && window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`, '_blank', 'noopener')), { loading: !address }),
+    ]),
     item('call', 'Call Client', Phone, run(() => { if (v?.c?.clientPhone) window.location.href = `tel:${v.c.clientPhone}`; }), { loading: !v?.c?.clientPhone }),
     moreCell,
     item('messages', 'Message Admin', MessageCircle, openMessages, { badge: unreadChats }),
@@ -228,15 +238,18 @@ export default function GlobalChatWidget({ currentUser, unreadChats = 0 }) {
 
   const MENUS = isAdmin ? {
     // Work first: the admin's daily valuation actions on the first screen
+    // Top row: this screen's actions (New Case · Review Queue · Live Map when the screen has none). Rows 2–3 never move.
     root: [
-      item('messages', 'Messages', MessageCircle, openMessages, { badge: unreadChats }), item('new', 'New Case', FilePlus2, run(() => quick('new_case'))), item('review', 'Review Queue', ClipboardCheck, run(() => quick('review_queue'))),
+      ...screenRow([item('new', 'New Case', FilePlus2, run(() => quick('new_case'))), item('review', 'Review Queue', ClipboardCheck, run(() => quick('review_queue'))), item('map', 'Live Map', MapPinned, run(() => quick('live_map')))]),
       item('search', 'Search', Search, run(() => quick('find_case'))), moreCell, notifItem,
-      item('map', 'Live Map', MapPinned, run(() => quick('live_map'))), homeItem, item('controls', 'Controls', SlidersHorizontal, () => setMenu('controls')),
+      item('messages', 'Messages', MessageCircle, openMessages, { badge: unreadChats }), homeItem, item('controls', 'Controls', SlidersHorizontal, () => setMenu('controls')),
     ],
     more: [
       item('broadcast', 'Announce', Megaphone, run(() => quick('broadcast'))), item('attendance', 'Attendance', CalendarCheck, run(() => quick('attendance'))), refreshItem,
       topItem, 'back', deviceItem,
-      null, hideItem, null,
+      // The everyday items the screen's actions took the place of
+      screen?.actions?.length ? item('new', 'New Case', FilePlus2, run(() => quick('new_case'))) : null, hideItem,
+      screen?.actions?.length ? item('review', 'Review Queue', ClipboardCheck, run(() => quick('review_queue'))) : null,
     ],
     controls: [
       null, item('browserAlerts', 'Desktop Alerts', BellRing, () => setLocalSwitch('browserAlerts', 'admin_push_notifications', !controls.browserAlerts, 'Desktop alerts'), { on: controls.browserAlerts }), null,
@@ -362,7 +375,7 @@ export default function GlobalChatWidget({ currentUser, unreadChats = 0 }) {
                 <button
                   key={c.key}
                   role="menuitem"
-                  className={`gcr-at-item ${isToggle ? 'is-toggle' : ''} ${c.on ? 'is-on' : ''}`}
+                  className={`gcr-at-item ${isToggle ? 'is-toggle' : ''} ${c.on ? 'is-on' : ''} ${c.ctx ? 'is-ctx' : ''}`}
                   onClick={c.onClick}
                   disabled={c.loading}
                   aria-pressed={isToggle ? !!c.on : undefined}
@@ -457,6 +470,8 @@ export default function GlobalChatWidget({ currentUser, unreadChats = 0 }) {
         .gcr-at-item:hover, .gcr-at-item:focus-visible { background: rgba(255, 255, 255, 0.1); outline: none; }
         .gcr-at-item:active { background: rgba(255, 255, 255, 0.18); }
         .gcr-at-item:disabled { opacity: 0.4; cursor: default; }
+        .gcr-at-item.is-ctx .gcr-at-glyph { color: #7dd3fc; }
+        .gcr-at-item.is-ctx .gcr-at-label { color: #e0f2fe; }
         .gcr-at-glyph { position: relative; display: inline-flex; align-items: center; justify-content: center; height: 34px; }
         .gcr-at-label { font-size: 12px; font-weight: 500; line-height: 1.15; text-align: center; letter-spacing: -0.1px; }
 

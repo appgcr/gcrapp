@@ -86,6 +86,8 @@ const valuationCaseSchema = new mongoose.Schema({
     deedDate: String,
     // 'docs' (5 documents + check + site) or 'sheet' (the filled office data sheet, when the branch allows it)
     entryMode: String,
+    // Sheet route only: 'audio' when the details were spoken / an audio recording was uploaded instead of the paper sheet
+    sheetSource: String,
     dealType: String, // 'Mortgage' | 'Purchase'
     // Everything read from the office data sheet (applicant / owner, engineers, extents, road affected,
     // tax amount & name, rates, comments, extras …) — the main values are also copied to the fields above

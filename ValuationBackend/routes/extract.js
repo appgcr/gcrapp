@@ -1116,6 +1116,7 @@ Respond with ONLY valid JSON:
           generationConfig: { responseMimeType: 'application/json' }
         })
       });
+      require('../services/aiStatus').note(res.status, res.ok ? '' : await res.clone().text().catch(() => ''));
       if (res.ok) {
         const data = await res.json();
         const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;

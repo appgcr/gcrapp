@@ -63,7 +63,7 @@ def build_apartment(case, temps, bank=None):
     c_rate = num(rep.get('constructionRate')) or 2000
     age = int(num(pd.get('buildingAge')))
     life = int(num(rep.get('totalLife'), 60)) or 60
-    dep_pct = min(age * num(rep.get('depreciationPerYear'), 1.0), 70.0)
+    dep_pct = apgb.dep_percent(age, rep.get('depreciationPerYear'))
     bld = apgb.money(plinth * c_rate)
     dep = apgb.money(bld * dep_pct / 100)
     net = bld - dep
@@ -127,7 +127,80 @@ def build_apartment(case, temps, bank=None):
     return {'fields': f, 'rows': {}, 'images': images}
 
 
-BUILDERS = {'apartment': build_apartment}
+# ---------------------------------------------------------------- HOUSE
+# From the bank's house sample: land = net extent (Sqyds, least of deed / plan) x rate per Sqyd (no rounding);
+# building = floor plinth x rate less 1%/year; + Parts C–F; total "Say" rounded down to ₹10,000
+# (56,07,864 → 56,00,000); realizable / distress 95% / 90% of the Say, to the nearest ₹10,000.
+HOUSE_BANK = {**BANK, 'realizable': 0.95, 'distress': 0.90, 'say_step': 10000, 'value_round': 10000,
+              'extras': {**bob.HOUSE_EXTRAS,
+                         'partD': [k for k in bob.HOUSE_EXTRAS['partD'] if k != 'am_lift'],
+                         'partF': ['sv_water', 'sv_drainage', 'sv_compoundWall', 'sv_cbDeposits', 'sv_pavement']},
+              'defaults': {'house': {'purpose': 'For Bank Facility', 'tenure': 'Freehold', 'cityTown': 'City',
+                                     'areaResidential': 'Yes', 'areaCommercial': '----', 'areaIndustrial': '----',
+                                     'localBodyType': 'Corporation Limits', 'govtEnactments': 'NA', 'agriConversion': 'NA',
+                                     'occupancy': 'Owners', 'planVerified': 'YES / NO Verified', 'planComments': '  NILL',
+                                     'district': 'Y S R', 'place': 'Kadapa'}}}
+
+
+def bom_extent(yd):
+    sqm = trunc2(yd * 0.836127)
+    return f'{sqm:.2f} Sqmts (or) {yd:.2f} Sqyds (or) ', f'{cents_txt(yd / SQYD_PER_CENT)} Cents'
+
+
+def build_house(case, temps, bank=None):
+    job = bob.build_house(case, temps, bank=HOUSE_BANK)
+    f = job['fields']
+    pd = case.get('propertyDetails') or {}
+    rep = pd.get('report') or {}
+    district = f['district']
+    deed_yd = bob.sqyd_of(rep.get('extentDeedRaw') or pd.get('netExtent'))
+    plan_yd = bob.sqyd_of(rep.get('netExtentPlanRaw')) or deed_yd
+    yd = min(x for x in (deed_yd, plan_yd) if x) if (deed_yd or plan_yd) else 0
+    rate = num(rep.get('landRatePerSqyd')) or num(pd.get('landRate')) or round(num(rep.get('marketRatePerCent')) / 48.4)
+    guide = num(rep.get('guidelineRatePerSqyd')) or num(pd.get('guidelineRate'))
+    land = apgb.money(yd * rate)
+    building = num(re.sub(r'[^\d.]', '', f['buildingTotalLine']))
+    parts = sum(num(rep.get(k)) for keys in HOUSE_BANK['extras'].values() for k in keys)
+    total = land + building + parts
+    fmv, _, _ = bob.final_values(f, case, rep, 'house', total, step=HOUSE_BANK['say_step'], bank=HOUSE_BANK)
+
+    da, db = bom_extent(deed_yd)
+    pa, pb = bom_extent(plan_yd)
+    ca, cb = bom_extent(yd)
+    survey, door, ward = f['surveyNo'] or '---', f['doorNo'] or '---', f.get('wardNo') or '---'
+    kind = rep.get('buildingKindTitle') or 'Residential Building'
+    floors = f.get('floorsLine') or '(GF)'
+    loc = (f'In Site Survey No : {survey}, Door No : {door}, Ward No : {ward}, In {f.get("landmark") or "---"},'
+           + (f' Near {rep["nearBy"]},' if rep.get('nearBy') else '')
+           + f' {f.get("village") or "---"} Village Field At {f.get("localBodyName")} Of  {dotted(district)} (Dt).')
+    plan_no, plan_dt = f.get('planNo') or 'NA', f.get('planDate') or '---'
+    f.update({
+        'houseTitle': f'{kind} {floors.strip()}, {loc}', 'postalLine': loc,
+        'ownerLine1': (f'{f["owner1Name"]}, {f["owner1Rel"]}.' if f.get('owner1Rel') not in (None, DROP, '')
+                       else f'{f["owner1Name"]}.'),
+        'deedLineBom': f'Deed : {pd.get("deedNo") or "---"}, Date: {f.get("deedDate") or "---"}',
+        'planLineBom': f'B.A No : {plan_no}, Date : {plan_dt}.' if plan_no != 'NA' else 'NA',
+        'planValidity': rep.get('planValidity') or '---',
+        'extentDeedBom': da + db, 'extentDeedBomA': da, 'extentDeedBomB': db, 'extentPlanBom': pa + pb,
+        'extentConsBomA': ca, 'extentConsBomB': cb,
+        'sizeNorthSouth': rep.get('sizeNorthSouth') or f.get('dimDeedNorth') or '---',
+        'sizeEastWest': rep.get('sizeEastWest') or ' & '.join(x for x in (f.get('dimDeedEast'), f.get('dimDeedWest')) if x and x != '---') or '---',
+        'marketRateLine': f'Rs {inr(rate)}/- Per Sqyds', 'guidelineRateLine': f'Rs {int(guide)}/- per Sqyds' if guide else '---',
+        'guidelineValueLine': f'   Rs {inr(apgb.money(yd * guide))}/- (Land)' if guide else ' ',
+        'sroValue': f'{inr(apgb.money(yd * guide))}/- (Land)'.replace('/- (Land)', '') if guide else '---',
+        'adoptedRateLine': f'{yd:.2f} Sqyds  X  Rs {inr(rate)}/- Sqyds', 'landValueLine': f'Rs {inr(land)}/-',
+        'absA': f'Rs {inr(land)}/-', 'absB': f'Rs {inr(building)}/-', 'absTotal': f'Rs  {inr(total)}/-',
+        'absSayAs': f'Rs  {inr(fmv)}/-',
+        'declBackground': f'Net Extent {cents_txt(yd / SQYD_PER_CENT)} Cents, {kind} {floors}, {loc}',
+        'declPurpose': f'For collateral security. Manager, Bank of Maharashtra, {(case.get("bankBranch") or "---").strip()} ,{dotted(district)} (Dt).',
+        'declDates1': f'Date of appointment : {f["inspectionDate"]}, ', 'declDates2': f'Valuation date : {f["reportDate"]}, ',
+        'declDates3': f'Date of report : {f["reportDate"]}.',
+    })
+    apply_overrides(f, rep)
+    return job
+
+
+BUILDERS = {'apartment': build_apartment, 'house': build_house}
 TEMPLATES = {name: f'bom_{name}.docx' for name in BUILDERS}
 format_for = apgb.format_for
 

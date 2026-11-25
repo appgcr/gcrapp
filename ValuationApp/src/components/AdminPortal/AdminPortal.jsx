@@ -1,6 +1,6 @@
 import { API_BASE_URL } from '../../config/api';
 import React, { useState, useEffect, useRef } from 'react';
-import { LayoutDashboard, ClipboardList, PenSquare, Users, Settings, MessageCircle, Megaphone, LogOut, MapPinned, IndianRupee, CalendarRange } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, PenSquare, Users, Settings, MessageCircle, Megaphone, LogOut, MapPinned, IndianRupee, CalendarRange, FolderOpen } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import './AdminPortal.css';
@@ -19,6 +19,7 @@ import { GridIcon, DocIcon, CalendarIcon, PeopleIcon, GearIcon, MapIcon } from '
 import AdminValueMap from './AdminValueMap';
 import AdminFees from './AdminFees';
 import AdminMonthly from './AdminMonthly';
+import AdminReportsLibrary from './AdminReportsLibrary';
 import { isSuperAdmin } from '../../utils/session';
 import GcrLogo from '../Shared/GcrLogo';
 import PullDownReach from '../Shared/PullDownReach';
@@ -237,7 +238,8 @@ export default function AdminPortal({ currentUser, handleLogout }) {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard': return <AdminDashboard onNavigate={handleNavigate} />;
+      case 'dashboard': return <AdminDashboard onNavigate={handleNavigate} showLibrary={isSuperAdmin(currentUser)} />;
+      case 'library': return isSuperAdmin(currentUser) ? <AdminReportsLibrary /> : null;
       case 'cases': return <AdminCases defaultFilter={caseFilter} currentUser={currentUser} />;
       case 'forms': return <AttendanceLogs />; // Repurposing attendance logs as Forms for now
       case 'staff': return <AdminStaff currentUser={currentUser} />;
@@ -308,6 +310,15 @@ export default function AdminPortal({ currentUser, handleLogout }) {
           </button>
           {isSuperAdmin(currentUser) && (
             <button
+              className={`admin-sidebar-item ${activeTab === 'library' ? 'active' : ''}`}
+              onClick={() => setActiveTab('library')}
+            >
+              <FolderOpen size={18} />
+              <span>Reports Library</span>
+            </button>
+          )}
+          {isSuperAdmin(currentUser) && (
+            <button
               className={`admin-sidebar-item ${activeTab === 'valuemap' ? 'active' : ''}`}
               onClick={() => setActiveTab('valuemap')}
             >
@@ -366,6 +377,7 @@ export default function AdminPortal({ currentUser, handleLogout }) {
                   {activeTab === 'cases' && 'Cases'}
                   {activeTab === 'forms' && 'Attendance'}
                   {activeTab === 'staff' && 'Staff'}
+                  {activeTab === 'library' && 'Reports Library'}
                   {activeTab === 'settings' && 'Settings'}
                 </div>
                 {activeTab !== 'settings' && <BranchSwitcher currentUser={currentUser} />}

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { FileText, Image as ImageIcon, Loader2, X, Download, FolderOpen, FileWarning, Sparkles } from 'lucide-react';
+import { FileText, Image as ImageIcon, Loader2, X, Download, FolderOpen, FileWarning, Sparkles, Mic, Upload } from 'lucide-react';
 import { API_BASE_URL } from '../../config/api';
 import { authHeaders } from '../Shared/authHeaders';
 import { isWordFile, resolveDocUrl } from '../../utils/docFiles';
@@ -127,6 +127,27 @@ function FilesSheet({ c, onClose }) {
                   ))}
                 </div>
               </>)}
+              {Array.isArray(docs.voiceNotes) && docs.voiceNotes.length > 0 && (<>
+                <div className="cf-sec">Voice notes <small>{docs.voiceNotes.length} · what the engineer said and what Gouru AI heard</small></div>
+                <div className="cf-ai">
+                  {docs.voiceNotes.map((v, k) => (
+                    <div key={v.hash || v.id || k} className="cf-ai-row cf-vn">
+                      <div className="cf-vn-h">
+                        {v.source === 'upload' ? <Upload size={15} /> : <Mic size={15} />}
+                        <b>{v.source === 'upload' ? 'Uploaded recording' : 'Spoken at the site'}</b>
+                        <span>{[v.at ? new Date(v.at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: 'numeric', minute: '2-digit' }) : v.uploadedAt, v.seconds ? `${Math.floor(v.seconds / 60)}:${String(v.seconds % 60).padStart(2, '0')}` : '', v.filled ? `${v.filled} details filled` : ''].filter(Boolean).join(' · ')}</span>
+                      </div>
+                      <audio controls preload="metadata" src={resolveDocUrl(v.url)} style={{ width: '100%' }} aria-label={`Voice note ${k + 1}`} />
+                      {v.transcript && (
+                        <details className="cf-vn-t">
+                          <summary>What Gouru AI heard</summary>
+                          <p>{v.transcript}</p>
+                        </details>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>)}
               {full.siteSelfie && (<>
                 <div className="cf-sec">Engineer selfie at the site</div>
                 <div className="cf-photos">
@@ -195,6 +216,11 @@ function FilesSheet({ c, onClose }) {
         .cf-ai-ok { display: flex; gap: 8px; align-items: center; color: #166534; font-size: 13.5px; font-weight: 600; }
         .cf-ai-row { border-top: 1px solid #f1f5f9; padding-top: 8px; font-size: 13.5px; }
         .cf-ai-row:first-of-type { border-top: 0; padding-top: 0; }
+        .cf-vn { display: flex; flex-direction: column; gap: 6px; }
+        .cf-vn-h { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: #4338ca; } .cf-vn-h b { color: #1e1b4b; } .cf-vn-h span { color: #64748b; font-size: 12.5px; }
+        .cf-vn-t summary { cursor: pointer; font-size: 12.5px; font-weight: 700; color: #4f46e5; }
+        .cf-vn-t p { margin: 6px 0 0; font-size: 13px; line-height: 1.5; color: #334155; white-space: pre-wrap; }
+        body.dark-theme .cf-vn-h b { color: #fff; } body.dark-theme .cf-vn-t p { color: #d1d5db; }
         .cf-ai-q { color: #0f172a; }
         .cf-ai-a { margin-top: 4px; padding: 6px 9px; border-radius: 8px; background: #f0fdf4; color: #166534; display: flex; flex-direction: column; gap: 2px; }
         .cf-ai-a.change { background: #fff7ed; color: #9a3412; }

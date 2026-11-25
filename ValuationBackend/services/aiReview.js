@@ -156,15 +156,38 @@ async function buildReview(draft, { user = null, readFile } = {}) {
   return list;
 }
 
-/** The engineer's spoken answer → { transcript, decision: keep | change | explain, value, note } */
+/** The engineer's spoken answer → { transcript, decision: keep | change | explain, value, note, sure } */
 async function understandAnswer(audioDataUrl, question) {
-  const prompt = `A valuation engineer was asked: "${question.text}"${question.label ? ` (field: ${question.label}, current value: "${question.current}")` : ''}.
-They answered by voice (English, Telugu or mixed). Answer JSON:
-{"transcript": "what they said, in English", "decision": "keep" (the current value is right) | "change" (give the corrected value) | "explain" (a reason, no change), "value": "the corrected value when decision is change, as it should be written in the form", "note": "their reason in one short sentence"}`;
+  const q = question || {};
+  const isField = !!(q.field || q.label);
+  const prompt = `You are listening to a valuation engineer in Andhra Pradesh answering Gouru AI on a phone call (English, Telugu or mixed).
+Gouru AI asked: "${q.text || ''}"${q.te ? `\n(Asked in Telugu as: "${q.te}")` : ''}
+${isField ? `This is about the form field "${q.label || q.field}". Value in the form now: "${q.current || '(empty)'}".${q.suggest ? ` Gouru AI's suggested value: "${q.suggest}".` : ''}` : 'This is a yes / no question (is it correct as it is?), not a field to fill.'}
+
+IMPORTANT — the recording may START with Gouru AI's own voice still reading the question (from the phone speaker).
+Ignore Gouru AI's voice completely: use ONLY the engineer's reply that comes after it. Never treat words of the question as the answer.
+
+How engineers answer:
+- Yes / it is right / keep it: "avunu", "avunandi", "sari", "sare", "correct", "correct andi", "ade correct", "alage undi", "ok", "yes", "form lo unnade correct", "maarchakandi" (don't change).
+- No / change it: "kaadu", "kaadandi", "ledu", "tappu" (wrong), "maarchandi" / "change cheyyandi" (change it) — when they only say "change it" and a suggested value exists, the new value is the suggested value.
+- A value said ("muppai feet" = 30 ft, "iravai naalugu" = 24, "2024 correct", "sale deed lo unnadi correct") → the value as it should be written in the form (deed numbers like "1234/2024"; widths like "30 ft"; amounts in digits).
+- A reason (why it is different, e.g. "pakkana kaaluva undi" = there is a canal next to it) → explain.
+Decision:
+${isField ? `- "keep": the value in the form is right. "change": a different value is right (give it in "value"). "explain": they give a reason and no new value.` : `- "keep": yes, it is correct as it is. "explain": no / it is different, with their reason in "note". ("change" is not used for yes / no questions.)`}
+- "sure": false when the reply was unclear, cut off, too quiet, or you are guessing.
+Reply with ONLY this JSON:
+{"transcript": "ONLY the engineer's reply, in English", "decision": "keep" | "change" | "explain", "value": "", "note": "their reason in one short sentence, or empty", "sure": true}`;
+  // Full thinking on purpose: an answer is short, and with the question's echo at the start it needs care (tested:
+  // 7/7 Telugu answers with echo + noise vs 3/7 with low thinking)
   const out = await askJson(prompt, [audioDataUrl], { timeoutMs: 45000 });
   if (!out) return null;
-  const decision = ['keep', 'change', 'explain'].includes(out.decision) ? out.decision : 'explain';
-  return { transcript: String(out.transcript || '').slice(0, 500), decision, value: String(out.value || '').slice(0, 200), note: String(out.note || '').slice(0, 300) };
+  let decision = ['keep', 'change', 'explain'].includes(out.decision) ? out.decision : 'explain';
+  let value = String(out.value || '').trim();
+  // "Change it" with no value said → the suggested value; a yes / no question never changes a field
+  if (decision === 'change' && !value && q.suggest) value = String(q.suggest);
+  if (decision === 'change' && !value) decision = 'explain';
+  if (!isField && decision === 'change') decision = 'explain';
+  return { transcript: String(out.transcript || '').slice(0, 500), decision, value: value.slice(0, 200), note: String(out.note || '').slice(0, 300), sure: out.sure !== false };
 }
 
 module.exports = { buildReview, understandAnswer, FIELDS };

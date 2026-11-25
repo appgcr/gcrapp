@@ -43,7 +43,7 @@ async function contactFor(c) {
 }
 
 const env = (k) => config[k] ?? process.env[k];
-const emailReady = () => String(env('EMAIL_ENABLED')).toLowerCase() === 'true'
+const emailReady = () => !require('./testServer').outgoingBlocked() && String(env('EMAIL_ENABLED')).toLowerCase() === 'true'
   && env('SMTP_HOST') && env('SMTP_USERNAME') && env('SMTP_PASSWORD') && env('EMAIL_FROM');
 
 function messageFor(c, link) {

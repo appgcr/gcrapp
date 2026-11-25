@@ -17,10 +17,18 @@ const FALLBACK_PROPERTY_TYPES = [
   'Commercial Building',
   'Industrial Unit'
 ];
+// Plot position by the roads at the site (office rule): road on 1 side → Intermittent; 2 sides meeting at a corner → Corner;
+// 3 sides → Double Corner; 4 sides → Island
 const FALLBACK_PLOT_TYPES = [
+  'Intermittent Plot',
   'Corner Plot',
-  'Intermediary Plot',
-  'Road-Facing Plot'
+  'Double Corner Plot',
+  'Island Plot'
+];
+/** Plot type list from Settings → always the 4 office types first (old "Intermediary" = Intermittent), then any others */
+const withOfficePlotTypes = (list = []) => [
+  ...FALLBACK_PLOT_TYPES,
+  ...(Array.isArray(list) ? list : []).filter((t) => t && !/intermedia|intermit|corner|island/i.test(t)),
 ];
 const FALLBACK_ROAD_TYPES = [
   'CC Road',
@@ -1003,7 +1011,7 @@ const applyLocalMetaDirectly = (localMeta, setPropertyDetails, setClientName, ma
 
 // ── Dedicated Local Sale Deed Autofill Mapper ──────────────────────────────────
 // Plot type from the sides that touch a road (same rule as the report, no entry needed):
-// 1 road side or 2 opposite sides → Intermediary; 2 sides meeting at a corner → Corner;
+// 1 road side or 2 opposite sides → Intermittent; 2 sides meeting at a corner → Corner;
 // 3 sides → Double Corner; 4 sides → Island. Site (actual) boundaries first, else the deed's.
 const ROAD_SIDE = /\b(road|rd|street|st\.?|lane|rastha|rasta|highway|nh|main\s*road)\b(?!\s*(no|number)\b)/i;
 export const plotFromRoads = (pd = {}) => {
@@ -1013,10 +1021,10 @@ export const plotFromRoads = (pd = {}) => {
     if (!texts.some(t => t.trim())) continue;
     const roads = sides.filter((sd, i) => ROAD_SIDE.test(texts[i]));
     if (!roads.length) return '';
-    if (roads.length === 1) return 'Intermediary Plot';
+    if (roads.length === 1) return 'Intermittent Plot';
     if (roads.length === 2) {
       const k = roads.join(',');
-      return (k === 'north,south' || k === 'east,west') ? 'Intermediary Plot' : 'Corner Plot';
+      return (k === 'north,south' || k === 'east,west') ? 'Intermittent Plot' : 'Corner Plot';
     }
     return roads.length === 3 ? 'Double Corner Plot' : 'Island Plot';
   }
@@ -1788,6 +1796,7 @@ const FLOOR_LABELS = [
 export {
   FALLBACK_PROPERTY_TYPES,
   FALLBACK_PLOT_TYPES,
+  withOfficePlotTypes,
   FALLBACK_ROAD_TYPES,
   FALLBACK_STRUCTURE_TYPES,
   FALLBACK_FLOORING_TYPES,

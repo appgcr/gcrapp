@@ -161,6 +161,7 @@ $('fill').onclick = async () => {
   if (!portal) { show('Open the portal form (Valocity) in this tab first, then press Fill.', 'err'); return; }
   try {
     setFillReady(true);
+    show('Filling… Valocity’s address search boxes are slow, so this can take up to a minute. You can close this popup — the result appears on the page.', '');
     const full = await api(`/api/cases/${encodeURIComponent(selected.id)}`);
     const fields = portal.fields(caseValues(full));
     const target = { tabId: tab.id, allFrames: false };

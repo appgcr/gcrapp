@@ -199,7 +199,7 @@ def build_apartment(case, temps, bank=None):
     c_rate = num(rep.get('constructionRate')) or 2200
     age = int(num(pd.get('buildingAge')))
     life = int(num(rep.get('totalLife'), 60)) or 60
-    dep_pct = min(age * num(rep.get('depreciationPerYear'), 1.0), 70.0)
+    dep_pct = apgb.dep_percent(age, rep.get('depreciationPerYear'))
     bld = apgb.money(plinth * c_rate)
     dep = apgb.money(bld * dep_pct / 100)
     net = bld - dep
@@ -336,7 +336,116 @@ def build_open_site(case, temps, bank=None):
     return {'fields': f, 'rows': {}, 'images': images}
 
 
-BUILDERS = {'house': build_house, 'apartment': build_apartment, 'open_site': build_open_site}
+# ---------------------------------------------------------------- AGRICULTURE LAND
+AGRI_DEFAULTS = {
+    'purpose': 'For Bank Purpose', 'planLine': 'NA', 'mvCertificate': 'Copy Enclosed', 'doorNo': '---',
+    'postalAddress': 'As Of The Above', 'cityTown': 'City', 'areaResidential': 'Agriculture Area', 'areaCommercial': 'NA',
+    'areaIndustrial': 'NA', 'areaClass': 'Middle', 'areaUrban': 'Rural', 'localBodyType': 'Panchayat',
+    'govtEnactments': 'NA', 'agriConversion': 'Agricultural Land', 'occupancy': 'Owner', 'locality': 'Middle',
+    'surroundings': 'Agriculture', 'flooding': 'Nil', 'civicAmenities': 'At  Walkable Distance',
+    'levelOfLand': 'Level Ground', 'landShape': 'Rectangular', 'landUse': 'Agriculture', 'usageRestriction': 'Nil',
+    'layoutApproved': 'NA', 'cornerPlot': '--', 'roadFacilities': 'Yes', 'roadType': 'Metal', 'roadWidth': '20 Below',
+    'landLocked': 'no', 'water': 'Available', 'sewerage': '---', 'power': 'Provided',
+    'advantage1': 'Good Agriculture Area', 'specialRemarks': 'Nil', 'district': 'Y.S.R', 'place': 'Kadapa',
+}
+
+
+def ac_txt(acres):
+    """'Ac 18.435' / 'Ac 5.74' — the bank's own way of writing acres (2 or 3 decimals)."""
+    s = f'{acres:.3f}'
+    return s[:-1] if s.endswith('0') else s
+
+
+def acres_of(value):
+    if re.search(r'[a-z]', str(value or ''), re.I):
+        return apgb.acres_of(value)
+    return num(value)
+
+
+def build_agriculture(case, temps, bank=None):
+    """Land items: report.items = [{survey, extent (acres), deedNo, deedDate, north, south, east, west}, …]
+    (one per sale deed). 1-B entries: report.khatas = [{applicant, khataNo, survey, extent}, …] (up to four).
+    Without them the case's own deed, survey number, extent and boundaries are used."""
+    pd = case.get('propertyDetails') or {}
+    rep = pd.get('report') or {}
+    f = apgb.common_fields(case, rep, dict(AGRI_DEFAULTS))
+    bob.owners(f, case, rep)
+    owner_fields(f, case, rep, n=4)
+    district = f['district']
+    village = rep.get('village') or pd.get('village') or '---'
+    panchayat = rep.get('panchayat') or f'{village} Panchayat'
+    mandal = rep.get('mandal') or pd.get('mandal') or '---'
+
+    items = [i for i in (rep.get('items') or []) if i and (i.get('survey') or i.get('extent'))]
+    if not items:
+        bd = pd.get('boundariesDoc') or {}
+        items = [{'survey': pd.get('surveyNo'), 'extent': rep.get('extentDeedRaw') or pd.get('netExtent'),
+                  'deedNo': pd.get('deedNo'), 'deedDate': pd.get('deedDate'), **bd}]
+    acres = [acres_of(i.get('extent')) for i in items]
+    doc_total = sum(acres)
+    deeds = []
+    for i in items:
+        no = i.get('deedNo') or ''
+        dt = apgb.ddmmyyyy(i.get('deedDate')) or i.get('deedDate') or ''
+        if no and f'{no}|{dt}' not in deeds:
+            deeds.append(f'{no}|{dt}')
+    deed_lines = [f'{n}, Dt : {d}.' if d else f'{n}.' for n, d in (x.split('|') for x in deeds)] or ['---']
+    deed_lines[0] = 'Xerox Copy Of Sale Deed No : ' + deed_lines[0]
+    surveys = ', '.join(str(i.get('survey')) for i in items if i.get('survey')) or (f['surveyNo'] or '---')
+
+    khatas = [k for k in (rep.get('khatas') or []) if k and (k.get('khataNo') or k.get('survey'))][:4]
+    if not khatas:
+        khatas = [{'applicant': case.get('clientName'), 'khataNo': pd.get('khathaNo') or rep.get('khataNo'),
+                   'survey': surveys, 'extent': doc_total}]
+    kb_acres = [acres_of(k.get('extent')) for k in khatas]
+    kb_total = sum(kb_acres)
+    considered = min(doc_total, kb_total) if kb_total else doc_total
+    for n in range(1, 5):
+        if n <= len(khatas):
+            k = khatas[n - 1]
+            f[f'kb{n}Applicant'] = f'Applicant : {k.get("applicant") or "---"}'
+            f[f'kb{n}Khata'] = f'As Per 1-B Report Khata No : {k.get("khataNo") or "---"}, Survey No & Total Extent : '
+            f[f'kb{n}Survey'] = f'Survey No : {k.get("survey") or "---"}'
+            f[f'kb{n}Total'] = f'Total Extent : Ac {ac_txt(kb_acres[n - 1])} Cents '
+        else:
+            for key in ('Applicant', 'Khata', 'Survey', 'Total'):
+                f[f'kb{n}{key}'] = DROP
+
+    rate = num(rep.get('ratePerAcre')) or num(pd.get('landRate'))
+    guide = num(rep.get('guidelineRatePerAcre'))
+    land = apgb.money(considered * rate)
+    fmv, _, _ = bob.final_values(f, case, rep, 'agriculture', land, step=BANK['site_say_step'], bank=BANK)
+    loc = f'{village} Village, {panchayat}, {mandal} Mandal of  {dotted(district)} (Dt).'
+    f.update({
+        'districtShort': dotted(district), 'khataNos': ', '.join(str(k.get('khataNo')) for k in khatas if k.get('khataNo')) or '---',
+        'agTitle': f'Agriculture Land In Site Survey No’s : {surveys}, {loc}',
+        'mandalLine': f'{mandal} Mandal  of  {dotted(district)} (Dt).',
+        'kbGrandTotal': f'Total Extent : Ac {ac_txt(kb_total)} Cents' if len(khatas) > 1 else DROP,
+        'deedListText': '\n'.join(deed_lines),
+        'agDesc': f'In Site Survey No’s : {surveys}, {loc}', 'surveyLine': f'Survey No’S : {surveys}',
+        'villageLine': f'{village} Village Field', 'panchayatLine': f'{panchayat},',
+        'mandalLineAt': f'At {mandal} Mandal of  {dotted(district)} (Dt).',
+        'docTotalLine': f'Ac {ac_txt(doc_total)} Cents', 'kbTotalLine': f'Ac {ac_txt(kb_total)} Cents',
+        'extentDeed': f'Ac {ac_txt(considered)} Cents ', 'extentConsidered': f'Ac {ac_txt(considered)} Cents ',
+        'marketRateLine': f'Rs {inr(rate)}/- Acre', 'guidelineRateLine': f'Rs {inr(guide)}/- Acre' if guide else 'NA',
+        'adoptedRateLine': f'Ac {ac_txt(considered)} Cents X Rs {inr(rate)}/- Acre', 'landValueLine': f'Rs {inr(land)}/-',
+        'absA': f'Rs.  {inr(land)}/-', 'absTotal': f'Rs.  {inr(land)}/-', 'absSayAs': f'Say Rs {inr(fmv)}/-',
+        'declBackground': f'Ac {ac_txt(considered)} Cents of freehold land belonging to the client. The land bearing At  '
+                          f'Site Survey No’s : {surveys}, {loc}',
+    })
+    rows = [{'deed': it.get('deedNo') or f'Item {n}', 'extent': f'Ac {ac_txt(ac)} Cents',
+             **{side: it.get(side) or '---' for side in ('north', 'south', 'east', 'west')}}
+            for n, (it, ac) in enumerate(zip(items, acres), start=1)]
+    common(f, case, rep, 'agriculture', loc)
+    f['declPurpose'] = (f'For collateral security. Manager, Indian Overseas Bank, '
+                        f'{(case.get("bankBranch") or "---").strip().title()} Branch- {dotted(district)} (Dt)')
+    images = apgb.geo_and_photos(case, rep, f, temps, 4)
+    apply_overrides(f, rep)
+    return {'fields': f, 'rows': {'ld': rows}, 'images': images}
+
+
+BUILDERS = {'house': build_house, 'apartment': build_apartment, 'open_site': build_open_site,
+            'agriculture': build_agriculture}
 TEMPLATES = {name: f'iob_{name}.docx' for name in BUILDERS}
 format_for = apgb.format_for
 

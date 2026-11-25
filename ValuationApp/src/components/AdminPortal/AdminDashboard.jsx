@@ -6,7 +6,7 @@ import AdminInsights from './AdminInsights';
 import DashboardSummary from './DashboardSummary';
 import IntakeBreakdown from './IntakeBreakdown';
 import { Row, BackBar, IosSettingsStyles } from '../Shared/IosSettings';
-import { Layers, BarChart3, FileText, Users, Landmark } from 'lucide-react';
+import { Layers, BarChart3, FileText, Users, Landmark, FolderOpen, ChevronRight } from 'lucide-react';
 
 const timeAgo = (iso) => {
   const t = new Date(iso).getTime();
@@ -104,7 +104,29 @@ function computeIntakePeriod(filter, customStartDate, customEndDate) {
   return { buckets, rangeStart, rangeEnd, invalid };
 }
 
-export default function AdminDashboard({ onNavigate }) {
+// Red banner while Gouru AI (Gemini) is stopped by Google: quota used up or key refused
+function AiStatusBanner() {
+  const [s, setS] = useState(null);
+  useEffect(() => {
+    let live = true;
+    const check = () => fetch(`${API_BASE_URL}/api/assist/ai-status`).then((r) => (r.ok ? r.json() : null)).then((d) => { if (live) setS(d); }).catch(() => {});
+    check();
+    const id = setInterval(check, 60000);
+    return () => { live = false; clearInterval(id); };
+  }, []);
+  if (!s || s.ok) return null;
+  const since = s.since ? new Date(s.since).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }) : '';
+  return (
+    <div role="alert" style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', borderRadius: 14, padding: '12px 14px', margin: '0 0 14px', fontSize: 13.5, lineHeight: 1.45 }}>
+      <b style={{ display: 'block', fontSize: 14.5 }}>{s.problem === 'quota' ? 'Gouru AI limit reached' : 'Gouru AI key refused'}{since ? ` · since ${since}` : ''}</b>
+      {s.problem === 'quota'
+        ? 'Voice fill, document reading and the review call are paused. Raise the limit or add billing in Google AI Studio (aistudio.google.com → Usage / Billing). Engineers can still type the details.'
+        : 'Google refused the GEMINI_API_KEY on the server. Fix the key in the server settings. Engineers can still type the details.'}
+    </div>
+  );
+}
+
+export default function AdminDashboard({ onNavigate, showLibrary = false }) {
   const [stats, setStats] = useState({
     completed: 0,
     pending: 0,
@@ -470,10 +492,18 @@ export default function AdminDashboard({ onNavigate }) {
 
   return (
     <div className="animate-fade-in gcr-dashboard ios-settings ios-dash">
+      <AiStatusBanner />
       {/* Key numbers (live data) */}
       <DashboardSummary cases={cases} users={users} />
 
       {onNavigate && <FeesShortcut onOpen={() => onNavigate('fees')} onMonthly={() => onNavigate('monthly')} />}
+      {onNavigate && showLibrary && (
+        <button type="button" className="fsc" onClick={() => onNavigate('library')}>
+          <span className="fsc-ic" style={{ background: '#0f172a' }}><FolderOpen size={18} /></span>
+          <span className="fsc-t"><b>Reports library</b><small style={{ color: '#64748b' }}>Every finished report by bank and property type</small></span>
+          <ChevronRight size={18} className="fsc-ch" />
+        </button>
+      )}
 
       {/* Only what needs action — or a single "All caught up" row */}
       <AdminInsights cases={cases} users={users} onNavigate={onNavigate} only="attention" />

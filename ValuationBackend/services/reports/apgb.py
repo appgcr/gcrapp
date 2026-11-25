@@ -74,6 +74,21 @@ def num(v, default=0.0):
     return float(m.group(0).replace(',', '')) if m else default
 
 
+
+# Building depreciation — the office rule: nothing for the first 3 completed years; from the 4th year the age
+# in percent (4 years → 4 %, 5 years → 5 % … 30 years → 30 %). A building over 30 years old is not
+# eligible for valuation (the app stops it before submit). Land never depreciates.
+MAX_BUILDING_AGE = 30
+NO_DEPRECIATION_UPTO = 3
+
+
+def dep_percent(age, per_year=None):
+    a = max(num(age), 0.0)
+    if a <= NO_DEPRECIATION_UPTO:
+        return 0.0
+    rate = num(per_year, 1.0) or 1.0
+    return round(min(a, MAX_BUILDING_AGE) * rate, 2)
+
 def ddmmyyyy(v):
     if not v:
         return ''
@@ -401,7 +416,7 @@ def build_house(case, temps):
     age = int(num(pd.get('buildingAge')))
     life = int(num(rep.get('totalLife'), 60)) or 60
     year = rep.get('yearOfConstruction') or (str(dt.date.today().year - age) if age else '---')
-    dep_pct = min(age * num(rep.get('depreciationPerYear'), 1.0), 70.0)
+    dep_pct = dep_percent(age, rep.get('depreciationPerYear'))
     rate_sft = num(rep.get('constructionRate')) or num((case.get('valuation') or {}).get('constructionRate')) or 2500
     floors_src = (pd.get('siteValue') or {}).get('floors') or []
     floors, total_net, plinth_lines = [], 0, []
@@ -562,8 +577,7 @@ def site_choices(f, pd):
                          'Mud / Gravel Road' if 'mud' in r or 'gravel' in r else road)
     plot = (pd.get('plotType') or '').lower()
     if plot:
-        f['cornerPlot'] = ('Corner Plot' if 'corner' in plot else 'Intermittent Plot' if 'interm' in plot else
-                           'Road Facing Plot' if 'road' in plot else pd['plotType'])
+        f['cornerPlot'] = plot_name(pd['plotType']) if 'road' not in plot else 'Road Facing Plot'
     width = str(pd.get('roadWidth') or '').strip()
     if width:
         m = re.fullmatch(r'(\d+(?:\.\d+)?)\s*(ft|feet|fts|’|\')?', width, re.I)
@@ -773,7 +787,7 @@ def build_apartment(case, temps):
     rate = num(rep.get('constructionRate')) or num((case.get('valuation') or {}).get('constructionRate')) or 2250
     age = int(num(pd.get('buildingAge')))
     life = int(num(rep.get('totalLife'), 60)) or 60
-    dep_pct = min(age * num(rep.get('depreciationPerYear'), 1.0), 70.0)
+    dep_pct = dep_percent(age, rep.get('depreciationPerYear'))
     bld = money(plinth * rate)
     net = money(bld - bld * dep_pct / 100)
     composite = net + land
@@ -1017,6 +1031,22 @@ TEMPLATES = {name: f'apgb_{name}.docx' for name in BUILDERS}
 
 
 ROAD_SIDE = re.compile(r'\b(road|rd|street|st\.?|lane|rastha|rasta|highway|nh|main\s*road)\b(?!\s*(no|number)\b)', re.I)
+
+
+def plot_name(v):
+    """The engineer's plot type → the office wording (old "Intermediary" = Intermittent)."""
+    t = str(v or '').strip().lower()
+    if not t:
+        return None
+    if 'double' in t:
+        return 'Double Corner Plot'
+    if 'island' in t:
+        return 'Island'
+    if 'corner' in t:
+        return 'Corner Plot'
+    if 'interm' in t:
+        return 'Intermittent Plot'
+    return str(v).strip()
 
 
 def plot_position(case):
