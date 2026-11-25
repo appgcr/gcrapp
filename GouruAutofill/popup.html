@@ -1,0 +1,127 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root { --brand: #0f766e; --brand-dark: #115e59; --brand-soft: #ecfdf5; --ink: #0f172a; --muted: #64748b; --line: #e2e8f0; --bg: #f8fafc; }
+  * { box-sizing: border-box; }
+  body { width: 360px; margin: 0; font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--bg); }
+  header { background: var(--brand); color: #fff; padding: 12px 14px; display: flex; align-items: center; gap: 10px; }
+  header img { width: 32px; height: 32px; border-radius: 8px; background: #fff; padding: 2px; }
+  header .title { font-weight: 600; font-size: 15px; line-height: 1.2; }
+  header .sub { font-size: 11px; opacity: .85; }
+  header .grow { flex: 1; }
+  .iconbtn { background: rgba(255,255,255,.15); border: 0; color: #fff; border-radius: 8px; padding: 6px 9px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 5px; }
+  .iconbtn:hover { background: rgba(255,255,255,.25); }
+  main { padding: 14px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  h2 { margin: 0 0 2px; font-size: 15px; }
+  .muted { color: var(--muted); font-size: 12px; }
+  label { display: block; margin: 12px 0 5px; font-weight: 600; font-size: 12px; color: #334155; }
+  .field { position: relative; }
+  input, select { width: 100%; padding: 9px 11px; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; background: #fff; color: var(--ink); outline: none; transition: border-color .15s, box-shadow .15s; }
+  input:focus, select:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(15,118,110,.15); }
+  .field input { padding-right: 40px; }
+  .field .ico { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+  .field.with-ico input { padding-left: 34px; }
+  .eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: none; cursor: pointer; color: var(--muted); padding: 5px; border-radius: 6px; display: flex; }
+  .eye:hover { color: var(--brand); background: var(--brand-soft); }
+  .btn { width: 100%; margin-top: 14px; padding: 10px; border: 0; border-radius: 8px; background: var(--brand); color: #fff; font-weight: 600; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 8px; transition: background .15s; }
+  .btn:hover { background: var(--brand-dark); }
+  .btn:disabled { background: #f1f5f9; color: #64748b; border: 1px dashed #cbd5e1; cursor: default; }
+  .btn.busy:disabled { background: var(--brand); color: #fff; border: 0; }
+  .btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  details { margin-top: 10px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+  .user { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none; }
+  .tabs { display: flex; background: #f1f5f9; border-radius: 9px; padding: 3px; gap: 3px; margin-bottom: 8px; }
+  .tabs button { flex: 1; border: 0; background: none; padding: 6px 4px; border-radius: 7px; font: inherit; font-size: 12px; color: var(--muted); cursor: pointer; }
+  .tabs button.on { background: #fff; color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  #cases { max-height: 240px; overflow: auto; margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .case { padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px; cursor: pointer; background: #fff; display: flex; gap: 9px; align-items: flex-start; transition: border-color .15s, background .15s; }
+  .case:hover { border-color: #99f6e4; }
+  .case.sel { border-color: var(--brand); background: var(--brand-soft); box-shadow: 0 0 0 1px var(--brand) inset; }
+  .case .info { flex: 1; min-width: 0; }
+  .case .name { font-weight: 600; display: flex; justify-content: space-between; gap: 6px; }
+  .case .name span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .case .meta { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pill { font-size: 10.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px; white-space: nowrap; flex: none; }
+  .pill.done { background: #dcfce7; color: #166534; }
+  .pill.review { background: #fef3c7; color: #92400e; }
+  .pill.other { background: #f1f5f9; color: #475569; }
+  .empty { text-align: center; padding: 18px 8px; color: var(--muted); }
+  .check { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 12px; color: #334155; cursor: pointer; }
+  .check input { width: 15px; height: 15px; accent-color: var(--brand); margin: 0; }
+  .hint { display: flex; gap: 6px; align-items: flex-start; margin-top: 10px; font-size: 11.5px; color: var(--muted); }
+  .msg { margin-top: 12px; padding: 9px 11px; border-radius: 9px; white-space: pre-wrap; font-size: 12px; }
+  .err { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+  .ok { background: #ecfdf5; color: #166534; border: 1px solid #bbf7d0; }
+  .hidden { display: none !important; }
+  .spin { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: s .7s linear infinite; }
+  @keyframes s { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<header>
+  <img src="icons/icon48.png" alt="">
+  <div class="grow"><div class="title">Gouru Autofill</div><div class="sub">Fill portal forms from your cases</div></div>
+  <button id="logout" class="iconbtn hidden" title="Log out">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>Log out
+  </button>
+</header>
+<main>
+  <section id="login" class="card">
+    <h2>Welcome back</h2>
+    <div class="muted">Log in with your Gouru Valuations account.</div>
+    <label for="user">Username</label>
+    <div class="field with-ico">
+      <svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>
+      <input id="user" autocomplete="username" placeholder="Your username">
+    </div>
+    <label for="pass">Password</label>
+    <div class="field with-ico">
+      <svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+      <input id="pass" type="password" autocomplete="current-password" placeholder="Your password">
+      <button type="button" class="eye" id="eye" title="Show password" aria-label="Show password">
+        <svg id="eyeOpen" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+        <svg id="eyeShut" class="hidden" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.9 17.9A10.4 10.4 0 0 1 12 19C5.5 19 2 12 2 12a18.5 18.5 0 0 1 4.1-5.1"/><path d="M9.9 5.2A9.6 9.6 0 0 1 12 5c6.5 0 10 7 10 7a18.6 18.6 0 0 1-2.2 3.2"/><path d="M14.1 14.1a3 3 0 1 1-4.2-4.2"/><path d="M2 2l20 20"/></svg>
+      </button>
+    </div>
+    <input id="server" type="hidden" value="https://gcrapp-api.onrender.com">
+    <button class="btn" id="doLogin">Log in</button>
+  </section>
+
+  <section id="main" class="hidden">
+    <div class="card">
+      <div class="user"><div class="avatar" id="avatar">G</div><div><div style="font-weight:600" id="who"></div><div class="muted" id="role"></div></div></div>
+      <div class="tabs" id="tabs">
+        <button data-v="done">Completed</button>
+        <button data-v="review">In review</button>
+        <button data-v="all">All</button>
+      </div>
+      <select id="statusFilter" class="hidden">
+        <option value="done">done</option><option value="review">review</option><option value="all">all</option>
+      </select>
+      <div class="field with-ico">
+        <svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="search" placeholder="Search name, file no, village…">
+      </div>
+      <div id="cases"></div>
+      <label class="check"><input type="checkbox" id="overwrite">Replace values already in the form</label>
+      <button class="btn" id="fill" disabled>
+        <svg id="icoPick" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+        <svg id="icoBusy" class="hidden spin" style="border:0;animation-duration:.9s" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.2-8.6"/></svg>
+        <span id="fillText">Select a case above</span>
+      </button>
+      <div class="hint">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+        <span>Open the portal form in this tab first. It only fills, you check and press Save yourself.</span>
+      </div>
+    </div>
+  </section>
+  <div id="msg" class="msg hidden"></div>
+</main>
+<script type="module" src="popup.js"></script>
+</body>
+</html>

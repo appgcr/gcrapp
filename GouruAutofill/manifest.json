@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Gouru Autofill",
+  "version": "1.0.0",
+  "description": "Fills valuation portal forms (Valocity) from a Gouru Valuations case. You check and save the form yourself.",
+  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "action": { "default_popup": "popup.html", "default_title": "Gouru Autofill" },
+  "permissions": ["storage", "activeTab", "scripting"],
+  "host_permissions": [
+    "https://gcrapp-api.onrender.com/*",
+    "http://localhost/*",
+    "https://connect.valocityglobal.com/*"
+  ]
+}
