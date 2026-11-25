@@ -27,15 +27,15 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>GCR Valuation uses the camera to take geo-tagged site photos, scan property documents and verify your face at check-in.</string>
+	<string>Gouru Valuations uses the camera to take geo-tagged site photos, scan property documents and verify your face at check-in.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Use Face ID to sign in to GCR Valuation quickly and securely.</string>
+	<string>Use Face ID to sign in to Gouru Valuations quickly and securely.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>While you are on duty, GCR Valuation shares your location with your branch so site visits can be assigned and verified. Tracking stops when you go off duty.</string>
+	<string>While you are on duty, Gouru Valuations shares your location with your branch so site visits can be assigned and verified. Tracking stops when you go off duty.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>GCR Valuation records the site location on your inspection photos and confirms you are at the property during a site visit.</string>
+	<string>Gouru Valuations records the site location on your inspection photos and confirms you are at the property during a site visit.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>GCR Valuation lets you choose property documents and photos from your library to attach to a valuation.</string>
+	<string>Gouru Valuations lets you choose property documents and photos from your library to attach to a valuation.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
