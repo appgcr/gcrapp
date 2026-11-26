@@ -122,6 +122,8 @@ export default function VoiceSheetFill({ setSheet, emptySheet, onFilled, apply, 
   const [note, setNote] = useState('');
   const [result, setResult] = useState(null);
   const [stage, setStage] = useState(''); // what Gouru AI is doing while busy
+  const sendRef = useRef(null); // always the latest send (it uses the form's latest values)
+  const waitingForSignal = useRef(false); // a recording that could not be sent (no signal): sent again when back online
   const rec = useRef(null);
   const stream = useRef(null);
   const segments = useRef([]);   // finished pieces (Blobs)
@@ -165,6 +167,13 @@ export default function VoiceSheetFill({ setSheet, emptySheet, onFilled, apply, 
       try { stream.current?.getTracks().forEach((t) => t.stop()); } catch { /* ignore */ }
     };
   }, [storeKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Back online after a recording could not be sent → send it now, no tap needed
+  useEffect(() => {
+    const onOnline = () => { if (waitingForSignal.current && segments.current.length && rec.current == null) { waitingForSignal.current = false; sendRef.current && sendRef.current(); } };
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A call, the screen going off or switching apps → pause at once (what was said so far is kept)
   useEffect(() => {
@@ -341,11 +350,16 @@ export default function VoiceSheetFill({ setSheet, emptySheet, onFilled, apply, 
         toast.error(`${fromFile} could not be opened on this phone. Try an m4a, mp3 or wav file.`, { duration: 7000 });
         return;
       }
-      setNote(`${err.message || 'Could not read the recording.'} Your recording is kept — tap Fill now to try again.`);
+      const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+      waitingForSignal.current = offline || /fetch|network|failed to fetch|load failed/i.test(err.message || '');
+      setNote(waitingForSignal.current
+        ? 'No signal. Your recording is kept on this phone and will be sent by itself when the signal is back.'
+        : `${err.message || 'Could not read the recording.'} Your recording is kept — tap Fill now to try again.`);
       setState('paused');
     }
   };
 
+  sendRef.current = send;
   const time = fmt(secs);
   return (
     <div className="vsf">

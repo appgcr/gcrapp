@@ -30,6 +30,10 @@ export default function AdminMonthly() {
       ...d.engineers.map((e) => [e.name, e.approved, e.submitted, e.returned, e.flagged, e.medianDays ?? '']), [],
       ['Bank', 'Requests', 'Approved', 'Value (Rs)', 'Billed (Rs)', 'Received (Rs)'],
       ...d.banks.map((b) => [b.bank, b.requests, b.approved, Math.round(b.value), b.billed, b.received]),
+      ...(Array.isArray(d.branches) && d.branches.length ? [[], ['Branch', 'Requests', 'Approved', 'Returned', 'Billed (Rs)', 'Received (Rs)', 'Outstanding now (Rs)'],
+        ...d.branches.map((b) => [b.name, b.requests, b.approved, b.returned, b.billed, b.received, b.outstanding])] : []),
+      ...(Array.isArray(d.returns) && d.returns.length ? [[], ['Returned case', 'File no', 'Engineer', 'Date', 'Reason'],
+        ...d.returns.map((r) => [r.clientName, r.fileNumber, r.engineer, r.at ? new Date(r.at).toLocaleDateString('en-IN') : '', r.reason])] : []),
     ];
     const blob = new Blob(['﻿' + rows.map((r) => r.map(q).join(',')).join('\r\n')], { type: 'text/csv' });
     await saveBlobToDevice(blob, `Gouru_Monthly_${d.month}.csv`, { successMsg: 'Monthly report exported' });
@@ -77,6 +81,45 @@ export default function AdminMonthly() {
               ))}
             </div>
           )}
+
+          {Array.isArray(d.branches) && d.branches.length > 1 && (<>
+            <div className="mth-h">Branches</div>
+            <div className="mth-table">
+              <div className="mth-tr mth-th mth-tr5"><span>Branch</span><span>Requests</span><span>Approved</span><span>Returned</span><span>Due</span></div>
+              {d.branches.map((b) => (
+                <div className="mth-tr mth-tr5" key={b.branchId}><span>{b.name}</span><span>{b.requests}</span><b>{b.approved}</b><span className={b.returned ? 'bad' : ''}>{b.returned}</span><span className={b.outstanding ? 'bad' : ''}>{b.outstanding ? inr(b.outstanding) : '—'}</span></div>
+              ))}
+            </div>
+          </>)}
+
+          {Array.isArray(d.paymentChanges) && (<>
+            <div className="mth-h">Payment details changed ({d.paymentChanges.length})</div>
+            {d.paymentChanges.length === 0 ? <div className="mth-none">No changes to bank accounts, UPI or QR this month.</div> : (
+              <div className="mth-table">
+                {d.paymentChanges.map((c, i) => (
+                  <div className="mth-ret mth-pay" key={i}>
+                    <div><b>{c.where}</b><small>{c.byName} · {new Date(c.at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: 'numeric', minute: '2-digit' })}</small></div>
+                    <p>{c.changed.join(' · ')}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>)}
+
+          {Array.isArray(d.returns) && d.returns.length > 0 && (<>
+            <div className="mth-h">Why reports came back ({d.returns.length})</div>
+            {Array.isArray(d.returnTopics) && d.returnTopics.length > 0 && (
+              <div className="mth-topics">{d.returnTopics.map((t) => <span key={t.topic}>{t.topic} <b>{t.count}</b></span>)}</div>
+            )}
+            <div className="mth-table">
+              {d.returns.slice(0, 20).map((r) => (
+                <div className="mth-ret" key={`${r.caseId}-${r.at}`}>
+                  <div><b>{r.clientName || r.fileNumber}</b><small>{[r.fileNumber, r.engineer, r.at ? new Date(r.at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : ''].filter(Boolean).join(' · ')}</small></div>
+                  <p>{r.reason || 'No reason written'}</p>
+                </div>
+              ))}
+            </div>
+          </>)}
         </>
       )}
       <style>{`
@@ -98,6 +141,13 @@ export default function AdminMonthly() {
         .mth-tr > *:not(:first-child) { text-align: right; }
         .mth-tr small { color: #b45309; font-size: 11.5px; }
         .mth-tr .bad { color: #c2410c; font-weight: 700; }
+        .mth-tr5 { grid-template-columns: minmax(0, 1fr) 64px 64px 64px 84px; }
+        .mth-topics { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+        .mth-topics span { background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; border-radius: 999px; padding: 3px 10px; font-size: 12.5px; }
+        .mth-ret { padding: 10px 12px; border-top: 1px solid #f1f5f9; }
+        .mth-ret > div { display: flex; flex-direction: column; } .mth-ret b { font-size: 13.5px; color: #0f172a; } .mth-ret small { font-size: 12px; color: #64748b; }
+        .mth-ret p { margin: 4px 0 0; font-size: 13px; color: #9a3412; line-height: 1.4; }
+        .mth-pay p { color: #1e3a8a; }
         .mth-tr > span:first-child { overflow: hidden; text-overflow: ellipsis; }
         @media (max-width: 420px) { .mth-tr { grid-template-columns: minmax(0, 1fr) 54px 56px 64px; font-size: 13px; padding: 9px 10px; } .mth-top h2 { font-size: 17px; } }
         .mth-th { border-top: 0; background: #f8fafc; font-size: 11.5px; font-weight: 800; color: #64748b; }

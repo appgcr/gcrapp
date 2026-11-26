@@ -30,6 +30,10 @@ const day = (d) => (d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit'
 export default function AdminReportsLibrary() {
   const banks = useBanks();
   const [cases, setCases] = useState(null);
+  // Which property types each bank's own report format covers (missing ones are marked on the folders)
+  const [formats, setFormats] = useState(null);
+  useEffect(() => { fetch(`${API_BASE_URL}/api/banks/format-matrix`, { headers: authHeaders() }).then((r) => (r.ok ? r.json() : null)).then(setFormats).catch(() => {}); }, []);
+  const FORMAT_OF = { house: 'house', open: 'open_site', apartment: 'apartment', agri: 'agriculture', industrial: 'industrial' };
   const [err, setErr] = useState('');
   const [bank, setBank] = useState(null);   // bank name opened
   const [type, setType] = useState(null);   // type key opened
@@ -179,10 +183,14 @@ export default function AdminReportsLibrary() {
         <div className="rl-grid">
           {keys.map((k) => {
             const T = TYPE_INFO[k]; const n = (types[k] || []).length;
+            // This bank has no own report format for this type yet → a sample report is needed
+            const fkey = (banks.find((b) => b.name === bank) || {}).format;
+            const noFormat = formats && fkey && FORMAT_OF[k] && Array.isArray(formats[fkey]) && !formats[fkey].includes(FORMAT_OF[k]);
             return (
               <button type="button" key={k} className={`rl-folder ${n ? '' : 'none'}`} onClick={() => { setQ(''); setType(k); }}>
                 <span className="rl-ic" style={{ background: n ? T.color : '#cbd5e1' }}><T.Icon size={18} /></span>
-                <span className="rl-ft"><b>{T.label}</b><small>{n ? `${n} report${n === 1 ? '' : 's'}` : 'None yet'}</small></span>
+                <span className="rl-ft"><b>{T.label}</b><small>{n ? `${n} report${n === 1 ? '' : 's'}` : 'None yet'}</small>
+                  {noFormat && <span className="rl-nofmt">No report format yet — send a sample report</span>}</span>
                 <ChevronRight size={17} className="rl-ch" />
               </button>
             );
@@ -248,6 +256,7 @@ function Style() {
       .rl-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
       .rl-chips span { font-size: 11.5px; font-weight: 700; border: 1px solid; border-radius: 999px; padding: 1px 8px; background: #fff; }
       .rl-ch { color: #94a3b8; flex-shrink: 0; }
+      .rl-nofmt { margin-top: 3px; align-self: flex-start; font-size: 11px; font-weight: 700; color: #b45309; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 1px 6px; }
       .rl-sec { margin-top: 6px; font-size: 12.5px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; color: #94a3b8; }
       .rl-list { display: flex; flex-direction: column; gap: 8px; }
       .rl-row { background: #fff; border: 1px solid #eef2f7; border-radius: 14px; padding: 12px 14px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }

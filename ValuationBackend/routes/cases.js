@@ -351,6 +351,15 @@ router.put('/:id', authenticateToken, async (req, res) => {
           const old = require('../services/buildingAge').tooOldError(pd);
           if (old) return res.status(422).json({ error: old, code: 'TOO_OLD' });
         }
+        // Proof of the site visit on every report: the selfie at the site and at least 3 site photos
+        // (not for the App Review demo office, whose reviewers can't visit a site)
+        {
+          const brv = await Branch.findOne({ id: existingCase.branchId }).select('code name').lean();
+          const demo = !!brv && (String(brv.code || '').toUpperCase() === 'DEMO' || /app\s*review/i.test(brv.name || ''));
+          const photos = (updateData.sitePhotos || existingCase.sitePhotos || []).length;
+          if (!demo && photos < 3) return res.status(422).json({ error: `Please take at least 3 site photos (front, side, road) before submitting — ${photos} so far.`, code: 'NEED_PHOTOS' });
+          if (!demo && !(updateData.siteSelfie || existingCase.siteSelfie)) return res.status(422).json({ error: 'Please take your selfie at the site before submitting.', code: 'NEED_SELFIE' });
+        }
         if (pd.entryMode === 'sheet') {
           // Office sheet route: only when the Super Admin has switched it on for this branch
           const br = await Branch.findOne({ id: existingCase.branchId }).select('sheetBypass').lean();

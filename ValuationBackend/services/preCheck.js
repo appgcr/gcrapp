@@ -116,7 +116,50 @@ async function runPreCheck(draft = {}, { user = null, caseDoc = null } = {}) {
     add('photos', 'warn', 'Few site photos', `${photos} photo${photos === 1 ? '' : 's'}. Banks expect at least front, road, inside and surroundings (4+).`, 'photos');
   }
 
+  // 9. Same property valued before (same survey no + same door / plot no, or same survey no in the same village) —
+  // a second valuation of one property, often for another bank, is a common fraud pattern
+  try {
+    const dups = await sameProperty(pd, caseDoc && caseDoc.id);
+    if (dups.length) {
+      const myBank = draft.bankName || (caseDoc && caseDoc.bankName) || '';
+      const otherBank = dups.some((d) => d.bankName && myBank && d.bankName !== myBank);
+      add('same_property', 'warn', otherBank ? 'This property was valued before for another bank' : 'This property was valued before',
+        dups.slice(0, 3).map((d) => `${d.fileNumber || `#${d.id}`} · ${d.bankName || 'no bank'} · ${d.clientName || ''} · ${d.when}${d.value ? ` · value ${inr(d.value)}` : ''}${d.engineer && !/^unknown/i.test(d.engineer) ? ` · ${d.engineer}` : ''}`).join('\n')
+        + `\nCheck it is the same owner and the property was not already given as security. Tell the admin if anything looks wrong.`, 'details');
+    }
+  } catch (e) { /* the check is a help; never blocks */ }
+
   return { at: new Date(), checks };
 }
 
-module.exports = { runPreCheck, areaFromSides, similar };
+// Survey / door / plot numbers in one form: "Sy.No. 123/4A" → "123/4a", "D.No: 54/108-7-1" → "54/108-7-1"
+const normNo = (v) => String(v || '').toLowerCase().replace(/\b(sy|s|survey|d|door|plot|p|r\.?s|no|nos|number)\b\.?/g, ' ').replace(/[^0-9a-z/\-]/g, '').replace(/^[-/]+|[-/]+$/g, '');
+const normPlace = (v) => String(v || '').toLowerCase().replace(/[^a-z]/g, '');
+async function sameProperty(pd = {}, selfId = null) {
+  const sy = normNo(pd.surveyNo || (pd.sheet && pd.sheet.surveyNo));
+  if (!sy || sy.length < 2) return [];
+  const door = normNo(pd.doorNo || (pd.sheet && pd.sheet.doorNo));
+  const plot = normNo(pd.plotNo || (pd.sheet && pd.sheet.plotNo));
+  const village = normPlace(pd.village);
+  const ValuationCase = require('../models/ValuationCase');
+  // Candidates: survey number contains the same digits (then compared exactly in the normal form)
+  const core = (sy.match(/\d+/) || [''])[0];
+  if (!core) return [];
+  const rx = new RegExp(`(^|\\D)${core}(\\D|$)`);
+  const list = await ValuationCase.find({ id: { $ne: selfId || '' }, $or: [{ 'propertyDetails.surveyNo': rx }, { 'propertyDetails.sheet.surveyNo': rx }] })
+    .select('id fileNumber clientName bankName status createdAt approvedAt assignedEngineerName propertyDetails.surveyNo propertyDetails.doorNo propertyDetails.plotNo propertyDetails.village propertyDetails.sheet.surveyNo propertyDetails.sheet.doorNo propertyDetails.sheet.plotNo valuation.fairMarketValue')
+    .limit(200).lean();
+  return list.filter((c) => {
+    const p = c.propertyDetails || {}; const sh = p.sheet || {};
+    if (normNo(p.surveyNo || sh.surveyNo) !== sy) return false;
+    const d2 = normNo(p.doorNo || sh.doorNo); const p2 = normNo(p.plotNo || sh.plotNo);
+    if ((door && d2 && door === d2) || (plot && p2 && plot === p2)) return true;
+    return !door && !plot && village && normPlace(p.village) === village; // open land: same survey no in the same village
+  }).map((c) => ({
+    id: c.id, fileNumber: c.fileNumber, clientName: c.clientName, bankName: c.bankName, engineer: c.assignedEngineerName,
+    value: (c.valuation && c.valuation.fairMarketValue) || 0,
+    when: new Date(c.approvedAt || c.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }),
+  }));
+}
+
+module.exports = { runPreCheck, areaFromSides, similar, sameProperty, normNo };

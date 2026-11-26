@@ -121,6 +121,8 @@ const appConfigSchema = new mongoose.Schema({
   },
   // Firm details printed on invoices (Fees → Firm details)
   billing: { type: mongoose.Schema.Types.Mixed, default: {} },
+  // Last database backup downloaded by the Super Admin (routes/backup.js): { lastAt, lastBy, lastKind, records }
+  backup: { type: mongoose.Schema.Types.Mixed, default: {} },
   attendanceSettings: {
     fullDayHours: { type: Number, default: 7 },
     halfDayHours: { type: Number, default: 4 },

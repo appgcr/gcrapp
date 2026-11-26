@@ -1,6 +1,6 @@
 import { API_BASE_URL } from '../../config/api';
 import React, { useState } from 'react';
-import { Bell, HelpCircle, X, Mail, Phone, ChevronRight, ChevronLeft, Clock, BarChart3, Fingerprint, KeyRound, Landmark, FileImage, PenTool } from 'lucide-react';
+import { Bell, HelpCircle, X, Mail, Phone, ChevronRight, ChevronLeft, Clock, BarChart3, Fingerprint, KeyRound, Landmark, FileImage, PenTool, DatabaseBackup } from 'lucide-react';
 import LetterheadSettings from '../Shared/LetterheadSettings';
 import SignatureSettings from '../Shared/SignatureSettings';
 import BanksSettings from './BanksSettings';
@@ -8,6 +8,7 @@ import pkg from '../../../package.json';
 import { isSuperAdmin, roleLabel } from '../../utils/session';
 import IconTile, { AssistiveGlyph } from '../Shared/IconTile';
 import ReminderSettingsCard from './ReminderSettingsCard';
+import BackupCard from './BackupCard';
 import NotificationPrefsCard from '../Shared/NotificationPrefsCard';
 import NotificationInsightsCard from './NotificationInsightsCard';
 import { Row, Switch, IosSettingsStyles } from '../Shared/IosSettings';
@@ -161,7 +162,7 @@ export default function AdminSettings({ currentUser, handleLogout }) {
   const name = currentUser?.name || 'Admin User';
   const initials = name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || 'A';
 
-  const titles = { notifications: 'Notifications', reminders: 'Automatic Reminders', insights: 'Alert Insights', banks: 'Banks', letterhead: 'Letterhead & Valuer', signature: 'Digital Signature' };
+  const titles = { notifications: 'Notifications', reminders: 'Automatic Reminders', insights: 'Alert Insights', banks: 'Banks', letterhead: 'Letterhead & Valuer', signature: 'Digital Signature', backup: 'Database backup' };
 
   if (page !== 'main') {
     return (
@@ -187,6 +188,7 @@ export default function AdminSettings({ currentUser, handleLogout }) {
         {page === 'reminders' && <ReminderSettingsCard currentUser={currentUser} embedded />}
         {page === 'insights' && <NotificationInsightsCard currentUser={currentUser} />}
         {page === 'banks' && <BanksSettings />}
+        {page === 'backup' && <BackupCard />}
         {page === 'signature' && <SignatureSettings />}
         {page === 'letterhead' && <LetterheadSettings branchId={currentUser?.branchId} branchName={currentUser?.branchInfo?.name} />}
         <IosSettingsStyles />
@@ -213,8 +215,9 @@ export default function AdminSettings({ currentUser, handleLogout }) {
           <div className="ios-section">Organisation</div>
           <div className="ios-group">
             <Row icon={Landmark} color="blue" label="Banks" onClick={() => open('banks')} />
+            <Row icon={DatabaseBackup} color="green" label="Database backup" onClick={() => open('backup')} />
           </div>
-          <p className="ios-footnote">Add or rename banks and set each bank’s report format and valuation percentages.</p>
+          <p className="ios-footnote">Add or rename banks and set each bank’s report format and valuation percentages. Download a copy of all the data to keep safe.</p>
         </>
       )}
 

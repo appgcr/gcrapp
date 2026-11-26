@@ -188,3 +188,28 @@ Provide them together at the end; then the features are switched on and tested.
 | Account deletion URL (Google Play "Data deletion") | `https://<your-domain>/delete-account` | Ready once hosted |
 | Google Play "Background location" declaration + short video | Play Console → App content | **To do** (engineers' live tracking while on duty) |
 | Gemini billing (free daily quota ran out during testing on 11 Nov 2026) | aistudio.google.com → Billing | **Recommended** |
+
+---
+
+## L. WhatsApp Business (automatic fee reminders)
+
+Unpaid invoices already get reminders at 7 days, on the due date (15) and every 7 days after (app notification +
+email). With these set, the bank branch's **mobile** also gets a WhatsApp from the office number
+(`ValuationBackend/services/whatsapp.js`). Until then it stays off — nothing else changes. Never sends on staging.
+
+| Credential Name | Required / Optional | Free / Paid | Where | Configured In | Must Be Supplied By You? |
+| :--- | :---: | :---: | :--- | :--- | :---: |
+| `WHATSAPP_TOKEN` (permanent System User token) | Optional | Meta charges per business-started message (~₹0.1–0.8) | business.facebook.com → WhatsApp Manager / developers.facebook.com | Render env | **Yes** |
+| `WHATSAPP_PHONE_NUMBER_ID` (the office number, not on personal WhatsApp) | Optional | — | WhatsApp Manager → Phone numbers | Render env | **Yes** |
+| `WHATSAPP_REMINDER_TEMPLATE` (e.g. `fee_reminder`) | Optional | — | WhatsApp Manager → Message templates | Render env | **Yes** |
+| `WHATSAPP_TEMPLATE_LANG` (default `en`) | Optional | — | as approved | Render env | No |
+
+**Template to submit for approval** (category *Utility*, 5 variables, in this order):
+
+> Gouru Valuations — fee reminder
+> Invoice {{1}} for {{2}} is pending.
+> Valuation: {{3}}. It is {{4}} days since the invoice.
+> Pay by UPI or see the bank details here: {{5}}
+> Thank you.
+
+Bank branch mobiles come from Settings → Banks → branch contacts (a landline is skipped).

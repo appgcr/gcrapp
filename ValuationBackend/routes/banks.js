@@ -108,6 +108,20 @@ async function withCaseCounts(list) {
 }
 
 // GET /api/banks — active banks for pickers; ?all=1 (Super Admin) includes inactive ones and case counts
+// GET /api/banks/format-matrix — admins: which property types each bank's own report format covers
+// (from the installed Python formats), so missing ones are visible before a case needs them
+let matrixCache = null;
+router.get('/format-matrix', authenticateToken, async (req, res) => {
+  try {
+    if (!['ADMIN', 'SUPER_ADMIN'].includes(req.user && req.user.role)) return res.status(403).json({ error: 'Admins only.' });
+    if (!matrixCache) {
+      const r = require('child_process').spawnSync('python3', [require('path').join(__dirname, '..', 'services', 'reports', 'format_matrix.py')], { timeout: 30000 });
+      matrixCache = JSON.parse(String(r.stdout || '{}').trim().split('\n').pop() || '{}');
+    }
+    res.json(matrixCache);
+  } catch (err) { res.json({}); }
+});
+
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const list = await banks.allBanks();

@@ -117,6 +117,14 @@ router.put('/payment', async (req, res) => {
     if (!branchId || branchId === 'firm') {
       if (!isSuper(req.user)) return res.status(403).json({ error: 'Only the Super Admin can change the firm default.' });
       const set = Object.fromEntries(Object.entries(p).map(([k, v]) => [`billing.${k}`, v]));
+      // Firm default changes are kept too (who, when, what) — the monthly report lists every change of where money goes
+      const cur = await AppConfig.findOne({ key: 'global' }).select('billing').lean();
+      const was = (cur && cur.billing) || {};
+      const changedF = Object.keys(PAY_LABELS).filter((k) => String(was[k] || '') !== String(p[k] || ''));
+      if (!changedF.length) return res.json({ ok: true, unchanged: true });
+      const entryF = { at: new Date(), by: req.user.id, byName: who, scope: 'firm',
+        changed: changedF.map((k) => ({ field: PAY_LABELS[k], from: k === 'accountNo' ? maskAcc(was[k]) : k === 'qrDataUrl' ? (was[k] ? 'picture' : '') : (was[k] || ''), to: k === 'accountNo' ? maskAcc(p[k]) : k === 'qrDataUrl' ? (p[k] ? 'new picture' : 'removed') : (p[k] || '') })) };
+      set['billing.paymentHistory'] = [...(Array.isArray(was.paymentHistory) ? was.paymentHistory : []), entryF].slice(-40);
       await AppConfig.updateOne({ key: 'global' }, { $set: set }, { upsert: true });
       notify({ to: 'ADMIN', title: 'Payment details changed', message: `${who} changed the firm's default payment details on invoices${p.accountNo ? ` (account ${maskAcc(p.accountNo)})` : ''}${p.upi ? `, UPI ${p.upi}` : ''}.`, type: 'billing', priority: 'urgent' }).catch(() => {});
       return res.json({ ok: true });

@@ -4,7 +4,7 @@ const router = express.Router();
 const ValuationCase = require('../models/ValuationCase');
 const ValuationCaseVersion = require('../models/ValuationCaseVersion');
 const { authenticateToken } = require('../middleware/auth');
-const { isAdmin, caseFilter } = require('../services/access');
+const { isAdmin, isSuper, caseFilter } = require('../services/access');
 
 router.use(authenticateToken);
 router.use((req, res, next) => (isAdmin(req.user) ? next() : res.status(403).json({ error: 'Admins only.' })));
@@ -26,10 +26,10 @@ router.get('/monthly', async (req, res) => {
     const { start, end, label, ym } = monthRange(req.query.month);
     const scope = caseFilter(req);
     const all = await ValuationCase.find(scope)
-      .select('id fileNumber clientName bankName status createdAt approvedAt returnedAt assignedEngineerId assignedEngineerName inspectionDate inspectionTime valuation.fairMarketValue billing preCheck')
+      .select('id fileNumber clientName bankName branchId status createdAt approvedAt returnedAt assignedEngineerId assignedEngineerName inspectionDate inspectionTime valuation.fairMarketValue billing preCheck')
       .lean();
     const ids = all.map((c) => c.id);
-    const versions = await ValuationCaseVersion.find({ caseId: { $in: ids } }).select('caseId version submittedAt adminDecision decisionAt').lean();
+    const versions = await ValuationCaseVersion.find({ caseId: { $in: ids } }).select('caseId version submittedAt adminDecision decisionAt decisionComment').lean();
     const inMonth = (d) => d && new Date(d) >= start && new Date(d) < end;
 
     const created = all.filter((c) => inMonth(c.createdAt));
@@ -70,8 +70,47 @@ router.get('/monthly', async (req, res) => {
     const billed = approved.reduce((a, c) => a + (c.billing && c.billing.status !== 'cancelled' ? c.billing.total || 0 : 0), 0);
     const outstandingNow = all.reduce((a, c) => a + (c.billing && c.billing.status !== 'cancelled' ? Math.max(0, (c.billing.total || 0) - (c.billing.received || 0)) : 0), 0);
 
+    // Why reports came back: each return with its reason (newest first), and the reasons grouped by topic
+    const TOPICS = [['Photos / selfie / map', /photo|selfie|picture|image|map|gps|location/i], ['Documents', /deed|document|tax|plan|layout|ec\b|link doc|missing doc/i],
+      ['Measurements / extent', /measure|extent|area|sq|cent|dimension|boundar/i], ['Rates / value', /rate|value|valuation|price|guideline|market|amount/i],
+      ['Names / details', /name|s\/o|w\/o|address|survey|door|plot|ward/i], ['Building', /floor|plinth|age|construction|structure|building/i]];
+    const returns = returnedV.map((v) => { const c = byId.get(v.caseId) || {}; return { caseId: v.caseId, fileNumber: c.fileNumber, clientName: c.clientName, engineer: c.assignedEngineerName, at: v.decisionAt, reason: String(v.decisionComment || '').slice(0, 300) }; })
+      .sort((a, b) => new Date(b.at) - new Date(a.at));
+    const topics = {};
+    returns.forEach((r) => { const t = (TOPICS.find(([, rx]) => rx.test(r.reason)) || ['Other'])[0]; topics[t] = (topics[t] || 0) + 1; });
+    const returnTopics = Object.entries(topics).map(([topic, count]) => ({ topic, count })).sort((a, b) => b.count - a.count);
+
+    // Branches side by side (Super Admin, all branches)
+    let branches = [];
+    if (isSuper(req.user)) {
+      const Branch = require('../models/Branch');
+      const names = new Map((await Branch.find({}).select('id name').lean()).map((b) => [b.id, b.name]));
+      const br = {};
+      const B = (c) => { const k = c.branchId || 'none'; br[k] = br[k] || { branchId: k, name: names.get(k) || 'No branch', requests: 0, approved: 0, returned: 0, billed: 0, received: 0, outstanding: 0 }; return br[k]; };
+      created.forEach((c) => { B(c).requests += 1; });
+      approved.forEach((c) => { const x = B(c); x.approved += 1; const b = c.billing; if (b && b.status !== 'cancelled') { x.billed += b.total || 0; x.received += b.received || 0; } });
+      returnedV.forEach((v) => { const c = byId.get(v.caseId); if (c) B(c).returned += 1; });
+      all.forEach((c) => { const b = c.billing; if (b && b.status !== 'cancelled' && (b.total || 0) > (b.received || 0)) B(c).outstanding += (b.total || 0) - (b.received || 0); });
+      branches = Object.values(br).filter((x) => x.requests || x.approved || x.returned || x.outstanding).sort((a, b) => b.approved - a.approved);
+    }
+
+    // Every change of where invoices are paid this month (account, UPI, QR) — firm default and each branch
+    let paymentChanges = [];
+    if (isSuper(req.user)) {
+      const Branch = require('../models/Branch');
+      const AppConfig = require('../models/AppConfig');
+      const cfg = await AppConfig.findOne({ key: 'global' }).select('billing.paymentHistory').lean();
+      const firmH = ((cfg && cfg.billing && cfg.billing.paymentHistory) || []).map((h) => ({ ...h, where: 'Firm default' }));
+      const brs = await Branch.find({}).select('name payment.history').lean();
+      const brH = brs.flatMap((b) => ((b.payment && b.payment.history) || []).map((h) => ({ ...h, where: `${b.name} branch` })));
+      paymentChanges = [...firmH, ...brH].filter((h) => inMonth(h.at))
+        .map((h) => ({ at: h.at, byName: h.byName, where: h.where, changed: (h.changed || []).map((c) => `${c.field}: ${c.from || '-'} → ${c.to || '-'}`) }))
+        .sort((a, b) => new Date(b.at) - new Date(a.at));
+    }
+
     const open = all.filter((c) => !['Approved', 'Rejected'].includes(c.status));
     res.json({
+      returns: returns.slice(0, 50), returnTopics, branches, paymentChanges,
       month: ym, label,
       work: {
         requests: created.length, submitted: new Set(submittedV.map((v) => v.caseId)).size, approved: approved.length,

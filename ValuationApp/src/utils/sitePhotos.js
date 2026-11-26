@@ -2,6 +2,8 @@
 import { API_BASE_URL } from '../config/api';
 
 export const MAX_SITE_PHOTOS = 10;
+// Every report needs at least this many site photos (front, side, road) — proof of the site visit
+export const MIN_SITE_PHOTOS = 3;
 
 /** Current position, fresh (no cached fix older than 30 s). Rejects when location is off. */
 export function currentPosition() {

@@ -428,10 +428,34 @@ async function ruleEveningSummary(ctx) {
 }
 
 // Unpaid invoices: reminders 7 days after the invoice, on the due date (15), then every 7 days (until 90).
-// Bank users get a notification (bank portal + phone), the bank branch an email with the invoice when
+// Bank users get a notification (bank portal + phone), the bank branch a WhatsApp (when the office WhatsApp
+// Business number is set up, services/whatsapp.js) and an email with the invoice when
 // email is set up, and each admin one daily list with one-tap WhatsApp messages in Fees.
 const INVOICE_AT = 10 * 60 + 30; // 10:30 AM IST
 const INVOICE_DAYS = [7, 15, 22, 29, 36, 43, 50, 57, 64, 71, 78, 85];
+// Database backup: the Super Admin is reminded at 10 AM when no backup was downloaded for 7 days (once a week)
+const BACKUP_AT = 10 * 60;
+async function ruleBackupReminder(ctx) {
+  const { ist, now, admins } = ctx;
+  if (!isDue(ist.minutes, BACKUP_AT)) return 0;
+  const AppConfig = require('../models/AppConfig');
+  const cfg = await AppConfig.findOne({ key: 'global' }).select('backup').lean();
+  const last = cfg && cfg.backup && cfg.backup.lastAt ? new Date(cfg.backup.lastAt) : null;
+  const days = last ? Math.floor((now - last) / 86400000) : null;
+  if (days !== null && days < 7) return 0;
+  const week = Math.floor(now / (7 * 86400000));
+  let n = 0;
+  for (const a of admins.filter((x) => x.role === 'SUPER_ADMIN')) {
+    if (await send(`backupReminder:${a.id}:${week}`, 'backupReminder', {
+      to: a.id, type: 'system', priority: 'normal', now,
+      title: 'Time for a database backup',
+      message: days === null ? 'No backup has been taken yet. Settings → Database backup → Download, and keep the file safe (not on the same phone).'
+        : `The last backup was ${days} days ago. Settings → Database backup → Download, and keep the file safe.`,
+    })) n += 1;
+  }
+  return n;
+}
+
 async function ruleInvoiceReminders(ctx) {
   const { ist, now, admins } = ctx;
   if (!isDue(ist.minutes, INVOICE_AT)) return 0;
@@ -465,7 +489,18 @@ async function ruleInvoiceReminders(ctx) {
     if (emailReady()) {
       try { const ct = await contactFor(c); if (ct.email) await billing.emailInvoice(c, { to: ct.email, link: billing.payLink(base, c), reminder: days }); } catch (err) { console.warn('invoice reminder email:', err.message); }
     }
-    await ValuationCase.updateOne({ id: c.id }, { $push: { 'billing.reminders': { at: now, day: days, bankUsers: bankUsers.length, email: emailReady() } } });
+    // WhatsApp to the bank branch's mobile (office WhatsApp Business number, approved template) when set up
+    let wa = false;
+    const whatsapp = require('./whatsapp');
+    if (whatsapp.ready()) {
+      try {
+        const ct = await contactFor(c);
+        const r = await whatsapp.sendFeeReminder(ct.phone, { invoiceNo: c.billing.invoiceNo, amount, customer: `${c.clientName || ''} (${c.fileNumber || c.id})`, days, link: billing.payLink(base, c) });
+        wa = !!r.sent;
+        if (!r.sent && r.reason !== 'no-mobile') console.warn('invoice reminder WhatsApp:', r.reason);
+      } catch (err) { console.warn('invoice reminder WhatsApp:', err.message); }
+    }
+    await ValuationCase.updateOne({ id: c.id }, { $push: { 'billing.reminders': { at: now, day: days, bankUsers: bankUsers.length, email: emailReady(), whatsapp: wa } } });
     count += 1;
   }
   // Admins: one list a day of overdue invoices, each one tap to send on WhatsApp from Fees
@@ -569,6 +604,7 @@ async function runReminders(now = new Date()) {
     // The one-line evening summary only while the fuller daily report is switched off
     if (!settings.dailyReport?.enabled) summary.sent.eveningSummary = await ruleEveningSummary(ctx);
     try { summary.sent.invoiceReminders = await ruleInvoiceReminders(ctx); } catch (err) { console.warn('invoice reminders:', err.message); }
+    try { summary.sent.backupReminder = await ruleBackupReminder(ctx); } catch (err) { console.warn('backup reminder:', err.message); }
   }
   return summary;
 }

@@ -38,7 +38,9 @@ import Step5ExtractedDataReview from './Step5ExtractedDataReview';
 import Step6FinalReviewSignature from './Step6FinalReviewSignature';
 import { getPageDisplayInfo, formatFileSize, isBuiltProperty, REQUIRED_DOCS } from './caseModalHelpers';
 import { oldestBuildingAge, tooOldText, MAX_BUILDING_AGE } from '../../../utils/buildingAge';
-import { MAX_SITE_PHOTOS, currentPosition, addressFor, drawStamp, fileHash, readExifGps, imageToCanvas } from '../../../utils/sitePhotos';
+import { useProvideScreenActions } from '../../../utils/screenActions';
+import { Camera as CameraIcon, UserRound } from 'lucide-react';
+import { MAX_SITE_PHOTOS, MIN_SITE_PHOTOS, currentPosition, addressFor, drawStamp, fileHash, readExifGps, imageToCanvas } from '../../../utils/sitePhotos';
 
 import {
   FALLBACK_PROPERTY_TYPES,
@@ -313,6 +315,7 @@ export default function CaseCreationModal({
 
   // Office sheet route (Super Admin switches it on per branch): sheet → photos + selfie → sign
   const [bypassAllowed, setBypassAllowed] = useState(false);
+  const [demoOffice, setDemoOffice] = useState(false);
   const [siteSelfie, setSiteSelfie] = useState(null); // { url, lat, lng, takenAt }
   // Gouru AI review call before the case goes to the admin
   const aiReviewRef = useRef(null);
@@ -324,6 +327,8 @@ export default function CaseCreationModal({
     fetch(`${API_BASE_URL}/api/branches`).then((r) => (r.ok ? r.json() : [])).then((list) => {
       const mine = Array.isArray(list) ? list.find((b) => b.id === currentUser?.branchId) : null; // only this engineer's branch
       setBypassAllowed(!!(mine && mine.sheetBypass));
+      // App Review (Demo) office: the reviewers can't take site photos with GPS, so the visit proof is not asked
+      setDemoOffice(!!(mine && (String(mine.code || '').toUpperCase() === 'DEMO' || /app\s*review/i.test(mine.name || ''))));
     }).catch(() => {});
   }, [isOpen, modalStep === 0]);
   const [propertyDetails, setPropertyDetails] = useState({
@@ -1589,6 +1594,12 @@ export default function CaseCreationModal({
       ? (({ recordingDoc, ...rest }) => rest)(aiReviewRef.current)
       : { status: 'skipped', reason: offlineNow ? 'no signal' : 'not run', at: new Date().toISOString() };
 
+    // The site's GPS (selfie, else the photos' average) goes into the report when its coordinates are not filled
+    const gpsPts = [siteSelfie, ...siteImages].filter((p) => p && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)) && p.lat !== null && p.lng !== null);
+    const rep0 = propertyDetails.report || {};
+    const withGps = gpsPts.length && !String(rep0.latitude || '').trim()
+      ? { ...propertyDetails, report: { ...rep0, latitude: Number(gpsPts[0].lat).toFixed(6), longitude: Number(gpsPts[0].lng).toFixed(6) } }
+      : propertyDetails;
     const payload = {
       aiReview,
       clientName: clientName || 'Unknown Client',
@@ -1596,7 +1607,7 @@ export default function CaseCreationModal({
       bankName: bankName || '',
       bankBranch: bankBranch,
       bankDistrict: bankDistrict,
-      propertyDetails: propertyDetails,
+      propertyDetails: withGps,
       locationData: locationData,
       sitePhotos: siteImages.map(img => img.url),
       photoHashes: siteImages.map(img => img.hash).filter(Boolean),
@@ -1815,7 +1826,8 @@ export default function CaseCreationModal({
       toast.error(tooOldText(oldestBuildingAge(propertyDetails)), { id: 'too-old', duration: 8000 });
       return;
     }
-    if (sheetMode && !siteSelfie) {
+    // Proof of the site visit on every report: the selfie at the site, at least 3 photos, one with GPS
+    if (!siteSelfie && !demoOffice) {
       toast.error('Please take your selfie at the site (Take selfie).');
       return;
     }
@@ -1824,8 +1836,12 @@ export default function CaseCreationModal({
       setModalStep(2);
       return;
     }
-    if (siteImages.length === 0) {
-      toast.error("Please capture at least one geo-tagged site image.");
+    if (siteImages.length < (demoOffice ? 1 : MIN_SITE_PHOTOS)) {
+      toast.error(`Please take at least ${MIN_SITE_PHOTOS} site photos (front, side, road) — ${siteImages.length} so far.`);
+      return;
+    }
+    if (!demoOffice && !siteImages.some((img) => Number.isFinite(Number(img.lat)) && img.lat !== null && img.lat !== '') && !(siteSelfie && Number.isFinite(Number(siteSelfie.lat)))) {
+      toast.error('No photo has a GPS location. Turn on location and take the photos with the camera at the site.');
       return;
     }
     if (siteImages.length > MAX_SITE_PHOTOS) {
@@ -1834,6 +1850,14 @@ export default function CaseCreationModal({
     }
     setModalStep(7);
   };
+
+  // Assistive Touch while a case is open: speak the details, take a site photo, take the selfie — one tap from anywhere
+  const caseOpen = modalStep > 0 && modalStep !== 7;
+  useProvideScreenActions('case-form', caseOpen ? [
+    { key: 'speak', label: 'Speak details', Icon: Mic, run: () => { if (sheetMode) setModalStep(8); else { setModalStep(3); setTimeout(() => setStep3Phase('site'), 0); } } },
+    { key: 'photo', label: `Photo ${siteImages.length}/${MIN_SITE_PHOTOS}+`, Icon: CameraIcon, run: () => { setModalStep(4); setTimeout(() => startCamera('SITE_IMAGES'), 50); }, disabled: siteImages.length >= MAX_SITE_PHOTOS },
+    { key: 'selfie', label: siteSelfie ? 'Selfie again' : 'Selfie', Icon: UserRound, run: () => { setModalStep(4); setTimeout(() => startCamera('SITE_SELFIE'), 50); } },
+  ] : [], [caseOpen, sheetMode, siteImages.length, !!siteSelfie]);
 
   if (!isOpen && modalStep === 0 && !showDraftPrompt) return null;
 
