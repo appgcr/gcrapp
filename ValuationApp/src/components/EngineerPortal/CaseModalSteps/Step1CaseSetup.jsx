@@ -1,6 +1,6 @@
 import { searchBanks } from '../../../utils/banks';
 import React from 'react';
-import { User, Building, ChevronDown, ChevronRight, Lock } from 'lucide-react';
+import { User, Building, ChevronDown, ChevronRight, Lock, UserPlus, X } from 'lucide-react';
 
 export default function Step1CaseSetup({
   top = null, // route choice + "Tell customer": scrolls with the form instead of staying pinned
@@ -24,7 +24,10 @@ export default function Step1CaseSetup({
   propertyTypes = [],
   propertyType = '',
   setPropertyType = () => {},
-  lockedFields = {}
+  lockedFields = {},
+  coOwners = [],
+  setCoOwners = () => {},
+  maxCoOwners = 5
 }) {
   const lockStyle = { backgroundColor: 'var(--bg-app)', color: 'var(--text-muted)', cursor: 'not-allowed' };
   const LockNote = () => (
@@ -74,6 +77,34 @@ export default function Step1CaseSetup({
             style={{ width: '100%', padding: '16px 16px 16px 42px', borderRadius: '12px', border: '2px solid var(--border-color)', fontSize: '16px', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)' }}
           />
         </div>
+      </div>
+
+      {/* Joint owners: the property may belong to several people; every one is printed in the bank report */}
+      <div style={{ marginBottom: '20px' }}>
+        {coOwners.map((o, i) => (
+          <div key={i} style={{ border: '1.5px solid var(--border-color)', borderRadius: '12px', padding: '10px 12px', marginBottom: '10px', backgroundColor: 'var(--bg-card)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+              <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-muted)' }}>Owner {i + 2}</span>
+              <button type="button" aria-label={`Remove owner ${i + 2}`} onClick={() => setCoOwners(coOwners.filter((_, j) => j !== i))}
+                style={{ border: 0, background: 'transparent', color: '#dc2626', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', padding: '2px 4px' }}>
+                <X size={15} /> Remove
+              </button>
+            </div>
+            <input type="text" placeholder="Owner's full name" value={o.name} autoFocus={!o.name}
+              onChange={(e) => setCoOwners(coOwners.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+              style={{ width: '100%', padding: '12px 14px', borderRadius: '10px', border: '1.5px solid var(--border-color)', fontSize: '16px', outline: 'none', backgroundColor: 'var(--bg-app)', color: 'var(--text-primary)', boxSizing: 'border-box', marginBottom: '8px' }} />
+            <input type="text" placeholder="S/o or W/o (Optional)" value={o.rel}
+              onChange={(e) => setCoOwners(coOwners.map((x, j) => (j === i ? { ...x, rel: e.target.value } : x)))}
+              style={{ width: '100%', padding: '12px 14px', borderRadius: '10px', border: '1.5px solid var(--border-color)', fontSize: '16px', outline: 'none', backgroundColor: 'var(--bg-app)', color: 'var(--text-primary)', boxSizing: 'border-box' }} />
+          </div>
+        ))}
+        {coOwners.length < maxCoOwners && (
+          <button type="button" onClick={() => setCoOwners([...coOwners, { name: '', rel: '' }])}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '12px', borderRadius: '12px', border: '1.5px dashed var(--primary)', background: 'transparent', color: 'var(--primary)', fontSize: '14.5px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+            <UserPlus size={17} /> {coOwners.length ? 'Add another owner' : 'Add joint owner'}
+          </button>
+        )}
+        {coOwners.length > 0 && <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>All {coOwners.length + 1} owners are printed in the bank report.</div>}
       </div>
 
       <div style={{ marginBottom: '24px', flex: 1, position: 'relative' }}>

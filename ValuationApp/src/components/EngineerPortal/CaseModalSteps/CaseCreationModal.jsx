@@ -22,6 +22,7 @@ import { reconcileDocuments } from '../../../utils/reconciliation';
 import { isStrictlyEmpty } from '../../../utils/canonicalSchema';
 
 import Step1CaseSetup from './Step1CaseSetup';
+import { readCoOwners, writeCoOwners, MAX_CO_OWNERS } from '../../../utils/coOwners';
 import { reportFileName } from '../../../utils/reportFileName';
 import Step2LegalDocs from './Step2LegalDocs';
 import { landRateMissing } from './LandRateCard';
@@ -2084,6 +2085,9 @@ export default function CaseCreationModal({
                 lockedFields={lockedFields}
                 clientFatherName={clientFatherName}
                 setClientFatherName={setClientFatherName}
+                coOwners={readCoOwners(propertyDetails.report)}
+                setCoOwners={(list) => setPropertyDetails((prev) => ({ ...prev, report: writeCoOwners(prev.report, list) }))}
+                maxCoOwners={MAX_CO_OWNERS}
                 bankName={bankName}
                 setBankName={setBankName}
                 bankBranch={bankBranch}

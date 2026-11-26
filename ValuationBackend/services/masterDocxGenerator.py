@@ -405,9 +405,21 @@ def _exact_bank_format(case_data, output_path):
     if not str(fields.get("engineerInitials") or "").strip():
         from apgb import engineer_initials
         fields["engineerInitials"] = engineer_initials(case_data)
+    # Joint owners 2…6 typed on the case (report.owner2Name / owner2Rel …): every builder fills the owner lines its
+    # layout has; the rest are filled here so fill_report can add them under the owner's address.
+    _rep = ((case_data.get("propertyDetails") or {}).get("report") or {})
+    from apgb import title_for
+    from bob import relation, DROP as _DROP
+    for _i in range(2, 7):
+        _nm = str(_rep.get(f"owner{_i}Name") or "").strip()
+        if not _nm:
+            continue
+        if str(fields.get(f"owner{_i}Name") or "").strip() in ("", _DROP):
+            _rl = str(_rep.get(f"owner{_i}Rel") or "").strip()
+            fields[f"owner{_i}Name"] = title_for(_nm, _rl)
+            fields[f"owner{_i}Rel"] = relation(_rl) or ""
     # Corner / intermittent plot worked out from the road sides (unless typed into the report by hand)
     from apgb import plot_position
-    _rep = ((case_data.get("propertyDetails") or {}).get("report") or {})
     # Road written in the site boundaries → the office rule decides; else the engineer's own choice
     _pos = plot_position(case_data)
     if not _pos:

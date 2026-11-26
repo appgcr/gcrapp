@@ -118,17 +118,19 @@ def show_all_people(doc, fields):
     from docx.oxml.ns import qn as _qn
     text = ''.join(t.text or '' for t in doc.element.body.iter(_qn('w:t')))
     present = set(TAG.findall(text))
-    addr_key = next((k for k in ('owner1Addr', 'ownerAddress', 'owner1AddrLine') if k in present), None)
+    addr_key = next((k for k in ('owner1Addr', 'ownerAddress', 'owner1AddrLine', 'owner1AddrFull', 'owner1AddrB', 'customerAddr')
+                     if k in present), None)
     if not addr_key:
         return
     extra = []
-    has_second = any(re.match(r'(owner[2-5]|ownerLine[2-5]|ownerNum[2-5])', t) for t in present)
-    if not has_second:
-        for i in (2, 3, 4, 5):
-            name, rel = fields.get(f'owner{i}Name'), fields.get(f'owner{i}Rel')
-            if _real(name):
-                name = name.strip().rstrip(',')
-                extra.append(f'{name}, {rel.strip().rstrip(".")}.' if _real(rel) else f'{name}.')
+    # Owners the layout has its own lines for are filled there; every owner after the last such line is added here
+    slots = [int(m.group(1)) for t in present for m in [re.match(r'(?:owner|ownerLine|ownerNum)(\d)', t)] if m]
+    top = max(slots + [1])
+    for i in range(top + 1, 7):
+        name, rel = fields.get(f'owner{i}Name'), fields.get(f'owner{i}Rel')
+        if _real(name):
+            name = name.strip().rstrip(',')
+            extra.append(f'{name}, {rel.strip().rstrip(".")}.' if _real(rel) else f'{name}.')
     has_app = any(re.match(r'(applicant|customer)', t, re.I) for t in present)
     if not has_app and _real(fields.get('applicantName')):
         name, rel = fields['applicantName'].strip().rstrip(','), fields.get('applicantRel')
