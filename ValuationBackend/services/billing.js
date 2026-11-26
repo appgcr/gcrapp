@@ -229,41 +229,49 @@ async function invoicePdf(c, { link = '' } = {}) {
   const right = (s, xr, yy, o = {}) => { const f = o.f || font; const size = o.size || 10; text(s, xr - f.widthOfTextAtSize(ascii(s), size), yy, o); };
   const line = (yy) => page.drawLine({ start: { x: 40, y: yy }, end: { x: 555, y: yy }, thickness: 0.7, color: rgb(0.8, 0.83, 0.87) });
 
-  // Logo + firm name
+  // ── Header row: logo + firm (left) | INVOICE, number, date (right). The logo's top meets the firm name's
+  // capitals and its bottom meets the Date line, so both columns start and end together.
+  const top = 800;                      // firm name / INVOICE baseline
+  const LS = 46;                        // logo size
   let lx = 40;
   try {
     const logo = await doc.embedPng(fs.readFileSync(LOGO));
-    page.drawImage(logo, { x: 40, y: y - 26, width: 46, height: 46 });
-    lx = 96;
+    page.drawImage(logo, { x: 40, y: top + 13 - LS, width: LS, height: LS });
+    lx = 40 + LS + 12;
   } catch { /* name only */ }
-  text(firm.name, lx, y, { f: bold, size: 18, color: navy });
-  right(firm.gstin ? 'TAX INVOICE' : 'INVOICE', 555, y, { f: bold, size: 14, color: navy });
-  y -= 16;
-  // The valuer / branch head, highlighted
-  if (firm.person && firm.person.name) {
-    const who = `Er. ${firm.person.name}${firm.person.qual ? `, ${firm.person.qual}` : ''}`;
-    const sub = [firm.person.iiv ? `Approved Valuer (IIV ${firm.person.iiv})` : 'Approved Valuer', firm.person.branch && `${firm.person.branch} Branch`].filter(Boolean).join('  |  ');
-    const w = Math.max(bold.widthOfTextAtSize(ascii(who), 11), font.widthOfTextAtSize(ascii(sub), 8.5)) + 16;
-    page.drawRectangle({ x: lx - 4, y: y - (sub ? 19 : 6), width: Math.min(w, 330), height: sub ? 30 : 18, color: rgb(1, 0.97, 0.86), borderColor: rgb(0.96, 0.78, 0.3), borderWidth: 0.8 });
-    text(who, lx + 4, y, { f: bold, size: 11, color: rgb(0.47, 0.25, 0.02) });
-    if (sub) { y -= 12; text(sub, lx + 4, y, { size: 8.5, color: rgb(0.55, 0.36, 0.06) }); }
-    y -= 18;
-  }
-  ascii(firm.address).split('\n').filter(Boolean).slice(0, 3).forEach((l) => { text(l, lx, y, { size: 9, color: grey }); y -= 12; });
+  text(firm.name, lx, top, { f: bold, size: 18, color: navy });
+  let ly = top - 15;
+  ascii(firm.address).split('\n').filter(Boolean).slice(0, 2).forEach((l) => { text(l, lx, ly, { size: 9, color: grey }); ly -= 11; });
   const contact = [firm.phone && `Ph: ${firm.phone}`, firm.email].filter(Boolean).join('  |  ');
-  if (contact) { text(contact, lx, y, { size: 9, color: grey }); y -= 12; }
+  if (contact) { text(contact, lx, ly, { size: 9, color: grey }); ly -= 11; }
   const ids = [firm.gstin && `GSTIN: ${firm.gstin}`, firm.pan && `PAN: ${firm.pan}`].filter(Boolean).join('   ');
-  if (ids) { text(ids, lx, y, { size: 9, color: grey }); y -= 12; }
-  y = Math.min(y, 760);
-  let ry = 782;
-  right(`Invoice No: ${b.invoiceNo}`, 555, ry, { f: bold }); ry -= 14;
-  right(`Date: ${new Date(b.invoiceDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}`, 555, ry); ry -= 18;
-  // File number in its own box, so bank and customer can match it to the report
+  if (ids) { text(ids, lx, ly, { size: 9, color: grey }); ly -= 11; }
+
+  right(firm.gstin ? 'TAX INVOICE' : 'INVOICE', 555, top, { f: bold, size: 14, color: navy });
+  right(`Invoice No: ${b.invoiceNo}`, 555, top - 18, { f: bold });
+  right(`Date: ${new Date(b.invoiceDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}`, 555, top - 32, { color: grey });
+
+  // ── Valuer strip, full width: the valuer's name large and dark (left) | File No box (right), both centred in the strip
   const fileNo = `File No: ${c.fileNumber || `#${c.id}`}`;
-  const fw = bold.widthOfTextAtSize(ascii(fileNo), 10.5) + 16;
-  page.drawRectangle({ x: 555 - fw, y: ry - 6, width: fw, height: 20, color: rgb(0.93, 0.95, 0.98), borderColor: rgb(0.75, 0.82, 0.93), borderWidth: 0.8 });
-  right(fileNo, 547, ry, { f: bold, size: 10.5, color: navy });
-  y = Math.min(y, ry - 14, 735) - 8; line(y); y -= 20;
+  const fs10 = 10;
+  const fw = bold.widthOfTextAtSize(ascii(fileNo), fs10) + 18;
+  const sTop = Math.min(ly + 4, top + 13 - LS) - 10;
+  const SH = 40;
+  const p = firm.person && firm.person.name ? firm.person : null;
+  const who = p ? `Er. ${p.name}${p.qual ? `, ${p.qual}` : ''}` : '';
+  const sub = p ? [p.iiv ? `Approved Valuer (IIV ${p.iiv})` : 'Approved Valuer', p.branch && `${p.branch} Branch`].filter(Boolean).join('  |  ') : '';
+  if (p) page.drawRectangle({ x: 40, y: sTop - SH, width: 515, height: SH, color: rgb(1, 0.97, 0.86), borderColor: rgb(0.96, 0.78, 0.3), borderWidth: 0.8 });
+  if (p) {
+    const maxW = 555 - 12 - fw - 16 - 52;   // room left of the File No box
+    let ns = 14;
+    while (ns > 10.5 && bold.widthOfTextAtSize(ascii(who), ns) > maxW) ns -= 0.5;
+    text(who, 52, sTop - 17, { f: bold, size: ns, color: rgb(0.3, 0.13, 0) });
+    text(sub, 52, sTop - 31, { size: 8.5, color: rgb(0.45, 0.28, 0.04) });
+  }
+  const fy = p ? sTop - SH / 2 - 10 : sTop - 20;   // File No box: vertically centred in the strip
+  page.drawRectangle({ x: 555 - (p ? 10 : 0) - fw, y: fy, width: fw, height: 20, color: rgb(0.93, 0.95, 0.98), borderColor: rgb(0.75, 0.82, 0.93), borderWidth: 0.8 });
+  right(fileNo, 555 - (p ? 10 : 0) - 9, fy + 6.5, { f: bold, size: fs10, color: navy });
+  y = (p ? sTop - SH : fy) - 14; line(y); y -= 20;
 
   text('Bill to', 40, y, { size: 9, color: grey }); text('Valuation', 320, y, { size: 9, color: grey }); y -= 14;
   text(c.bankName || 'Bank', 40, y, { f: bold, size: 11 });
@@ -335,7 +343,7 @@ async function invoicePdf(c, { link = '' } = {}) {
     v.distressSaleValue > 0 && ['Distress / forced sale value', v.distressSaleValue],
   ].filter(Boolean);
   if (vals.length) {
-    const h = 26 + vals.length * 15 + (v.fairMarketValue > 0 ? 14 : 0) + (v.fairMarketValue > 0 && b.total > 0 ? 16 : 0);
+    const h = 26 + vals.length * 15 + (v.fairMarketValue > 0 ? 14 : 0);
     page.drawRectangle({ x: 40, y: y - h + 12, width: 515, height: h, color: rgb(0.97, 0.98, 1), borderColor: rgb(0.8, 0.85, 0.93), borderWidth: 0.7 });
     text('Valuation done (as per the approved report)', 50, y, { f: bold, size: 10, color: navy });
     if (v.buildingAge > 0 && v.netStructureValue > 0) right(`Building age ${v.buildingAge} yrs, depreciation ${v.depreciationPercent || 0}%`, 545, y, { size: 8.5, color: grey });
@@ -346,14 +354,6 @@ async function invoicePdf(c, { link = '' } = {}) {
       y -= 15;
     });
     if (v.fairMarketValue > 0) { text(`Fair market value in words: Rupees ${words(Math.round(v.fairMarketValue))} Only`, 50, y, { size: 8.5, color: grey }); y -= 14; }
-    // Our fee next to the value it covers (a small share of the property's value)
-    if (v.fairMarketValue > 0 && b.total > 0) {
-      const pct = (b.total / v.fairMarketValue) * 100;
-      const share = pct < 0.01 ? 'less than 0.01%' : `only ${pct < 0.1 ? pct.toFixed(3) : pct.toFixed(2)}%`;
-      y -= 2;
-      text(`Our fee ${inr(b.total)} for a valuation of ${inr(v.fairMarketValue)} - ${share} of the property's value.`, 50, y, { f: bold, size: 9, color: rgb(0.08, 0.5, 0.24) });
-      y -= 14;
-    }
     y -= 10;
   } else y -= 4;
 

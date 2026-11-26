@@ -3,7 +3,7 @@ import SendInvoice from './SendInvoice';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Document, Page, pdfjs } from 'react-pdf';
-import { FileText, Loader2, X, Plus, Building2, Undo2, Download, Pencil, Ban, FileSpreadsheet, Landmark, QrCode, Trash2 } from 'lucide-react';
+import { FileText, Loader2, X, Plus, Building2, Undo2, Download, Pencil, Ban, FileSpreadsheet, Landmark, QrCode, Info, Lock, History } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../../config/api';
 import { isSuperAdmin } from '../../utils/session';
@@ -264,8 +264,6 @@ export function PdfSheet({ url, title, fileName, onClose }) {
 }
 
 // Where invoices are paid — per branch (its admin or the Super Admin) or the firm default (Super Admin)
-const PAY_FIELDS = [['accountName', 'Account name', 'As in the bank'], ['bankName', 'Bank', 'e.g. State Bank of India, Kadapa'], ['accountNo', 'Account number', 'Digits only'],
-  ['ifsc', 'IFSC', 'e.g. SBIN0001234'], ['upi', 'UPI ID', 'e.g. gouru@okaxis — a QR for the exact amount is made from it']];
 // A QR photo → a small PNG (under 1 MB)
 const shrinkImage = (file) => new Promise((resolve, reject) => {
   const r = new FileReader();
@@ -313,58 +311,92 @@ function PaymentSheet({ currentUser, onClose }) {
     } catch (e) { toast.error(e.message); } finally { setBusy(false); }
   };
   const canEdit = !!d?.canEdit;
+  const row = (k, label, ph, extra = {}) => (
+    <label className="pm-row" key={k}>
+      <span>{label}</span>
+      <input value={f[k] ?? ''} placeholder={ph} disabled={!canEdit} autoComplete="off" {...extra} onChange={(e) => setF({ ...f, [k]: e.target.value })} />
+    </label>
+  );
+  const when = (t, withYear) => new Date(t).toLocaleString('en-IN', { day: '2-digit', month: 'short', ...(withYear ? { year: 'numeric' } : {}), hour: 'numeric', minute: '2-digit' });
   return (
-    <Sheet title="Payment details on invoices" onClose={onClose}>
+    <Sheet title="Payment details" onClose={onClose}>
+      <div className="fee-sub">Shown on every invoice and pay link, so banks know where to pay.</div>
       {sup && (
-        <label className="fee-f"><span>For</span>
+        <label className="pm-scope">
+          <span><Building2 size={16} /> Applies to</span>
           <select value={scope} onChange={(e) => setScope(e.target.value)}>
-            <option value="firm">Firm default (every branch without its own)</option>
+            <option value="firm">Firm default</option>
             {branches.map((b) => <option key={b.id} value={b.id}>{b.name} branch</option>)}
           </select>
         </label>
       )}
       {!d ? <div className="fee-empty"><Loader2 className="spin" size={20} /></div> : (
         <>
-          {d.scope === 'branch' && d.usesFirm && <div className="fee-sub" style={{ marginTop: 10 }}>{d.branchName} uses the firm's default details now{d.firm?.accountNo ? ` (account ••••${String(d.firm.accountNo).slice(-4)})` : ''}. Fill these to give it its own.</div>}
-          {!canEdit && <div className="fee-sub">Only this branch's admin or the Super Admin can change these.</div>}
-          {PAY_FIELDS.map(([k, label, hint]) => (
-            <label className="fee-f" key={k}><span>{label}</span>
-              <input value={f[k] ?? ''} disabled={!canEdit} inputMode={k === 'accountNo' ? 'numeric' : undefined} autoCapitalize={k === 'ifsc' ? 'characters' : 'off'} autoComplete="off"
-                onChange={(e) => setF({ ...f, [k]: e.target.value })} />
-              <em>{hint}</em>
-            </label>
-          ))}
-          <div className="fee-f"><span>QR code picture (optional)</span>
-            <input ref={qrRef} type="file" accept="image/*" hidden onChange={(e) => { const x = e.target.files && e.target.files[0]; e.target.value = ''; pickQr(x); }} />
-            {f.qrDataUrl ? (
-              <div className="fee-qr">
-                <img src={f.qrDataUrl} alt="QR code on invoices" />
-                {canEdit && <div><button type="button" className="fee-firm" onClick={() => qrRef.current?.click()}><QrCode size={15} /> Change</button><button type="button" className="fee-firm" onClick={() => setF({ ...f, qrDataUrl: '' })}><Trash2 size={15} /> Remove</button></div>}
-              </div>
-            ) : canEdit && <button type="button" className="fee-firm" onClick={() => qrRef.current?.click()}><QrCode size={15} /> Upload QR (PhonePe / GPay / bank QR)</button>}
-            <em>If you upload one, invoices show this QR. Without it, a QR for the exact amount is made from the UPI ID.</em>
+          {d.scope === 'branch' && d.usesFirm && (
+            <div className="pm-note"><Info size={15} /><span><b>{d.branchName}</b> uses the firm default now{d.firm?.accountNo ? ` (account ••••${String(d.firm.accountNo).slice(-4)})` : ''}. Fill these to give it its own.</span></div>
+          )}
+          {!canEdit && <div className="pm-note"><Lock size={15} /><span>Only this branch's admin or the Super Admin can change these.</span></div>}
+
+          <div className="pm-sec"><Landmark size={14} /> Bank account</div>
+          <div className="pm-group">
+            {row('accountName', 'Account name', 'As in the bank')}
+            {row('bankName', 'Bank', 'e.g. SBI, Kadapa')}
+            {row('accountNo', 'Account no', 'Digits only', { inputMode: 'numeric' })}
+            {row('ifsc', 'IFSC', 'e.g. SBIN0001234', { autoCapitalize: 'characters', className: 'up' })}
           </div>
-          {d.updatedAt && <div className="fee-sub" style={{ marginTop: 12 }}>Last changed by {d.updatedByName || 'someone'} on {new Date(d.updatedAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</div>}
-          {Array.isArray(d.history) && d.history.length > 0 && (
-            <details className="fee-hist"><summary>Change history ({d.history.length})</summary>
-              {d.history.map((h, i) => (
-                <div key={i}><b>{new Date(h.at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: 'numeric', minute: '2-digit' })} · {h.byName}</b>
+          <div className="pm-foot">Account number and IFSC are checked before saving.</div>
+
+          <div className="pm-sec"><QrCode size={14} /> UPI &amp; QR</div>
+          <div className="pm-group">
+            {row('upi', 'UPI ID', 'e.g. gouru@okaxis', { autoCapitalize: 'off' })}
+            <div className="pm-qr">
+              <input ref={qrRef} type="file" accept="image/*" hidden onChange={(e) => { const x = e.target.files && e.target.files[0]; e.target.value = ''; pickQr(x); }} />
+              {f.qrDataUrl
+                ? <img src={f.qrDataUrl} alt="QR code on invoices" />
+                : <button type="button" className="pm-qr-empty" disabled={!canEdit} onClick={() => qrRef.current?.click()} aria-label="Upload QR code"><QrCode size={26} /><small>Upload</small></button>}
+              <div className="pm-qr-t">
+                <b>QR code picture</b>
+                <small>{f.qrDataUrl ? 'Invoices show this QR.' : 'Optional. Without it, a QR for the exact amount is made from the UPI ID.'}</small>
+                {canEdit && f.qrDataUrl && (
+                  <div className="pm-qr-b">
+                    <button type="button" onClick={() => qrRef.current?.click()}>Change</button>
+                    <button type="button" className="del" onClick={() => setF({ ...f, qrDataUrl: '' })}>Remove</button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="pm-foot">PhonePe, GPay or bank merchant QR.</div>
+
+          {(d.updatedAt || (Array.isArray(d.history) && d.history.length > 0)) && (
+            <details className="pm-hist">
+              <summary><History size={14} /> {d.updatedAt ? `Last changed by ${d.updatedByName || 'someone'} · ${when(d.updatedAt, true)}` : 'Change history'}</summary>
+              {(d.history || []).map((h, i) => (
+                <div key={i}><b>{when(h.at)} · {h.byName}</b>
                   {(h.changed || []).map((c, j) => <small key={j}>{c.field}: {c.from || '—'} → {c.to || '—'}</small>)}</div>
               ))}
             </details>
           )}
-          {canEdit && <button type="button" className="fee-save" disabled={busy} onClick={save}>{busy ? <Loader2 className="spin" size={16} /> : 'Save'}</button>}
+          {canEdit && (
+            <div className="pm-bar">
+              <button type="button" className="fee-save" disabled={busy} onClick={save}>{busy ? <Loader2 className="spin" size={16} /> : 'Save payment details'}</button>
+            </div>
+          )}
         </>
       )}
     </Sheet>
   );
 }
 
-const FIRM_FIELDS = [
-  ['name', 'Firm name'], ['address', 'Address', 'area'], ['phone', 'Phone'], ['email', 'Email'],
-  ['gstin', 'GSTIN', null, 'Leave empty if not GST registered — no GST is added then'], ['gstPercent', 'GST %'], ['pan', 'PAN'], ['sac', 'SAC code'],
-  ['prefix', 'Invoice prefix', null, 'e.g. GV → GV/2026-27/0001'], ['terms', 'Note on invoice', 'area'],
+// Firm details on invoices, in three groups: [key, label, placeholder, kind]
+const FIRM_GROUPS = [
+  ['Firm', Building2, [['name', 'Firm name', 'e.g. Gouru Valuations'], ['address', 'Address', 'Door no, street, town, district', 'area'],
+    ['phone', 'Phone', 'e.g. 98765 43210', 'tel'], ['email', 'Email', 'e.g. accounts@gouru.in', 'email']]],
+  ['Tax', FileText, [['gstin', 'GSTIN', 'Leave empty if not GST registered'], ['gstPercent', 'GST %', 'e.g. 18', 'num'],
+    ['pan', 'PAN', 'e.g. ABCDE1234F'], ['sac', 'SAC code', 'e.g. 998391']]],
+  ['Invoice', FileSpreadsheet, [['prefix', 'Invoice prefix', 'e.g. GV'], ['terms', 'Note on invoice', 'e.g. Payment due within 15 days.', 'area']]],
 ];
+const FIRM_FOOT = { Tax: 'No GST is added while GSTIN is empty.', Invoice: 'Invoice numbers look like GV/2026-27/0001.' };
 function FirmSheet({ canEdit, onClose }) {
   const [f, setF] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -378,21 +410,35 @@ function FirmSheet({ canEdit, onClose }) {
       toast.success('Firm details saved'); onClose();
     } catch (e) { toast.error(e.message); } finally { setBusy(false); }
   };
+  const field = ([k, label, ph, kind]) => (
+    <label className="pm-row" key={k}>
+      <span>{label}</span>
+      {kind === 'area'
+        ? <textarea rows={2} value={f[k] ?? ''} placeholder={ph} disabled={!canEdit} onChange={(e) => setF({ ...f, [k]: e.target.value })} />
+        : <input value={f[k] ?? ''} placeholder={ph} disabled={!canEdit} autoComplete="off"
+            inputMode={kind === 'num' ? 'decimal' : kind === 'tel' ? 'tel' : kind === 'email' ? 'email' : undefined}
+            className={['gstin', 'pan', 'prefix'].includes(k) ? 'up' : undefined}
+            onChange={(e) => setF({ ...f, [k]: e.target.value })} />}
+    </label>
+  );
   return (
-    <Sheet title="Firm details on invoices" onClose={onClose}>
+    <Sheet title="Firm details" onClose={onClose}>
+      <div className="fee-sub">Printed at the top of every invoice. Bank account, UPI and QR are in <b>Payment details</b>.</div>
       {!f ? <div className="fee-empty"><Loader2 className="spin" size={20} /></div> : (
         <>
-          {!canEdit && <div className="fee-sub">Only the Super Admin can change these.</div>}
-          <div className="fee-sub">Bank account, UPI and QR are in <b>Payment details</b> (each branch can have its own).</div>
-          {FIRM_FIELDS.map(([k, label, kind, hint]) => (
-            <label className="fee-f" key={k}><span>{label}</span>
-              {kind === 'area'
-                ? <textarea rows={2} value={f[k] ?? ''} disabled={!canEdit} onChange={(e) => setF({ ...f, [k]: e.target.value })} />
-                : <input value={f[k] ?? ''} disabled={!canEdit} onChange={(e) => setF({ ...f, [k]: e.target.value })} />}
-              {hint && <em>{hint}</em>}
-            </label>
+          {!canEdit && <div className="pm-note"><Lock size={15} /><span>Only the Super Admin can change these.</span></div>}
+          {FIRM_GROUPS.map(([title, Icon, rows]) => (
+            <React.Fragment key={title}>
+              <div className="pm-sec"><Icon size={14} /> {title}</div>
+              <div className="pm-group">{rows.map(field)}</div>
+              {FIRM_FOOT[title] && <div className="pm-foot">{FIRM_FOOT[title]}</div>}
+            </React.Fragment>
           ))}
-          {canEdit && <button type="button" className="fee-save" disabled={busy} onClick={save}>{busy ? <Loader2 className="spin" size={16} /> : 'Save'}</button>}
+          {canEdit && (
+            <div className="pm-bar">
+              <button type="button" className="fee-save" disabled={busy} onClick={save}>{busy ? <Loader2 className="spin" size={16} /> : 'Save firm details'}</button>
+            </div>
+          )}
         </>
       )}
     </Sheet>
@@ -453,6 +499,48 @@ const CSS = `
 .fee-hist { margin-top: 8px; font-size: 12.5px; color: #475569; } .fee-hist summary { cursor: pointer; font-weight: 700; color: #1d4ed8; }
 .fee-hist > div { border-top: 1px solid #f1f5f9; padding: 6px 0; display: flex; flex-direction: column; gap: 2px; } .fee-hist small { color: #64748b; }
 .fee-save.danger { background: #dc2626; }
+.pm-scope { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 0 4px; padding: 10px 12px; border-radius: 12px; background: #f1f5f9; }
+.pm-scope span { display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 700; color: #334155; white-space: nowrap; }
+.pm-scope select { min-width: 0; flex: 1; max-width: 62%; border: 0; background: transparent; font: inherit; font-size: 15px; font-weight: 600; color: #1d4ed8; text-align: right; text-align-last: right; cursor: pointer; }
+.pm-note { display: flex; gap: 8px; align-items: flex-start; margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: #eff6ff; color: #1e3a8a; font-size: 13px; line-height: 1.4; }
+.pm-note svg { flex-shrink: 0; margin-top: 1px; }
+.pm-sec { display: flex; align-items: center; gap: 6px; margin: 18px 4px 6px; font-size: 12px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #64748b; }
+.pm-group { border: 1px solid #e2e8f0; border-radius: 14px; background: #fff; overflow: hidden; }
+.pm-row { display: flex; flex-direction: column; align-items: stretch; gap: 2px; padding: 10px 14px 8px; border-bottom: 1px solid #eef2f7; cursor: text; }
+.pm-row:last-child { border-bottom: 0; }
+.pm-row span { font-size: 12.5px; font-weight: 700; color: #64748b; }
+.pm-row input { width: 100%; box-sizing: border-box; border: 0; outline: none; background: transparent; padding: 4px 0 2px; font: inherit; font-size: 16px; color: #0f172a; text-align: left; caret-color: #2563eb; }
+.pm-row input::placeholder { color: #a3aec0; }
+.pm-row input.up:not(:placeholder-shown) { text-transform: uppercase; }
+.pm-row textarea { width: 100%; box-sizing: border-box; border: 0; outline: none; background: transparent; padding: 4px 0 2px; font: inherit; font-size: 16px; line-height: 1.4; color: #0f172a; resize: vertical; caret-color: #2563eb; }
+.pm-row textarea::placeholder { color: #a3aec0; }
+.pm-row:focus-within { background: #f8fbff; box-shadow: inset 3px 0 0 #2563eb; }
+.pm-row:focus-within span { color: #2563eb; }
+.pm-row input:disabled { color: #475569; -webkit-text-fill-color: #475569; }
+.pm-foot { margin: 6px 4px 0; font-size: 12px; color: #94a3b8; }
+.pm-qr { display: flex; align-items: center; gap: 14px; padding: 12px 14px; }
+.pm-qr img, .pm-qr-empty { width: 84px; height: 84px; flex-shrink: 0; border-radius: 12px; }
+.pm-qr img { object-fit: contain; border: 1px solid #e2e8f0; background: #fff; }
+.pm-qr-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: 1.5px dashed #93c5fd; background: #f8fbff; color: #2563eb; cursor: pointer; font-family: inherit; }
+.pm-qr-empty small { font-size: 12px; font-weight: 700; }
+.pm-qr-empty:disabled { opacity: .5; cursor: default; }
+.pm-qr-t { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pm-qr-t b { font-size: 14.5px; color: #0f172a; }
+.pm-qr-t small { font-size: 12.5px; color: #64748b; line-height: 1.35; }
+.pm-qr-b { display: flex; gap: 8px; margin-top: 6px; }
+.pm-qr-b button { border: 1px solid #e2e8f0; background: #fff; border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 700; color: #1d4ed8; cursor: pointer; }
+.pm-qr-b button.del { color: #dc2626; }
+.pm-hist { margin-top: 16px; font-size: 12.5px; color: #475569; }
+.pm-hist summary { display: flex; align-items: center; gap: 6px; cursor: pointer; color: #64748b; font-weight: 600; list-style: none; }
+.pm-hist summary::-webkit-details-marker { display: none; }
+.pm-hist > div { border-top: 1px solid #f1f5f9; padding: 6px 0; display: flex; flex-direction: column; gap: 2px; } .pm-hist small { color: #64748b; }
+.pm-bar { position: sticky; bottom: calc(-16px - env(safe-area-inset-bottom)); margin: 8px -16px calc(-16px - env(safe-area-inset-bottom)); padding: 4px 16px calc(16px + env(safe-area-inset-bottom)); background: linear-gradient(rgba(255,255,255,0), #fff 30%); }
+body.dark-theme .pm-scope { background: #2c2c2e; } body.dark-theme .pm-scope span { color: #e5e5ea; } body.dark-theme .pm-scope select { color: #60a5fa; }
+body.dark-theme .pm-note { background: #172554; color: #dbeafe; }
+body.dark-theme .pm-group { background: #1c1c1e; border-color: #3a3a3c; } body.dark-theme .pm-row { border-color: #2c2c2e; }
+body.dark-theme .pm-row input, body.dark-theme .pm-row textarea, body.dark-theme .pm-qr-t b { color: #fff; } body.dark-theme .pm-row span { color: #a1a1aa; } body.dark-theme .pm-row:focus-within { background: #232325; }
+body.dark-theme .pm-qr-empty { background: #1e293b; border-color: #3b82f6; } body.dark-theme .pm-qr-b button { background: #2c2c2e; border-color: #3a3a3c; }
+body.dark-theme .pm-bar { background: linear-gradient(rgba(28,28,30,0), #1c1c1e 30%); }
 .fee-topbtns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .fee-cxl { font-size: 12px; color: #b91c1c; align-self: center; }
 .fee-pdf { display: flex; flex-direction: column; align-items: center; gap: 8px; background: #f1f5f9; border-radius: 12px; padding: 8px; overflow: hidden; }

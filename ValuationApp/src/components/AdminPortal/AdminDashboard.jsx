@@ -1,4 +1,4 @@
-import FeesShortcut from './FeesShortcut';
+import FeesShortcut, { ShortcutStyle } from './FeesShortcut';
 import { API_BASE_URL } from '../../config/api';
 import React, { useState, useEffect } from 'react';
 import DateRangePicker, { toYMD, fromYMD } from '../Shared/DateRangePicker';
@@ -499,6 +499,7 @@ export default function AdminDashboard({ onNavigate, showLibrary = false }) {
       {onNavigate && <FeesShortcut onOpen={() => onNavigate('fees')} onMonthly={() => onNavigate('monthly')} />}
       {onNavigate && showLibrary && (
         <button type="button" className="fsc" onClick={() => onNavigate('library')}>
+          <ShortcutStyle />
           <span className="fsc-ic" style={{ background: '#0f172a' }}><FolderOpen size={18} /></span>
           <span className="fsc-t"><b>Reports library</b><small style={{ color: '#64748b' }}>Every finished report by bank and property type</small></span>
           <ChevronRight size={18} className="fsc-ch" />

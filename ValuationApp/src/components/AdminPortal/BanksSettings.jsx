@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Loader2, Landmark, Search } from 'lucide-react';
+import { Plus, Loader2, Landmark, Search, X, MapPin } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../../config/api';
 import { banksChanged } from '../../utils/banks';
@@ -142,13 +142,63 @@ export default function BanksSettings() {
   );
 }
 
+/** The bank's branches as rows: rename in place, × to remove, and an "Add branch" row (Enter adds) */
+function BranchList({ list, onChange }) {
+  const [draft, setDraft] = useState('');
+  const clean = (v) => v.replace(/\s+/g, ' ').trim();
+  const add = (text = draft) => {
+    const parts = text.split(/[\n,]/).map(clean).filter(Boolean);       // a pasted list works too
+    if (!parts.length) return;
+    const have = new Set(list.map((b) => b.toLowerCase()));
+    const fresh = parts.filter((b) => !have.has(b.toLowerCase()) && have.add(b.toLowerCase()));
+    if (!fresh.length) { toast('Already in the list'); setDraft(''); return; }
+    onChange([...list, ...fresh]); setDraft('');
+  };
+  return (
+    <div className="fs-group bl">
+      {list.map((b, i) => (
+        <div className="bl-row" key={i}>
+          <MapPin size={16} className="bl-pin" />
+          <input value={b} aria-label={`Branch ${i + 1}`} autoComplete="off"
+            onChange={(e) => onChange(list.map((x, j) => (j === i ? e.target.value : x)))}
+            onBlur={(e) => { const v = clean(e.target.value); onChange(v ? list.map((x, j) => (j === i ? v : x)) : list.filter((_, j) => j !== i)); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }} />
+          <button type="button" className="bl-x" aria-label={`Remove ${b}`} onClick={() => onChange(list.filter((_, j) => j !== i))}><X size={15} /></button>
+        </div>
+      ))}
+      <div className="bl-row bl-add">
+        <Plus size={16} className="bl-pin" />
+        <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={list.length ? 'Add another branch' : 'Add a branch, e.g. ITI Road'} autoComplete="off"
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+          onPaste={(e) => { const t = e.clipboardData.getData('text'); if (/[\n,]/.test(t)) { e.preventDefault(); add(t); } }} />
+        <button type="button" className="bl-addbtn" disabled={!clean(draft)} onClick={() => add()}>Add</button>
+      </div>
+      <style>{`
+        .bl-row { display: flex; align-items: center; gap: 10px; padding: 0 12px 0 16px; min-height: 48px; border-bottom: 1px solid rgba(0,0,0,.06); }
+        .bl-row:last-of-type { border-bottom: 0; }
+        .bl-pin { color: #94a3b8; flex-shrink: 0; }
+        .bl-add .bl-pin { color: #2563eb; }
+        .bl-row input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; font: inherit; font-size: 16px; padding: 12px 0; color: inherit; }
+        .bl-row input::placeholder { color: #a3aec0; }
+        .bl-x { flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; border: 0; background: #f1f5f9; color: #64748b; display: grid; place-items: center; cursor: pointer; }
+        .bl-x:hover { background: #fee2e2; color: #dc2626; }
+        .bl-addbtn { flex-shrink: 0; border: 0; background: #2563eb; color: #fff; border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+        .bl-addbtn:disabled { background: #cbd5e1; cursor: default; }
+        body.dark-theme .bl-row { border-color: rgba(255,255,255,.08); }
+        body.dark-theme .bl-x { background: #2c2c2e; color: #a1a1aa; }
+        body.dark-theme .bl-addbtn:disabled { background: #3a3a3c; }
+      `}</style>
+    </div>
+  );
+}
+
 function BankSheet({ bank, formats, onClose, onSaved }) {
   const isNew = !bank.id;
   const [form, setForm] = useState(() => ({
     name: bank.name || '',
     shortName: bank.shortName || '',
     aliases: (bank.aliases || []).join(', '),
-    branches: (bank.branches || []).join('\n'),
+    branches: [...(bank.branches || [])],
     email: bank.email || '',
     autoSend: bank.autoSend !== false,
     contacts: (bank.contacts || []).map((r) => [r.branch, r.email, r.phone].filter(Boolean).join(' | ')).join('\n'),
@@ -212,16 +262,8 @@ function BankSheet({ bank, formats, onClose, onSaved }) {
         <p className="fs-foot">Typing the short name or an old name anywhere in the app picks this bank.{!isNew && ' A new name replaces the old one on all this bank’s cases.'}</p>
 
         <div className="fs-section">Branches</div>
-        <div className="fs-group">
-          <textarea
-            value={form.branches}
-            onChange={set('branches')}
-            rows={5}
-            placeholder={'One branch per line, e.g.\nITI Road\n7 Roads\nRACPC Kadapa'}
-            style={{ width: '100%', border: 0, outline: 'none', resize: 'vertical', padding: '12px 16px', font: 'inherit', fontSize: 16, lineHeight: 1.5, background: 'transparent', color: 'inherit', boxSizing: 'border-box' }}
-          />
-        </div>
-        <p className="fs-foot">These show as a list when a case for this bank is created.</p>
+        <BranchList list={form.branches} onChange={(branches) => setForm((f) => ({ ...f, branches }))} />
+        <p className="fs-foot">{form.branches.length ? `${form.branches.length} branch${form.branches.length > 1 ? 'es' : ''} · ` : ''}These show as a list when a case for this bank is created.</p>
 
         <div className="fs-section">Report delivery</div>
         <div className="fs-group">

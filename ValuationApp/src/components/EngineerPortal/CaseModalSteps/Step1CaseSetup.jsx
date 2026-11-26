@@ -152,6 +152,21 @@ export default function Step1CaseSetup({
             style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', border: '2px solid var(--border-color)', fontSize: '14px', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', ...(lockedFields.bankBranch ? lockStyle : {}) }}
           />
           {lockedFields.bankBranch && <LockNote />}
+          {/* The bank's branches (Settings → Banks) as one-tap chips — the typing suggestions alone are easy to miss on phones */}
+          {!lockedFields.bankBranch && bankBranchOptions.length > 0 && (
+            <div role="group" aria-label="Branches of this bank" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
+              {bankBranchOptions.map((b) => {
+                const on = bankBranch.trim().toLowerCase() === b.toLowerCase();
+                return (
+                  <button key={b} type="button" aria-pressed={on} onClick={() => setBankBranch(on ? '' : b)}
+                    style={{ border: `1.5px solid ${on ? '#2563eb' : 'var(--border-color)'}`, background: on ? '#2563eb' : 'var(--bg-card)', color: on ? '#fff' : 'var(--text-primary)',
+                      borderRadius: '999px', padding: '6px 12px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    {b}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {bankBranchOptions.length > 0 && (
             <datalist id="bank-branch-suggestions">
               {bankBranchOptions.map(b => <option key={b} value={b} />)}
