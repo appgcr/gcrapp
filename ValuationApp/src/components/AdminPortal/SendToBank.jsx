@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Mail, MessageCircle, Copy, Loader2, X } from 'lucide-react';
+import { Send, Mail, Copy, Loader2, X } from 'lucide-react';
+import WhatsAppIcon from '../Shared/WhatsAppIcon';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../../config/api';
 import { authHeaders } from '../Shared/authHeaders';
@@ -47,7 +48,7 @@ export default function SendToBank({ c }) {
                 {d.status === 'failed' && <div className="stb-note bad">Automatic email failed: {d.error}</div>}
                 {!d.email && !d.phone && <div className="stb-note">No email or WhatsApp saved for this branch. Add it in Settings → Banks → Report delivery, or type it in your mail / WhatsApp.</div>}
                 <a className="stb-opt" href={mailto} onClick={() => setTimeout(() => setOpen(false), 300)}><Mail size={18} /> Email{d.email ? <small>{d.email}</small> : null}</a>
-                <a className="stb-opt" href={whatsapp} target="_blank" rel="noreferrer"><MessageCircle size={18} /> WhatsApp{d.phone ? <small>{d.phone}</small> : <small>choose contact</small>}</a>
+                <a className="stb-opt" href={whatsapp} target="_blank" rel="noreferrer"><WhatsAppIcon size={18} /> WhatsApp{d.phone ? <small>{d.phone}</small> : <small>choose contact</small>}</a>
                 <button type="button" className="stb-opt" onClick={() => { navigator.clipboard?.writeText(d.link).then(() => toast.success('Link copied')).catch(() => toast.error('Could not copy')); }}><Copy size={18} /> Copy download link<small>works 30 days, no login</small></button>
               </>
             )}

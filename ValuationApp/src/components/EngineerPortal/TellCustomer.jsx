@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Send, MessageCircle, Smartphone, Loader2 } from 'lucide-react';
+import { Send, Smartphone, Loader2 } from 'lucide-react';
+import WhatsAppIcon from '../Shared/WhatsAppIcon';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../../config/api';
 import { currentPosition } from '../../utils/sitePhotos';
@@ -39,7 +40,7 @@ export default function TellCustomer({ caseId, notified }) {
           <div className="tcu-preview">{msg.text}</div>
           {msg.etaMin && <div className="tcu-eta">About {msg.distanceKm} km · {msg.etaMin} min away</div>}
           <div className="tcu-row">
-            <a className="tcu-btn wa" href={`https://wa.me/${wa}?text=${encodeURIComponent(msg.text)}`} target="_blank" rel="noreferrer"><MessageCircle size={17} /> WhatsApp</a>
+            <a className="tcu-btn wa" href={`https://wa.me/${wa}?text=${encodeURIComponent(msg.text)}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={17} /> WhatsApp</a>
             {digits && <a className="tcu-btn" href={`sms:${digits}?body=${encodeURIComponent(msg.text)}`}><Smartphone size={17} /> SMS</a>}
           </div>
           {!digits && <div className="tcu-eta">No customer number on this case — choose the contact in WhatsApp.</div>}

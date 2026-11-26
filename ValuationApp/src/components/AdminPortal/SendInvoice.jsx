@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, MessageCircle, Mail, Copy, Loader2, X, Building2, User } from 'lucide-react';
+import { Send, Mail, Copy, Loader2, X, Building2, User } from 'lucide-react';
+import WhatsAppIcon from '../Shared/WhatsAppIcon';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../../config/api';
 import { authHeaders } from '../Shared/authHeaders';
@@ -61,7 +62,7 @@ function Sheet({ c, onClose }) {
             <label className="si-f">WhatsApp number<input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" placeholder={to === 'bank' ? 'Bank branch mobile' : 'Customer mobile'} /></label>
             {to === 'bank' && <label className="si-f">Email<input value={email} onChange={(e) => setEmail(e.target.value)} inputMode="email" placeholder="branch email" /></label>}
             <label className="si-f">Message<textarea rows={8} value={text} onChange={(e) => setText(e.target.value)} /></label>
-            <a className="si-opt wa" href={wa} target="_blank" rel="noreferrer" onClick={() => setTimeout(onClose, 400)}><MessageCircle size={18} /> Send on WhatsApp{digits ? <small>{phone}</small> : <small>choose contact</small>}</a>
+            <a className="si-opt wa" href={wa} target="_blank" rel="noreferrer" onClick={() => setTimeout(onClose, 400)}><WhatsAppIcon size={18} /> Send on WhatsApp{digits ? <small>{phone}</small> : <small>choose contact</small>}</a>
             {to === 'bank' && (d.canEmail
               ? <button type="button" className="si-opt" onClick={emailNow} disabled={busy || !email}>{busy ? <Loader2 size={18} className="spin" /> : <Mail size={18} />} Email now with the PDF<small>{email}</small></button>
               : <a className="si-opt" href={mail}><Mail size={18} /> Email<small>{email || 'opens your mail app'}</small></a>)}

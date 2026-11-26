@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, ChevronLeft, ChevronRight, Loader2, Clock, MapPin, FileText, CheckCircle2, RotateCcw, FolderOpen, Users, Inbox, UserX, Download } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Loader2, Clock, MapPin, FileText, CheckCircle2, RotateCcw, FolderOpen, Users, Inbox, UserX, Download, Check } from 'lucide-react';
+import WhatsAppIcon from './WhatsAppIcon';
 import toast from 'react-hot-toast';
 import { saveBlobToDevice } from '../../utils/fileDownload';
 import { API_BASE_URL } from '../../config/api';
@@ -73,6 +74,27 @@ export default function WorkReport({ initialPeriod = 'day', initialDate = '', on
       await saveBlobToDevice(await r.blob(), name, { successMsg: 'Report PDF saved' });
     } catch (e2) { toast.error(e2.message); } finally { setPdfBusy(false); }
   };
+  // Send on WhatsApp, one person at a time (free): each gets only their own report
+  const [share, setShare] = useState(null); // null | 'loading' | { people } | { error }
+  const sentKey = `gcr_wr_sent:${period}:${ymd}`;
+  const [sent, setSent] = useState(() => { try { return JSON.parse(localStorage.getItem(sentKey) || '[]'); } catch { return []; } });
+  useEffect(() => { try { setSent(JSON.parse(localStorage.getItem(sentKey) || '[]')); } catch { setSent([]); } setShare(null); }, [sentKey]);
+  const openShare = async () => {
+    setShare('loading');
+    try {
+      const q = new URLSearchParams({ period, date: ymd });
+      const r = await fetch(`${API_BASE_URL}/api/work-report/share-list?${q}`);
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'Could not load the list.');
+      setShare({ people: j.people || [] });
+    } catch (e2) { setShare({ error: e2.message }); }
+  };
+  const sendTo = (p) => {
+    window.open(`https://wa.me/${p.wa}?text=${encodeURIComponent(p.message)}`, '_blank', 'noopener');
+    const next = [...new Set([...sent, p.id])];
+    setSent(next);
+    try { localStorage.setItem(sentKey, JSON.stringify(next)); } catch { /* ignore */ }
+  };
   const step = period === 'week' ? 7 : 1;
   const atToday = shift(ymd, step) > todayYmd();   // nothing to show in the future
   const t = data?.totals;
@@ -101,7 +123,29 @@ export default function WorkReport({ initialPeriod = 'day', initialDate = '', on
           <>
             <div className="wr-title">{data.kind === 'engineer' ? (e?.name || '') : data.kind === 'branch' ? `${data.branch?.name || 'Branch'} branch` : 'All branches'}
               <button type="button" className="wr-pdf" onClick={downloadPdf} disabled={pdfBusy}>{pdfBusy ? <Loader2 size={15} className="spin" /> : <Download size={15} />} PDF</button>
+              {data.kind !== 'engineer' && !userId && <button type="button" className="wr-pdf wr-wa" onClick={openShare}><WhatsAppIcon size={15} /> Send on WhatsApp</button>}
             </div>
+            {share && (
+              <div className="wr-share">
+                <div className="wr-share-h"><b>Send each person their own report</b><button type="button" onClick={() => setShare(null)} aria-label="Close list"><X size={16} /></button></div>
+                <small>Tap WhatsApp next to a name: their chat opens with their own report link ready — then tap Send. Nobody sees anyone else's report.</small>
+                {share === 'loading' ? <div className="wr-empty"><Loader2 size={18} className="spin" /></div>
+                  : share.error ? <div className="wr-empty">{share.error}</div>
+                  : share.people.length === 0 ? <div className="wr-empty">No engineers or branch admins found.</div> : (
+                    <>
+                      <div className="wr-share-count">{sent.filter((id) => share.people.some((p) => p.id === id)).length} of {share.people.length} sent</div>
+                      {share.people.map((p) => (
+                        <div className="wr-share-row" key={p.id}>
+                          <div><b>{p.name}</b><small>{[p.role, p.branch].filter(Boolean).join(' · ')}</small><em>{p.summary}</em></div>
+                          {p.wa
+                            ? <button type="button" className={sent.includes(p.id) ? 'done' : ''} onClick={() => sendTo(p)}>{sent.includes(p.id) ? <><Check size={15} /> Sent</> : <><WhatsAppIcon size={15} /> WhatsApp</>}</button>
+                            : <span className="wr-nophone">No mobile number — add it in Staff</span>}
+                        </div>
+                      ))}
+                    </>
+                  )}
+              </div>
+            )}
             {data.kind === 'engineer' && e && (
               <>
                 <div className="wr-tiles">
@@ -156,6 +200,18 @@ export default function WorkReport({ initialPeriod = 'day', initialDate = '', on
           .wr-top b { font-size: 17px; }
           .wr-pdf { float: right; display: inline-flex; align-items: center; gap: 5px; border: 0; border-radius: 999px; padding: 6px 12px; background: #0f2a5c; color: #fde68a; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; }
           .wr-pdf:disabled { opacity: .6; }
+          .wr-wa { background: #16a34a; color: #fff; margin-right: 6px; }
+          .wr-share { margin: 4px 0 12px; border: 1px solid #bbf7d0; background: #f0fdf4; border-radius: 14px; padding: 10px 12px; }
+          .wr-share-h { display: flex; justify-content: space-between; align-items: center; } .wr-share-h b { font-size: 14.5px; color: #14532d; }
+          .wr-share-h button { border: 0; background: none; cursor: pointer; color: #166534; }
+          .wr-share > small { display: block; font-size: 12px; color: #166534; margin: 2px 0 8px; line-height: 1.4; }
+          .wr-share-count { font-size: 12px; font-weight: 700; color: #15803d; margin-bottom: 4px; }
+          .wr-share-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid #dcfce7; }
+          .wr-share-row > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+          .wr-share-row b { font-size: 14px; color: #0f172a; } .wr-share-row small { font-size: 12px; color: #64748b; } .wr-share-row em { font-style: normal; font-size: 11.5px; color: #475569; margin-top: 2px; }
+          .wr-share-row button { flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px; border: 0; border-radius: 999px; padding: 8px 12px; background: #16a34a; color: #fff; font-weight: 700; font-size: 13px; cursor: pointer; font-family: inherit; }
+          .wr-share-row button.done { background: #dcfce7; color: #15803d; }
+          .wr-nophone { flex-shrink: 0; font-size: 11.5px; color: #b45309; font-weight: 600; max-width: 120px; text-align: right; }
           .wr-x { justify-self: end; border: 0; background: #e5e7eb; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; cursor: pointer; }
           .wr-back { justify-self: start; border: 0; background: transparent; color: #2563eb; font: inherit; font-weight: 600; display: flex; align-items: center; cursor: pointer; padding: 0; }
           .wr-seg { display: flex; background: #e5e7eb; border-radius: 10px; padding: 3px; margin-bottom: 10px; }

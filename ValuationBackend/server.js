@@ -89,6 +89,8 @@ app.use('/api/extract', require('./routes/extract'));
 app.use('/api/assist', require('./routes/assist'));
 app.use('/api/billing', require('./routes/billing'));
 app.use('/api/work-report', require('./routes/workReports'));
+// Short report links sent on WhatsApp: /r/<person>.<d|w><date>.<expiry>.<signature> → that person's own report PDF
+app.get('/r/:token', require('./routes/workReports').serveShort);
 app.use('/api/insights', require('./routes/insights'));
 app.use('/api/config', require('./routes/config'));
 app.use('/api/location', require('./routes/location'));
