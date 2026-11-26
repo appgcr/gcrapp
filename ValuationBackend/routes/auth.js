@@ -15,6 +15,60 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { authenticateToken, JWT_SECRET } = require('../middleware/auth');
 const { startSession, endSession } = require('../services/sessions');
+const approval = require('../services/loginApproval');
+const { requireRole } = require('../middleware/auth');
+
+/** A finished sign-in: this device's session, its token and the user's details */
+async function signedIn(user, req) {
+  const sid = await startSession(user, req);   // this device, for the Super Admin's Devices list
+  const token = jwt.sign({ id: user.id, username: user.username, role: user.role, sid }, JWT_SECRET, { expiresIn: '7d' });
+  return {
+    success: true,
+    token,
+    user: {
+      id: user.id, username: user.username, name: user.name, role: user.role, phone: user.phone, licenseNo: user.licenseNo,
+      branch: user.branch, branchId: user.branchId || null, branchInfo: await branchInfo(user), ...bankFields(user), status: user.status,
+      faceEnrolled: user.faceEnrolled || false, faceDescriptor: user.faceDescriptor || [], facePhotoUrl: user.facePhotoUrl || '',
+    },
+  };
+}
+
+// GET /api/auth/login-request/:id?key=… — the waiting phone asks whether its sign-in was approved
+router.get('/login-request/:id', async (req, res) => {
+  try {
+    const out = await approval.poll(req.params.id, String(req.query.key || ''));
+    if (out.status !== 'approved') return res.json({ status: out.status });
+    res.json({ status: 'approved', ...(await signedIn(out.user, req)) });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not check the sign-in.' });
+  }
+});
+
+// Super Admin: sign-ins waiting for approval, and the answer
+router.get('/login-requests', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+  try {
+    const Branch = require('../models/Branch');
+    const list = await approval.pending();
+    const names = Object.fromEntries((await Branch.find({}).select('id name').lean()).map((b) => [b.id, b.name]));
+    res.json({ enabled: await approval.enabled(), requests: list.map((r) => ({ ...r, branchName: names[r.branchId] || '' })) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+router.post('/login-requests/:id/:answer(approve|deny)', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+  try {
+    const out = await approval.decide(req.params.id, req.params.answer === 'approve', req.user);
+    if (out.error) return res.status(409).json({ error: out.error });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+// Super Admin: switch new-device approval on or off
+router.put('/login-approval', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+  try {
+    const AppConfig = require('../models/AppConfig');
+    const on = req.body?.enabled !== false;
+    await AppConfig.updateOne({ key: 'global' }, { $set: { loginApproval: on } }, { upsert: true });
+    res.json({ enabled: on });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
 // POST /api/auth/logout — this device signs out (its session and push notifications end)
 router.post('/logout', authenticateToken, async (req, res) => {
@@ -61,33 +115,13 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid Username or Password' });
     }
 
-    const sid = await startSession(user, req);   // this device, for the Super Admin's Devices list
-    const token = jwt.sign(
-      { id: user.id, username: user.username, role: user.role, sid },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    res.json({
-      success: true,
-      token,
-      user: {
-        id: user.id,
-        username: user.username,
-        name: user.name,
-        role: user.role,
-        phone: user.phone,
-        licenseNo: user.licenseNo,
-        branch: user.branch,
-        branchId: user.branchId || null,
-        branchInfo: await branchInfo(user),
-        ...bankFields(user),
-        status: user.status,
-        faceEnrolled: user.faceEnrolled || false,
-        faceDescriptor: user.faceDescriptor || [],
-        facePhotoUrl: user.facePhotoUrl || ''
-      }
-    });
+    // A new device of an engineer / branch admin waits for the Super Admin's approval
+    if (await approval.needsApproval(user, req)) {
+      const r = await approval.createRequest(user, req);
+      return res.status(202).json({ success: false, pending: true, ...r,
+        message: 'This is a new device. Your sign-in is waiting for the Super Admin to approve it.' });
+    }
+    res.json(await signedIn(user, req));
   } catch (err) {
     console.error("Login error:", err);
     res.status(500).json({ error: 'Server error during authentication' });
@@ -287,31 +321,12 @@ router.post('/webauthn/login-verify', async (req, res) => {
       passkey.counter = verification.authenticationInfo.newCounter;
       await user.save();
 
-      const sid = await startSession(user, req);
-      const token = jwt.sign(
-        { id: user.id, username: user.username, role: user.role, sid },
-        JWT_SECRET,
-        { expiresIn: '7d' }
-      );
-
-      res.json({
-        success: true,
-        token,
-        user: {
-          id: user.id,
-          username: user.username,
-          name: user.name,
-          role: user.role,
-          phone: user.phone,
-          licenseNo: user.licenseNo,
-          branch: user.branch,
-          branchId: user.branchId || null,
-          branchInfo: await branchInfo(user),
-        branchId: user.branchId || null,
-        branchInfo: await branchInfo(user),
-          status: user.status
-        }
-      });
+      if (await approval.needsApproval(user, req)) {
+        const r = await approval.createRequest(user, req);
+        return res.status(202).json({ success: false, pending: true, ...r,
+          message: 'This is a new device. Your sign-in is waiting for the Super Admin to approve it.' });
+      }
+      res.json(await signedIn(user, req));
     } else {
       res.status(400).json({ error: 'Authentication failed' });
     }

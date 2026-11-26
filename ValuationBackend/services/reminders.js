@@ -488,6 +488,37 @@ async function ruleInvoiceReminders(ctx) {
  * Run all rules once. `now` can be overridden for testing.
  * Returns a summary of how many reminders each rule sent.
  */
+// Daily (every working day) and weekly (on its set day) work report to every engineer, branch admin and
+// Super Admin: one notification with the key numbers; tapping it opens the full report in the app.
+async function ruleWorkReports(ctx, period) {
+  const { settings, ist, now, engineers, admins } = ctx;
+  const cfg = period === 'week' ? settings.weeklyReport : settings.dailyReport;
+  if (!cfg?.enabled) return 0;
+  if (period === 'week' && ist.weekday !== (cfg.day || 'Sat')) return 0;
+  if (!isDue(ist.minutes, toMinutes(cfg.time || '20:00'))) return 0;
+  const { workReport, summaryLine } = require('./workReports');
+  const type = period === 'week' ? 'weekly_report' : 'daily_report';
+  const word = period === 'week' ? 'weekly' : 'daily';
+  const Title = period === 'week' ? 'Weekly report' : 'Daily report';
+  let count = 0;
+  const deliver = async (person, scope, title) => {
+    const r = await workReport(period, ist.ymd, scope);
+    if (!r) return;
+    const sent = await send(`${type}:${person.id}:${ist.ymd}`, `${word}Report`, {
+      to: person.id, type, priority: 'digest', now, title, message: summaryLine(r),
+    });
+    if (sent) count += 1;
+  };
+  for (const e of engineers) await deliver(e, { userId: e.id }, `Your ${word} report`);
+  const Branch = require('../models/Branch');
+  const names = Object.fromEntries((await Branch.find({}).select('id name').lean()).map((b) => [b.id, b.name]));
+  for (const a of admins) {
+    if (a.role === 'ADMIN') { if (a.branchId) await deliver(a, { branchId: a.branchId }, `${Title} — ${names[a.branchId] || 'your branch'}`); }
+    else await deliver(a, {}, `${Title} — all branches`);
+  }
+  return count;
+}
+
 async function runReminders(now = new Date()) {
   const settings = await getSettings();
   const ist = istParts(now);
@@ -523,7 +554,11 @@ async function runReminders(now = new Date()) {
   // everything else stays inside working hours.
   // An actual booked inspection is reminded any day (even Sunday).
   summary.sent.inspection = await ruleInspection(ctx);
+  // Weekly work report on its own day (even if that is a Sunday)
+  try { summary.sent.weeklyReport = await ruleWorkReports(ctx, 'week'); } catch (err) { console.warn('weekly report:', err.message); }
   if (settings.skipSundays && ist.weekday === 'Sun') { summary.skipped = 'sunday (only inspection reminders run)'; return summary; }
+  // Daily work report (8 PM by default — after the working-hours rules below stop)
+  try { summary.sent.dailyReport = await ruleWorkReports(ctx, 'day'); } catch (err) { console.warn('daily report:', err.message); }
   if (ist.minutes >= WORK_START && ist.minutes < WORK_END) {
     summary.sent.morningDigest = await ruleMorningDigest(ctx);
     summary.sent.engineerDigest = await ruleEngineerDigest(ctx);
@@ -531,7 +566,8 @@ async function runReminders(now = new Date()) {
     summary.sent.overdue = await ruleOverdue(ctx);
     summary.sent.checkOut = await ruleCheckOut(ctx);
     summary.sent.visitNudge = await ruleVisitNudge(ctx);
-    summary.sent.eveningSummary = await ruleEveningSummary(ctx);
+    // The one-line evening summary only while the fuller daily report is switched off
+    if (!settings.dailyReport?.enabled) summary.sent.eveningSummary = await ruleEveningSummary(ctx);
     try { summary.sent.invoiceReminders = await ruleInvoiceReminders(ctx); } catch (err) { console.warn('invoice reminders:', err.message); }
   }
   return summary;

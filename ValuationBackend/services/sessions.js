@@ -58,7 +58,8 @@ async function startSession(user, req) {
   const now = new Date();
   const { device, platform, app } = describeDevice(req);
   await User.updateOne({ id: user.id }, {
-    $push: { sessions: { $each: [{ sid, device, platform, app, ip: clientIp(req), createdAt: now, lastSeenAt: now }], $slice: -MAX_SESSIONS } },
+    $push: { sessions: { $each: [{ sid, device, platform, app, ip: clientIp(req), createdAt: now, lastSeenAt: now,
+      deviceId: String(req.headers['x-device-id'] || '').replace(/[^\w-]/g, '').slice(0, 64) }], $slice: -MAX_SESSIONS } },
   });
   return sid;
 }
@@ -82,20 +83,20 @@ function touchSession(user, sid, req) {
   User.updateOne({ id: user.id, 'sessions.sid': sid }, { $set: { 'sessions.$.lastSeenAt': new Date(), 'sessions.$.ip': clientIp(req) } }).catch(() => {});
 }
 
-/** End one session (and its push notifications) */
-async function endSession(userId, sid) {
+/** End one session (and its push notifications). forget: the device also needs approval again to sign in. */
+async function endSession(userId, sid, { forget = false } = {}) {
   const u = await User.findOne({ id: userId }).select('sessions').lean();
   const s = (u?.sessions || []).find((x) => x.sid === sid);
   if (!s) return false;
-  const update = { $pull: { sessions: { sid } } };
-  await User.updateOne({ id: userId }, update);
+  await User.updateOne({ id: userId }, { $pull: { sessions: { sid } } });
   if (s.pushToken) await User.updateOne({ id: userId }, { $pull: { pushTokens: { token: s.pushToken } } });
+  if (forget && s.deviceId) await User.updateOne({ id: userId }, { $pull: { trustedDevices: { deviceId: s.deviceId } } });
   return true;
 }
 
 /** End every session, including old tokens from before device tracking */
 async function endAllSessions(userId) {
-  await User.updateOne({ id: userId }, { $set: { sessions: [], pushTokens: [], sessionsRevokedBefore: new Date() } });
+  await User.updateOne({ id: userId }, { $set: { sessions: [], pushTokens: [], trustedDevices: [], sessionsRevokedBefore: new Date() } });
 }
 
 /** For the Devices list (newest activity first) */

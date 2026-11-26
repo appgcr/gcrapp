@@ -4,6 +4,8 @@ const appConfigSchema = new mongoose.Schema({
   key: { type: String, required: true, unique: true, default: 'global' },
   // One-time data imports already applied (e.g. 'branches-kadapa-2026-11'), so they never run twice
   doneImports: { type: [String], default: [] },
+  // Engineers and branch admins need the Super Admin's approval to sign in on a new device
+  loginApproval: { type: Boolean, default: true },
   banks: {
     type: [String],
     default: [

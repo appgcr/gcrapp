@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BellRing, Sunrise, LogIn, MapPin, AlertTriangle, LogOut, CalendarOff, Coffee, Moon, Sparkles } from 'lucide-react';
+import { BellRing, Sunrise, LogIn, MapPin, AlertTriangle, LogOut, CalendarOff, Coffee, Moon, Sparkles, BarChart3, CalendarRange } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../../config/api';
 import IconTile from '../Shared/IconTile';
@@ -108,7 +108,17 @@ export default function ReminderSettingsCard({ currentUser, embedded = false }) 
       sub: 'To engineers still checked in at the end of the day',
       control: 'time',
     },
-  ];
+    {
+      key: 'dailyReport', icon: BarChart3, color: 'teal', title: 'Daily report',
+      sub: 'To every engineer (their day), branch admin (their branch) and you (all branches)',
+      control: 'time',
+    },
+    {
+      key: 'weeklyReport', icon: CalendarRange, color: 'purple', title: 'Weekly report',
+      sub: 'The same for the whole week (Monday to Sunday)',
+      control: 'weekly',
+    },
+  ].filter((r) => s[r.key]);   // an older server without the reports simply doesn't list them
 
   return (
     <div className="admin-card rs-card">
@@ -142,6 +152,21 @@ export default function ReminderSettingsCard({ currentUser, embedded = false }) 
                         />
                         <span aria-hidden="true">{fmt12(cfg.time)}</span>
                       </label>
+                    )}
+                    {r.control === 'weekly' && (
+                      <>
+                        <label className="rs-chip">
+                          <span className="sr-only">Weekly report day</span>
+                          <select value={cfg.day || 'Sat'} onChange={(e) => { const v = e.target.value; save({ weeklyReport: { day: v } }, (x) => { x.weeklyReport.day = v; return x; }); }}>
+                            {[['Mon', 'Monday'], ['Tue', 'Tuesday'], ['Wed', 'Wednesday'], ['Thu', 'Thursday'], ['Fri', 'Friday'], ['Sat', 'Saturday'], ['Sun', 'Sunday']].map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                          </select>
+                        </label>
+                        <label className="rs-chip">
+                          <span className="sr-only">Weekly report time</span>
+                          <input type="time" value={cfg.time} onChange={(e) => e.target.value && save({ weeklyReport: { time: e.target.value } }, (x) => { x.weeklyReport.time = e.target.value; return x; })} />
+                          <span aria-hidden="true">{fmt12(cfg.time)}</span>
+                        </label>
+                      </>
                     )}
                     {r.control === 'lead' && (
                       <label className="rs-chip">

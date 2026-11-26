@@ -183,7 +183,13 @@ export default function EngineerDashboard({ currentUser, onOpenCase }) {
       {/* This week */}
       {week && (
         <>
-          <div className="td-section">This week</div>
+          <div className="td-section" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>This week</span>
+            <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('gcr_open_work_report', { detail: { period: 'day' } }))}
+              style={{ border: 0, background: 'transparent', color: 'var(--primary, #2563eb)', font: 'inherit', fontSize: 13, fontWeight: 700, textTransform: 'none', letterSpacing: 0, cursor: 'pointer', padding: 0 }}>
+              Daily & weekly report ›
+            </button>
+          </div>
           <div className="ed-week">
             <div>
               <IconTile icon={CalendarCheck} color="green" size={28} />

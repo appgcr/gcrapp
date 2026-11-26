@@ -211,7 +211,15 @@ export default function NotificationBell({ userId, currentUserId }) {
       <button
         key={n._id}
         className={`nc-card ${n.isRead ? '' : 'is-unread'}`}
-        onClick={() => !n.isRead && markAsRead(n._id)}
+        onClick={() => {
+          if (!n.isRead) markAsRead(n._id);
+          // Daily / weekly report: open the full report (for the day it was sent)
+          if (n.type === 'daily_report' || n.type === 'weekly_report') {
+            setIsOpen(false);
+            const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(n.createdAt));
+            window.dispatchEvent(new CustomEvent('gcr_open_work_report', { detail: { period: n.type === 'weekly_report' ? 'week' : 'day', date } }));
+          }
+        }}
         aria-label={`${cleanTitle(n.title)}. ${textMessage}${n.isRead ? '' : '. Unread, tap to mark as read'}`}
       >
         <IconTile icon={icon} color={color} size={38} />

@@ -20,6 +20,7 @@ import AdminValueMap from './AdminValueMap';
 import AdminFees from './AdminFees';
 import AdminMonthly from './AdminMonthly';
 import AdminReportsLibrary from './AdminReportsLibrary';
+import LoginApprovals from './LoginApprovals';
 import { isSuperAdmin } from '../../utils/session';
 import GcrLogo from '../Shared/GcrLogo';
 import PullDownReach from '../Shared/PullDownReach';
@@ -398,6 +399,7 @@ export default function AdminPortal({ currentUser, handleLogout }) {
         )}
 
         <GlobalChatWidget currentUser={currentUser} unreadChats={unreadChats} />
+        {isSuperAdmin(currentUser) && <LoginApprovals />}
 
         <main className="admin-main-content" style={activeTab === 'chat' ? { padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' } : {}}>
           <React.Fragment key={refreshKey}>{renderContent()}</React.Fragment>

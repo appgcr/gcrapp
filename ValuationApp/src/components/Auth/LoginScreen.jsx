@@ -1,6 +1,6 @@
 import { API_BASE_URL } from '../../config/api';
 import React, { useEffect, useRef, useState } from 'react';
-import { Eye, EyeOff, Fingerprint, Loader2, AlertCircle, KeyRound, MapPin, FileCheck2, Users, X, Mail } from 'lucide-react';
+import { Eye, EyeOff, Fingerprint, Loader2, AlertCircle, KeyRound, MapPin, FileCheck2, Users, X, Mail, ShieldCheck, Smartphone } from 'lucide-react';
 import { startAuthentication } from '@simplewebauthn/browser';
 import GcrLogo from '../Shared/GcrLogo';
 import pkg from '../../../package.json';
@@ -18,6 +18,8 @@ export default function LoginScreen({ onLogin }) {
   const [shake, setShake] = useState(0);
   const [busy, setBusy] = useState(null); // 'password' | 'passkey' | null
   const [showHelp, setShowHelp] = useState(false);
+  // A new device: the sign-in waits for the Super Admin ({ requestId, pollKey, device, since })
+  const [waiting, setWaiting] = useState(null);
   const passwordRef = useRef(null);
   const userRef = useRef(null);
   const passkeySupported = typeof window !== 'undefined' && !!window.PublicKeyCredential;
@@ -34,6 +36,30 @@ export default function LoginScreen({ onLogin }) {
       else localStorage.removeItem(REMEMBER_KEY);
     } catch { /* storage blocked */ }
     onLogin(data.user);
+  };
+
+  // While waiting: ask every 3 seconds whether the Super Admin approved this device
+  useEffect(() => {
+    if (!waiting) return undefined;
+    let stop = false;
+    const tick = async () => {
+      try {
+        const r = await fetch(`${API_BASE_URL}/api/auth/login-request/${encodeURIComponent(waiting.requestId)}?key=${encodeURIComponent(waiting.pollKey)}`);
+        const d = await r.json().catch(() => ({}));
+        if (stop) return;
+        if (d.status === 'approved' && d.success) { setWaiting(null); return finish(d); }
+        if (d.status === 'denied') { setWaiting(null); return fail('The Super Admin did not approve this device. Contact your office.'); }
+        if (['expired', 'unknown', 'used'].includes(d.status)) { setWaiting(null); return fail('The approval request expired. Sign in again to send a new one.'); }
+      } catch { /* no signal: try again */ }
+      if (!stop) setTimeout(tick, 3000);
+    };
+    const first = setTimeout(tick, 2000);
+    return () => { stop = true; clearTimeout(first); };
+  }, [waiting]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const holdForApproval = (data) => {
+    setPassword('');
+    setWaiting({ requestId: data.requestId, pollKey: data.pollKey, device: data.device, since: Date.now() });
   };
 
   const handleLoginSubmit = async (e) => {
@@ -54,6 +80,7 @@ export default function LoginScreen({ onLogin }) {
           signal: AbortSignal.timeout(60000),
         });
         const data = await response.json().catch(() => ({}));
+        if (response.status === 202 && data.pending) { setError(''); setBusy(null); return holdForApproval(data); }
         if (response.ok && data.success) {
           setError('');
           setBusy(null);
@@ -90,6 +117,7 @@ export default function LoginScreen({ onLogin }) {
         body: JSON.stringify({ response: asseResp, expectedChallenge: options.challenge }),
       });
       const data = await verifyResp.json();
+      if (verifyResp.status === 202 && data.pending) return holdForApproval(data);
       if (data.success && data.user) return finish(data);
       fail(data.error || 'Face ID / fingerprint sign-in didn’t work. Use your password instead.');
     } catch (err) {
@@ -129,6 +157,25 @@ export default function LoginScreen({ onLogin }) {
             <p>{remembered ? `Signing in as ${remembered}` : 'Use the login your administrator gave you.'}</p>
           </header>
 
+          {waiting ? (
+            <div className="lg-wait" role="status" aria-live="polite">
+              <div className="lg-wait-icon"><ShieldCheck size={30} /></div>
+              <h3>Waiting for approval</h3>
+              <p>This is a new device for your account. Your Super Admin has been asked to approve it — you’ll be signed in automatically once they do.</p>
+              {waiting.device && <div className="lg-wait-device"><Smartphone size={16} /> {waiting.device}</div>}
+              <div className="lg-wait-spin"><Loader2 size={18} className="spin" /> Checking…</div>
+              <button type="button" className="lg-link" onClick={() => setWaiting(null)}>Cancel</button>
+              <style>{`
+                .lg-wait { text-align: center; padding: 8px 4px 4px; }
+                .lg-wait-icon { width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 18px; background: #eff6ff; color: #2563eb; display: grid; place-items: center; }
+                .lg-wait h3 { margin: 0 0 8px; font-size: 20px; }
+                .lg-wait p { margin: 0 auto 14px; max-width: 340px; color: #64748b; font-size: 14.5px; line-height: 1.45; }
+                .lg-wait-device { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px; background: #f1f5f9; color: #334155; font-size: 13.5px; font-weight: 600; margin-bottom: 16px; }
+                .lg-wait-spin { display: flex; align-items: center; justify-content: center; gap: 8px; color: #2563eb; font-weight: 600; font-size: 14px; margin-bottom: 14px; }
+              `}</style>
+            </div>
+          ) : (
+          <>
           <form onSubmit={handleLoginSubmit} noValidate>
             <div key={shake} className={`lg-group ${shake ? 'lg-shake' : ''} ${error ? 'lg-group-error' : ''}`}>
               <label className="lg-field">
@@ -199,6 +246,8 @@ export default function LoginScreen({ onLogin }) {
                 {busy === 'passkey' ? 'Waiting for Face ID / fingerprint…' : 'Sign in with Face ID or Fingerprint'}
               </button>
             </>
+          )}
+          </>
           )}
 
           <footer className="lg-foot">

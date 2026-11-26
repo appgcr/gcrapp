@@ -97,10 +97,19 @@ const VEMPALLE_BRANCHES = {
   'Andhra Pradesh Grameena Bank': ['Main – Vempalle', 'Kandula Complex – Vempalle', 'Veerapunayunipalle', 'Chakrayapeta'],
   'Canara Bank': ['Vempalle'],
 };
+// Pulivendula area: town branches carry the town ("Main – Pulivendula"); village branches keep their own name
+const PULIVENDULA_BRANCHES = {
+  'State Bank of India': ['Main – Pulivendula', 'Town – Pulivendula', 'JNTU – Pulivendula', 'Kondapuram', 'Balapanur', 'Parnapalli', 'Kommanuthala'],
+  'Bank of Baroda': ['Pulivendula'],
+  'Union Bank of India': ['Pulivendula', 'Vemula'],
+  'Andhra Pradesh Grameena Bank': ['Main – Pulivendula', 'Poola Angallu – Pulivendula', 'Nallapureddipalli', 'Lingala', 'Mallala', 'Thonduru', 'Velidandla'],
+  'Canara Bank': ['Pulivendula', 'Simhadripuram'],
+};
 const BRANCH_IMPORTS = [
   ['branches-kadapa-2026-11', 'Kadapa', KADAPA_BRANCHES],
   ['branches-proddatur-2026-11', 'Proddatur', PRODDATUR_BRANCHES],
   ['branches-vempalle-2026-11', 'Vempalle', VEMPALLE_BRANCHES],
+  ['branches-pulivendula-2026-11', 'Pulivendula', PULIVENDULA_BRANCHES],
 ];
 
 /**

@@ -31,6 +31,20 @@ function readDeviceInfo() {
   }).catch(() => {});
 }
 
+// A lasting id for this phone / computer (kept in the app's storage). A sign-in from a device the
+// Super Admin hasn't approved yet waits for approval; an approved device signs in normally.
+const DEVICE_ID_KEY = 'gcr_device_id';
+export function getDeviceId() {
+  try {
+    let id = localStorage.getItem(DEVICE_ID_KEY);
+    if (!id) {
+      id = (window.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`).replace(/[^\w-]/g, '');
+      localStorage.setItem(DEVICE_ID_KEY, id);
+    }
+    return id;
+  } catch { return ''; }
+}
+
 export function installApiAuth() {
   if (typeof window === 'undefined' || window.__gcrFetchPatched) return;
   window.__gcrFetchPatched = true;
@@ -51,6 +65,8 @@ export function installApiAuth() {
       headers.set('x-client', cap?.isNativePlatform?.() ? `app-${cap.getPlatform?.() || 'mobile'}` : 'web');
     }
     if (deviceHeader && !headers.has('x-device')) headers.set('x-device', deviceHeader);
+    const deviceId = getDeviceId();
+    if (deviceId && !headers.has('x-device-id')) headers.set('x-device-id', deviceId);
     const method = String(init.method || (typeof input !== 'string' && input?.method) || 'GET').toUpperCase();
     const cacheKey = method === 'GET' && offlineCacheable(url) ? `apiCache:${u?.id || 'anon'}:${url.slice(API_BASE_URL.length)}` : null;
     // A device the Super Admin signed out: tell the app, which returns to the login screen

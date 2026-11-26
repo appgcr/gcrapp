@@ -40,6 +40,16 @@ const reminderSettingsSchema = new mongoose.Schema({
     enabled: { type: Boolean, default: true },
     time: { type: String, default: '19:00' }
   },
+  // Work reports to every engineer, branch admin and the Super Admin (services/workReports.js)
+  dailyReport: {
+    enabled: { type: Boolean, default: true },
+    time: { type: String, default: '20:00' }         // every working day
+  },
+  weeklyReport: {
+    enabled: { type: Boolean, default: true },
+    day: { type: String, default: 'Sat' },            // Mon … Sun
+    time: { type: String, default: '20:00' }
+  },
 
   updatedBy: { type: String, default: '' },
   updatedAt: { type: Date, default: Date.now }

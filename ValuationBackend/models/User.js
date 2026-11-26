@@ -61,6 +61,15 @@ const userSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now },
     lastSeenAt: { type: Date, default: Date.now },
     pushToken: { type: String, default: '' },
+    deviceId: { type: String, default: '' },
+  }],
+  // Devices the Super Admin approved for sign-in (services/loginApproval.js); a new device waits for approval
+  trustedDevices: [{
+    _id: false,
+    deviceId: { type: String, required: true },
+    device: { type: String, default: '' },
+    approvedAt: { type: Date, default: Date.now },
+    approvedBy: { type: String, default: '' },
   }],
   // "Sign out of all devices": login tokens from before this moment stop working
   sessionsRevokedBefore: { type: Date, default: null },

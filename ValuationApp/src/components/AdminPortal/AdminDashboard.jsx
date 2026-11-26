@@ -505,6 +505,14 @@ export default function AdminDashboard({ onNavigate, showLibrary = false }) {
           <ChevronRight size={18} className="fsc-ch" />
         </button>
       )}
+      {onNavigate && (
+        <button type="button" className="fsc" onClick={() => window.dispatchEvent(new CustomEvent('gcr_open_work_report', { detail: { period: 'day' } }))}>
+          <ShortcutStyle />
+          <span className="fsc-ic" style={{ background: '#0ea5e9' }}><BarChart3 size={18} /></span>
+          <span className="fsc-t"><b>Daily & weekly report</b><small style={{ color: '#64748b' }}>Each engineer’s day: attendance, visits, reports — sent at 8 PM</small></span>
+          <ChevronRight size={18} className="fsc-ch" />
+        </button>
+      )}
 
       {/* Only what needs action — or a single "All caught up" row */}
       <AdminInsights cases={cases} users={users} onNavigate={onNavigate} only="attention" />

@@ -104,6 +104,10 @@ export default function PushRegistration({ currentUser }) {
               method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }),
             }).catch(() => {});
           }
+          if (data.type === 'daily_report' || data.type === 'weekly_report') {
+            window.dispatchEvent(new CustomEvent('gcr_open_work_report', { detail: { period: data.type === 'weekly_report' ? 'week' : 'day' } }));
+            return;
+          }
           window.dispatchEvent(new CustomEvent('gcr_open_case', { detail: { caseId: data.caseId || '', type: data.type || '' } }));
         }));
 

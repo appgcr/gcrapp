@@ -27,6 +27,7 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 import AppToaster from './components/Shared/AppToaster';
 import toast from 'react-hot-toast';
+import { WorkReportHost } from './components/Shared/WorkReport';
 import { isAdminRole, clearOfflineCache } from './utils/session';
 const PublicSite = lazy(() => import('./components/Public/PublicSite'));
 const BankPortal = lazy(() => import('./components/BankPortal/BankPortal'));
@@ -296,6 +297,7 @@ export default function App() {
         {/* Confirmations & errors (was missing on the admin side, so they never showed) */}
         <AppToaster duration={3000} />
         <PushRegistration currentUser={currentUser} />
+        <WorkReportHost />
         <Suspense fallback={<PartLoading />}><AdminPortal currentUser={currentUser} handleLogout={handleLogout} /></Suspense>
         {tracking}
         {permissionsOverlay}
@@ -320,6 +322,7 @@ export default function App() {
       {permissionsOverlay}
       {/* Shares live GPS with the admin map while the engineer is on duty */}
       <PushRegistration currentUser={currentUser} />
+      <WorkReportHost />
       <Suspense fallback={null}>
         {consent === 'ok' && <LiveLocationReporter currentUser={currentUser} />}
         {/* Assistive Touch with field-work actions */}

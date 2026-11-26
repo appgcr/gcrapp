@@ -7,7 +7,7 @@ const { authenticateToken, requireRole } = require('../middleware/auth');
 const Branch = require('../models/Branch');
 const { isSuper, isBranchAdmin, userFilter, canManageUser } = require('../services/access');
 
-const PUBLIC_FIELDS = '-password -issuedPasswordEnc -credentials -currentChallenge -pushTokens -activityLog -notificationPrefs -sessions -sessionsRevokedBefore';
+const PUBLIC_FIELDS = '-password -issuedPasswordEnc -credentials -currentChallenge -pushTokens -activityLog -notificationPrefs -sessions -sessionsRevokedBefore -trustedDevices';
 
 // GET /api/users — people this account may see:
 //   Super Admin → everyone (or one branch via x-branch-scope); Branch Admin → their branch;
@@ -158,7 +158,7 @@ router.get('/:idOrUsername/sessions', authenticateToken, async (req, res) => {
 router.delete('/:idOrUsername/sessions/:sid', authenticateToken, async (req, res) => {
   try {
     const t = await deviceTarget(req, res); if (!t) return;
-    const ended = await sessionsSvc.endSession(t.id, req.params.sid);
+    const ended = await sessionsSvc.endSession(t.id, req.params.sid, { forget: true });   // needs approval again
     if (!ended) return res.status(404).json({ error: 'That device is already signed out.' });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }

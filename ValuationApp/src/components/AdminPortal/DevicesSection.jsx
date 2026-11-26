@@ -92,7 +92,7 @@ export default function DevicesSection({ userId, name }) {
           </button>
         </div>
       )}
-      <p className="pf-foot">Times are India time. Signing out ends that device’s login and its notifications at once.</p>
+      <p className="pf-foot">Times are India time. Signing out ends that device’s login and its notifications at once, and the device needs your approval to sign in again.</p>
       <style>{`
         .dv-row { justify-content: flex-start; align-items: flex-start; gap: 12px; padding-top: 12px; padding-bottom: 12px; }
         .dv-ic { width: 34px; height: 34px; flex-shrink: 0; border-radius: 9px; background: #eef2ff; color: #4f46e5; display: grid; place-items: center; }
