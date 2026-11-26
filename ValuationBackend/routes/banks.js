@@ -25,6 +25,20 @@ function clean(body = {}) {
       seen.add(k); return true;
     }).slice(0, 300);
   }
+  // Branches filed under our offices: [{ office: 'Proddatur', names: [...] }]. The full list (branches) always
+  // holds every name — the office groups plus any "all offices" names sent in branches.
+  if (body.officeBranches !== undefined) {
+    const groups = (Array.isArray(body.officeBranches) ? body.officeBranches : []).map((g) => {
+      const seen = new Set();
+      const names = (Array.isArray(g?.names) ? g.names : []).map((b) => String(b).trim().replace(/\s+/g, ' ').slice(0, 80))
+        .filter((b) => { const k = b.toLowerCase(); if (!b || seen.has(k)) return false; seen.add(k); return true; }).slice(0, 200);
+      return { office: String(g?.office || '').trim().slice(0, 60), names };
+    }).filter((g) => g.office && g.names.length);
+    out.officeBranches = groups;
+    const all = [...(out.branches || []), ...groups.flatMap((g) => g.names)];
+    const seen = new Set();
+    out.branches = all.filter((b) => { const k = b.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 500);
+  }
   const okEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
   if (body.email !== undefined) {
     const e = String(body.email || '').trim().toLowerCase();
@@ -137,6 +151,11 @@ router.put('/:id', authenticateToken, requireRole('SUPER_ADMIN'), async (req, re
     const renamed = fields.name && fields.name !== bank.name;
     // Keep the old name as another spelling so old documents and searches still find the bank
     if (renamed) fields.aliases = [...new Set([...(fields.aliases || bank.aliases || []), bank.name])].filter((a) => banks.norm(a) !== banks.norm(fields.name));
+    // An older app that sends only the plain list keeps the office groups (their names stay in the full list)
+    if (fields.branches && fields.officeBranches === undefined && (bank.officeBranches || []).length) {
+      const have = new Set(fields.branches.map((b) => b.toLowerCase()));
+      fields.branches = [...fields.branches, ...bank.officeBranches.flatMap((g) => g.names).filter((b) => !have.has(b.toLowerCase()))];
+    }
     Object.assign(bank, fields, { updatedAt: new Date() });
     await bank.save();
     banks.clearCache();

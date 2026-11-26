@@ -2088,6 +2088,7 @@ export default function CaseCreationModal({
                 coOwners={readCoOwners(propertyDetails.report)}
                 setCoOwners={(list) => setPropertyDetails((prev) => ({ ...prev, report: writeCoOwners(prev.report, list) }))}
                 maxCoOwners={MAX_CO_OWNERS}
+                officeName={currentUser?.branchInfo?.name || ''}
                 bankName={bankName}
                 setBankName={setBankName}
                 bankBranch={bankBranch}

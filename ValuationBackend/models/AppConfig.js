@@ -2,6 +2,8 @@ const mongoose = require('mongoose');
 
 const appConfigSchema = new mongoose.Schema({
   key: { type: String, required: true, unique: true, default: 'global' },
+  // One-time data imports already applied (e.g. 'branches-kadapa-2026-11'), so they never run twice
+  doneImports: { type: [String], default: [] },
   banks: {
     type: [String],
     default: [

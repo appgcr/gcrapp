@@ -198,7 +198,12 @@ function BankSheet({ bank, formats, onClose, onSaved }) {
     name: bank.name || '',
     shortName: bank.shortName || '',
     aliases: (bank.aliases || []).join(', '),
-    branches: [...(bank.branches || [])],
+    // Branches filed under our offices; "general" = names in no office (shown to every office)
+    groups: Object.fromEntries((bank.officeBranches || []).map((g) => [g.office, [...(g.names || [])]])),
+    general: (() => {
+      const filed = new Set((bank.officeBranches || []).flatMap((g) => g.names || []).map((n) => n.toLowerCase()));
+      return (bank.branches || []).filter((b) => !filed.has(b.toLowerCase()));
+    })(),
     email: bank.email || '',
     autoSend: bank.autoSend !== false,
     contacts: (bank.contacts || []).map((r) => [r.branch, r.email, r.phone].filter(Boolean).join(' | ')).join('\n'),
@@ -211,6 +216,15 @@ function BankSheet({ bank, formats, onClose, onSaved }) {
     }])),
   }));
   const [busy, setBusy] = useState(false);
+  // Our offices (Kadapa, Proddatur…), so each gets its own branch list
+  const [offices, setOffices] = useState([]);
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/branches`).then((r) => (r.ok ? r.json() : [])).then((l) => setOffices((Array.isArray(l) ? l : []).map((b) => b.name).filter(Boolean))).catch(() => {});
+  }, []);
+  const officeNames = [...new Set([...offices, ...Object.keys(form.groups)])]
+    .sort((a, b) => (Object.keys(form.groups).includes(b) - Object.keys(form.groups).includes(a)) || a.localeCompare(b));
+  const totalBranches = form.general.length + Object.values(form.groups).reduce((n, l) => n + l.length, 0);
+  const setGroup = (office, list) => setForm((f) => ({ ...f, groups: { ...f.groups, [office]: list } }));
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const setPct = (type, which) => (e) => {
     const v = e.target.value.replace(/[^\d.]/g, '').slice(0, 5);
@@ -230,7 +244,11 @@ function BankSheet({ bank, formats, onClose, onSaved }) {
       const r = await fetch(`${API_BASE_URL}/api/banks${isNew ? '' : `/${bank.id}`}`, {
         method: isNew ? 'POST' : 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form, groups: undefined, general: undefined,
+          branches: form.general,
+          officeBranches: Object.entries(form.groups).map(([office, names]) => ({ office, names })).filter((g) => g.names.length),
+        }),
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || 'Could not save the bank.');
@@ -261,9 +279,33 @@ function BankSheet({ bank, formats, onClose, onSaved }) {
         </div>
         <p className="fs-foot">Typing the short name or an old name anywhere in the app picks this bank.{!isNew && ' A new name replaces the old one on all this bank’s cases.'}</p>
 
-        <div className="fs-section">Branches</div>
-        <BranchList list={form.branches} onChange={(branches) => setForm((f) => ({ ...f, branches }))} />
-        <p className="fs-foot">{form.branches.length ? `${form.branches.length} branch${form.branches.length > 1 ? 'es' : ''} · ` : ''}These show as a list when a case for this bank is created.</p>
+        <div className="fs-section">Branches{totalBranches ? ` (${totalBranches})` : ''}</div>
+        {officeNames.map((office) => {
+          const list = form.groups[office] || [];
+          return (
+            <details className="ob" key={office} open={list.length > 0 && list.length <= 4}>
+              <summary><span className="ob-name">{office}</span><span className="ob-count">{list.length ? `${list.length} branch${list.length > 1 ? 'es' : ''}` : 'None yet'}</span></summary>
+              <BranchList list={list} onChange={(l) => setGroup(office, l)} />
+            </details>
+          );
+        })}
+        <details className="ob" open={form.general.length > 0 && !officeNames.length}>
+          <summary><span className="ob-name">All offices</span><span className="ob-count">{form.general.length ? `${form.general.length} branch${form.general.length > 1 ? 'es' : ''}` : 'None'}</span></summary>
+          <BranchList list={form.general} onChange={(general) => setForm((f) => ({ ...f, general }))} />
+        </details>
+        <p className="fs-foot">Engineers see their own office’s branches when they create a case for this bank; “All offices” branches show to everyone.</p>
+        <style>{`
+          .ob { margin-bottom: 8px; }
+          .ob > summary { list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; background: var(--fs-card, #fff); border-radius: 12px; cursor: pointer; font-size: 16px; }
+          .ob > summary::-webkit-details-marker { display: none; }
+          .ob > summary::after { content: '›'; color: #c7c7cc; font-size: 20px; transition: transform .15s; }
+          .ob[open] > summary { border-radius: 12px 12px 0 0; border-bottom: .5px solid rgba(60,60,67,.18); }
+          .ob[open] > summary::after { transform: rotate(90deg); }
+          .ob[open] > .fs-group { border-radius: 0 0 12px 12px; margin-top: 0; }
+          .ob-name { font-weight: 600; text-transform: capitalize; flex: 1; }
+          .ob-count { color: #8e8e93; font-size: 14px; }
+          body.dark-theme .ob > summary { background: #1c1c1e; color: #fff; }
+        `}</style>
 
         <div className="fs-section">Report delivery</div>
         <div className="fs-group">

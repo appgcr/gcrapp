@@ -10,7 +10,10 @@ const bankSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },              // Andhra Pradesh Grameena Bank
   shortName: { type: String, default: '', trim: true },            // APGB
   aliases: { type: [String], default: [] },                        // other spellings / old names
-  branches: { type: [String], default: [] },                       // this bank's branches (ITI Road, 7 Roads…)
+  branches: { type: [String], default: [] },                       // this bank's branches (ITI Road, 7 Roads…) — all of them
+  // The same branches filed under our office (Kadapa, Proddatur, Vempalle…) that serves them, so engineers of
+  // an office see that town's branches first. A name in no group serves every office.
+  officeBranches: { type: [{ _id: false, office: String, names: [String] }], default: [] },
   // Where approved reports go: a default email, and per-branch email / WhatsApp number
   email: { type: String, default: '', trim: true },
   contacts: { type: [{ branch: String, email: String, phone: String }], default: [] },

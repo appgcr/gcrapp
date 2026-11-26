@@ -66,6 +66,83 @@ const SEED = [
 
 const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
+// Bank branches from the office lists (Nov 2026). Each list is added once to each bank's own list; banks with
+// no branches in a list are left as they are. Spellings evened out, abbreviations without dots (SME, ITI, NGO).
+// Kadapa is the home office, so its names stay plain; other towns carry the town ("Main – Proddatur"), because
+// many names repeat (Main, SME, Court, Gandhi Road) and the chosen name is printed on the report.
+const KADAPA_BRANCHES = {
+  'State Bank of India': ['RACPC', 'SME', 'Main – 7 Roads', 'PBB', 'Court', 'RTC', 'Yerramukkapalli', 'Durgamma Colony', 'ITI',
+    'Chinna Chowk', 'Krishnapuram', 'Patha Kadapa'],
+  'Punjab National Bank': ['Main – 7 Roads', 'Co-operative Colony'],
+  'Bank of Baroda': ['Main – 7 Roads', 'RS Road', 'Hospital Road'],
+  'Indian Bank': ['Main', 'Rajiv Park'],
+  'Union Bank of India': ['Main – 7 Roads', 'Koti Reddy', 'ITI', 'NGO East Face', 'NGO West Face', 'Chinna Chowk', 'Yerramukkapalli',
+    'LIC', 'CMR Palle', 'Mundy Bazar'],
+  'Andhra Pradesh Grameena Bank': ['Main', 'Patha Kadapa', 'Mariyapuram', 'Mochampeta', 'NESCO', 'Yerramukkapalli', 'NGO', 'RS Road'],
+  'Canara Bank': ['Main – 7 Roads', 'ITI', 'Shankarapuram', 'NGO', 'Mochampeta', 'MSME Sulabh'],
+};
+const PRODDATUR = (names) => names.map((n) => `${n} – Proddatur`);
+const PRODDATUR_BRANCHES = {
+  'State Bank of India': PRODDATUR(['SME', 'Main', 'Gandhi Road', 'Court', 'Shivalayam', 'Town', 'ADB']),
+  'Bank of Baroda': PRODDATUR(['Holmespeta', 'TB Road']),
+  'Indian Bank': PRODDATUR(['Main', 'Mydukur Road']),
+  'Union Bank of India': PRODDATUR(['Super Bazar Road', 'Gandhi Road', 'YMR Colony', 'Jinnah Road']),
+  'Andhra Pradesh Grameena Bank': PRODDATUR(['Main', 'Rameswaram', 'Modampalli', 'NGO Colony', 'Gopavaram']),
+  'Canara Bank': PRODDATUR(['Main', 'Jinnah Road', 'Gandhi Road']),
+};
+// Vempalle area: village branches keep their own name (Chakrayapeta, Nandimandalam…); generic ones carry the town
+const VEMPALLE_BRANCHES = {
+  'State Bank of India': ['Vempalle', 'Chakrayapeta', 'Nandimandalam'],
+  'Union Bank of India': ['Vempalle', 'Nagulaguttapalle'],
+  'Andhra Pradesh Grameena Bank': ['Main – Vempalle', 'Kandula Complex – Vempalle', 'Veerapunayunipalle', 'Chakrayapeta'],
+  'Canara Bank': ['Vempalle'],
+};
+const BRANCH_IMPORTS = [
+  ['branches-kadapa-2026-11', 'Kadapa', KADAPA_BRANCHES],
+  ['branches-proddatur-2026-11', 'Proddatur', PRODDATUR_BRANCHES],
+  ['branches-vempalle-2026-11', 'Vempalle', VEMPALLE_BRANCHES],
+];
+
+/**
+ * Adds each branch list once, filed under our office of that town (never removes; a branch the bank already
+ * has, whatever its spaces/dots, is kept — and filed under the town if it isn't filed anywhere yet).
+ */
+async function importBranchLists() {
+  const AppConfig = require('../models/AppConfig');
+  const Branch = require('../models/Branch');
+  for (const [importId, town, lists] of BRANCH_IMPORTS) {
+    const cfg = await AppConfig.findOne({ key: 'global' }).select('doneImports').lean();
+    if ((cfg?.doneImports || []).includes(importId)) continue;
+    // The office's own spelling when it exists (e.g. "vempalle"); otherwise the town
+    const offices = await Branch.find({}).select('name code').lean();
+    const officeName = (offices.find((o) => norm(o.name) === norm(town)) || {}).name || town;
+    let added = 0;
+    for (const [name, list] of Object.entries(lists)) {
+      const found = await findBank(name);
+      const bank = found && await Bank.findOne({ id: found.id }).select('id branches officeBranches').lean();   // fresh, not cached
+      if (!bank) continue;
+      const have = new Set((bank.branches || []).map(norm));
+      const fresh = list.filter((b) => !have.has(norm(b)) && have.add(norm(b)));
+      const groups = (bank.officeBranches || []).map((g) => ({ office: g.office, names: [...(g.names || [])] }));
+      const filed = new Set(groups.flatMap((g) => g.names.map(norm)));
+      let group = groups.find((g) => norm(g.office) === norm(officeName));
+      if (!group) { group = { office: officeName, names: [] }; groups.push(group); }
+      list.filter((b) => !filed.has(norm(b))).forEach((b) => {
+        const existing = (bank.branches || []).find((x) => norm(x) === norm(b));
+        group.names.push(existing || b);
+      });
+      await Bank.updateOne({ id: bank.id }, {
+        $set: { officeBranches: groups.filter((g) => g.names.length) },
+        ...(fresh.length ? { $push: { branches: { $each: fresh } } } : {}),
+      });
+      added += fresh.length;
+    }
+    await AppConfig.updateOne({ key: 'global' }, { $addToSet: { doneImports: importId } }, { upsert: true });
+    clearCache();
+    console.log(`🏦 ${town} branches added: ${added}`);
+  }
+}
+
 let cache = null;
 async function allBanks() {
   if (!cache) cache = await Bank.find({}).sort({ name: 1 }).lean();
@@ -121,6 +198,7 @@ async function ensureBanks() {
         clearCache();
       }
     }
+    await importBranchLists();
     // Cases remember which bank they belong to, so a rename reaches them
     for (const b of await allBanks()) {
       const names = [b.name, b.shortName, ...(b.aliases || [])].filter(Boolean);

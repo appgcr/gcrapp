@@ -27,7 +27,8 @@ export default function Step1CaseSetup({
   lockedFields = {},
   coOwners = [],
   setCoOwners = () => {},
-  maxCoOwners = 5
+  maxCoOwners = 5,
+  officeName = ''          // the engineer's own office (Kadapa, Proddatur…), for its bank branches first
 }) {
   const lockStyle = { backgroundColor: 'var(--bg-app)', color: 'var(--text-muted)', cursor: 'not-allowed' };
   const LockNote = () => (
@@ -38,6 +39,18 @@ export default function Step1CaseSetup({
   // Branches of the chosen bank (Settings → Banks), offered as suggestions
   const chosenBank = bankRecords.find(b => b.name === bankName);
   const bankBranchOptions = chosenBank?.branches || [];
+  // Chips: this engineer's own office first (Kadapa / Proddatur / Vempalle…) plus branches for every office;
+  // other towns' branches stay behind "Other towns"
+  const [moreTowns, setMoreTowns] = React.useState(false);
+  const normName = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const groups = (chosenBank?.officeBranches || []).filter((g) => (g.names || []).length);
+  const filed = new Set(groups.flatMap((g) => g.names).map(normName));
+  const ownGroup = officeName ? groups.find((g) => normName(g.office) === normName(officeName)) : null;
+  const everyOffice = bankBranchOptions.filter((b) => !filed.has(normName(b)));   // names for every office
+  const myChips = !groups.length ? bankBranchOptions : [...(ownGroup ? ownGroup.names : []), ...everyOffice];
+  const otherTowns = groups.filter((g) => g !== ownGroup);
+  const showOtherTowns = moreTowns || (myChips.length === 0 && otherTowns.length > 0);
+  const setShowOtherTowns = setMoreTowns;
   const filteredBanks = (bankRecords.length ? searchBanks(bankRecords, bankName).map(b => b.name)
     : availableBanks.filter(b => b.toLowerCase().includes(bankName.toLowerCase())));
 
@@ -184,20 +197,35 @@ export default function Step1CaseSetup({
           />
           {lockedFields.bankBranch && <LockNote />}
           {/* The bank's branches (Settings → Banks) as one-tap chips — the typing suggestions alone are easy to miss on phones */}
-          {!lockedFields.bankBranch && bankBranchOptions.length > 0 && (
-            <div role="group" aria-label="Branches of this bank" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
-              {bankBranchOptions.map((b) => {
-                const on = bankBranch.trim().toLowerCase() === b.toLowerCase();
-                return (
-                  <button key={b} type="button" aria-pressed={on} onClick={() => setBankBranch(on ? '' : b)}
-                    style={{ border: `1.5px solid ${on ? '#2563eb' : 'var(--border-color)'}`, background: on ? '#2563eb' : 'var(--bg-card)', color: on ? '#fff' : 'var(--text-primary)',
-                      borderRadius: '999px', padding: '6px 12px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                    {b}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          {!lockedFields.bankBranch && bankBranchOptions.length > 0 && (() => {
+            const chip = (b) => {
+              const on = bankBranch.trim().toLowerCase() === b.toLowerCase();
+              return (
+                <button key={b} type="button" aria-pressed={on} onClick={() => setBankBranch(on ? '' : b)}
+                  style={{ border: `1.5px solid ${on ? '#2563eb' : 'var(--border-color)'}`, background: on ? '#2563eb' : 'var(--bg-card)', color: on ? '#fff' : 'var(--text-primary)',
+                    borderRadius: '999px', padding: '6px 12px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  {b}
+                </button>
+              );
+            };
+            const linkStyle = { border: 0, background: 'transparent', color: 'var(--primary)', fontSize: '13px', fontWeight: 600, cursor: 'pointer', padding: '6px 4px', fontFamily: 'inherit' };
+            return (
+              <div style={{ marginTop: '8px' }}>
+                <div role="group" aria-label="Branches of this bank" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {myChips.map(chip)}
+                  {!showOtherTowns && otherTowns.length > 0 && (
+                    <button type="button" style={linkStyle} onClick={() => setShowOtherTowns(true)}>Other towns ›</button>
+                  )}
+                </div>
+                {showOtherTowns && otherTowns.map((g) => (
+                  <div key={g.office} style={{ marginTop: '10px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'capitalize', marginBottom: '6px' }}>{g.office}</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>{g.names.map(chip)}</div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
           {bankBranchOptions.length > 0 && (
             <datalist id="bank-branch-suggestions">
               {bankBranchOptions.map(b => <option key={b} value={b} />)}
