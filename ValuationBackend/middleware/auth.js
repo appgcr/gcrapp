@@ -60,6 +60,14 @@ async function authenticateToken(req, res, next) {
       return res.status(403).json({ error: 'Account is deactivated. Contact Administrator.' });
     }
 
+    // Signed-in devices: a device the Super Admin (or the person) signed out can't use its token any more
+    const { sessionProblem, touchSession } = require('../services/sessions');
+    if (sessionProblem(user, decoded)) {
+      return res.status(401).json({ error: 'This device was signed out. Please sign in again.', code: 'SIGNED_OUT' });
+    }
+    touchSession(user, decoded.sid, req);
+    req.sessionId = decoded.sid || null;
+
     req.user = user;
     if (user.role === 'BANK' && !bankMayUse(req)) {
       return res.status(403).json({ error: 'Bank accounts can only send and follow their own valuation requests.' });

@@ -20,9 +20,21 @@ const currentUser = () => { try { return JSON.parse(localStorage.getItem('sbi_va
 
 // Every request to our API carries the login token (and, for the Super Admin, the branch
 // being viewed), so the server can return only what this person is allowed to see.
+// The phone's brand, model and name (Capacitor Device plugin, phone app only), read once at start and
+// sent with requests so the Super Admin's device list shows e.g. "Samsung Galaxy A14 5G" instead of a code.
+let deviceHeader = '';
+function readDeviceInfo() {
+  if (!window.Capacitor?.isNativePlatform?.()) return;
+  import('@capacitor/device').then(({ Device }) => Device.getInfo()).then((d) => {
+    const clean = (v) => String(v || '').replace(/[|\r\n]/g, ' ').trim().slice(0, 60);
+    deviceHeader = encodeURIComponent([clean(d.manufacturer), clean(d.model), clean(d.name), clean(d.osVersion)].join('|'));
+  }).catch(() => {});
+}
+
 export function installApiAuth() {
   if (typeof window === 'undefined' || window.__gcrFetchPatched) return;
   window.__gcrFetchPatched = true;
+  readDeviceInfo();
   const original = window.fetch.bind(window);
   window.fetch = (input, init = {}) => {
     const url = typeof input === 'string' ? input : input?.url || '';
@@ -33,9 +45,21 @@ export function installApiAuth() {
     const u = currentUser();
     if (u?.id && !headers.has('x-user-id')) headers.set('x-user-id', u.id);
     if (isSuperAdmin(u) && !headers.has('x-branch-scope')) headers.set('x-branch-scope', getBranchScope());
+    // Which app this is (for the Super Admin's list of signed-in devices)
+    if (!headers.has('x-client')) {
+      const cap = window.Capacitor;
+      headers.set('x-client', cap?.isNativePlatform?.() ? `app-${cap.getPlatform?.() || 'mobile'}` : 'web');
+    }
+    if (deviceHeader && !headers.has('x-device')) headers.set('x-device', deviceHeader);
     const method = String(init.method || (typeof input !== 'string' && input?.method) || 'GET').toUpperCase();
     const cacheKey = method === 'GET' && offlineCacheable(url) ? `apiCache:${u?.id || 'anon'}:${url.slice(API_BASE_URL.length)}` : null;
-    const p = original(input, { ...init, headers });
+    // A device the Super Admin signed out: tell the app, which returns to the login screen
+    const p = original(input, { ...init, headers }).then((res) => {
+      if (res.status === 401 && token) {
+        res.clone().json().then((j) => { if (j && j.code === 'SIGNED_OUT') window.dispatchEvent(new CustomEvent('gcr_signed_out')); }).catch(() => {});
+      }
+      return res;
+    });
     if (!cacheKey) return p;
     // Keep the last answer on the phone; with no signal, serve it instead of failing
     return p.then((res) => {

@@ -10,6 +10,7 @@ import L from 'leaflet';
 import SmoothBaseMap from '../Shared/SmoothBaseMap';
 import BranchesPanel from './BranchesPanel';
 import StaffFormSheet from './StaffFormSheet';
+import DevicesSection from './DevicesSection';
 import BankUsersPanel from './BankUsersPanel';
 import { isSuperAdmin, getBranchScope } from '../../utils/session';
 
@@ -544,6 +545,8 @@ export default function AdminStaff({ currentUser }) {
                 <div className="pf-result-note">The old password no longer works. You can view this one again anytime with Show.</div>
               </div>
             )}
+
+            {superAdmin && <DevicesSection key={selectedStaff.id} userId={selectedStaff.id} name={selectedStaff.displayName} />}
 
             {superAdmin && (
               <>

@@ -14,6 +14,17 @@ const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { authenticateToken, JWT_SECRET } = require('../middleware/auth');
+const { startSession, endSession } = require('../services/sessions');
+
+// POST /api/auth/logout — this device signs out (its session and push notifications end)
+router.post('/logout', authenticateToken, async (req, res) => {
+  try {
+    if (req.sessionId) await endSession(req.user.id, req.sessionId);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not sign out.' });
+  }
+});
 
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
@@ -50,8 +61,9 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid Username or Password' });
     }
 
+    const sid = await startSession(user, req);   // this device, for the Super Admin's Devices list
     const token = jwt.sign(
-      { id: user.id, username: user.username, role: user.role },
+      { id: user.id, username: user.username, role: user.role, sid },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -275,8 +287,9 @@ router.post('/webauthn/login-verify', async (req, res) => {
       passkey.counter = verification.authenticationInfo.newCounter;
       await user.save();
 
+      const sid = await startSession(user, req);
       const token = jwt.sign(
-        { id: user.id, username: user.username, role: user.role },
+        { id: user.id, username: user.username, role: user.role, sid },
         JWT_SECRET,
         { expiresIn: '7d' }
       );

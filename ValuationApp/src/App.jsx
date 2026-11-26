@@ -26,6 +26,7 @@ import { GridIcon, DocIcon, CalendarIcon, ChatIcon, GearIcon } from './component
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Capacitor } from '@capacitor/core';
 import AppToaster from './components/Shared/AppToaster';
+import toast from 'react-hot-toast';
 import { isAdminRole, clearOfflineCache } from './utils/session';
 const PublicSite = lazy(() => import('./components/Public/PublicSite'));
 const BankPortal = lazy(() => import('./components/BankPortal/BankPortal'));
@@ -232,8 +233,11 @@ export default function App() {
     if (cleanPath() === '/login') navigate('/');
   };
 
-  const handleLogout = () => {
+  const handleLogout = (opts = {}) => {
     unregisterPush(currentUser?.id); // stop this phone receiving the old user's alerts
+    // End this device's sign-in on the server too (it leaves the Super Admin's device list)
+    const token = localStorage.getItem('token');
+    if (token && !opts?.alreadySignedOut) fetch(`${API_BASE_URL}/api/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
     clearOfflineCache(); // saved copies of cases are for this person only
     setCurrentUser(null);
     setIsAppLocked(false);
@@ -242,6 +246,19 @@ export default function App() {
     localStorage.removeItem(VERIFIED_AT_KEY);
     if (!Capacitor.isNativePlatform()) navigate('/login');
   };
+
+  // Signed out from another place (the Super Admin's device list, or "sign out of all devices")
+  const logoutRef = useRef(handleLogout);
+  logoutRef.current = handleLogout;
+  useEffect(() => {
+    const onSignedOut = (e) => {
+      if (!localStorage.getItem('token')) return;   // already signed out here
+      toast(e?.detail?.self ? 'You are signed out.' : 'This device was signed out by the administrator. Please sign in again.', { icon: '🔒', duration: 6000 });
+      logoutRef.current({ alreadySignedOut: true });
+    };
+    window.addEventListener('gcr_signed_out', onSignedOut);
+    return () => window.removeEventListener('gcr_signed_out', onSignedOut);
+  }, []);
 
   // Privacy policy, terms and account deletion are always reachable (store listings link to them)
   if (LEGAL[path]) {

@@ -7,7 +7,7 @@ const { authenticateToken, requireRole } = require('../middleware/auth');
 const Branch = require('../models/Branch');
 const { isSuper, isBranchAdmin, userFilter, canManageUser } = require('../services/access');
 
-const PUBLIC_FIELDS = '-password -issuedPasswordEnc -credentials -currentChallenge -pushTokens -activityLog -notificationPrefs';
+const PUBLIC_FIELDS = '-password -issuedPasswordEnc -credentials -currentChallenge -pushTokens -activityLog -notificationPrefs -sessions -sessionsRevokedBefore';
 
 // GET /api/users — people this account may see:
 //   Super Admin → everyone (or one branch via x-branch-scope); Branch Admin → their branch;
@@ -44,6 +44,8 @@ router.post('/:idOrUsername/push-token', authenticateToken, async (req, res) => 
       { id: req.user.id },
       { $push: { pushTokens: { $each: [{ token, platform, updatedAt: new Date() }], $slice: -10 } } }
     );
+    // Remember which signed-in device this is, so signing the device out also stops its notifications
+    if (req.sessionId) await User.updateOne({ id: req.user.id, 'sessions.sid': req.sessionId }, { $set: { 'sessions.$.pushToken': token } });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -132,6 +134,43 @@ router.delete('/:idOrUsername/push-token', authenticateToken, async (req, res) =
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── Signed-in devices (like Google's "Your devices") ──
+// The Super Admin sees and signs out anyone's devices; everyone sees and signs out their own.
+const sessionsSvc = require('../services/sessions');
+async function deviceTarget(req, res) {
+  const t = await User.findOne({ $or: [{ id: req.params.idOrUsername }, { username: req.params.idOrUsername }] }).select('id name role branchId sessions sessionsRevokedBefore').lean();
+  if (!t) { res.status(404).json({ error: 'User not found.' }); return null; }
+  if (!isSuper(req.user) && t.id !== req.user.id) { res.status(403).json({ error: 'Only the Super Admin can see other people’s devices.' }); return null; }
+  return t;
+}
+
+// GET /api/users/:idOrUsername/sessions
+router.get('/:idOrUsername/sessions', authenticateToken, async (req, res) => {
+  try {
+    const t = await deviceTarget(req, res); if (!t) return;
+    res.json({ userId: t.id, name: t.name, sessions: sessionsSvc.listSessions(t, t.id === req.user.id ? req.sessionId : null), allSignedOutAt: t.sessionsRevokedBefore || null });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// DELETE /api/users/:idOrUsername/sessions/:sid — sign that device out
+router.delete('/:idOrUsername/sessions/:sid', authenticateToken, async (req, res) => {
+  try {
+    const t = await deviceTarget(req, res); if (!t) return;
+    const ended = await sessionsSvc.endSession(t.id, req.params.sid);
+    if (!ended) return res.status(404).json({ error: 'That device is already signed out.' });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/users/:idOrUsername/sessions/sign-out-all — every device, including sign-ins from before device tracking
+router.post('/:idOrUsername/sessions/sign-out-all', authenticateToken, async (req, res) => {
+  try {
+    const t = await deviceTarget(req, res); if (!t) return;
+    await sessionsSvc.endAllSessions(t.id);
+    res.json({ success: true, selfSignedOut: t.id === req.user.id });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // GET /api/users/:idOrUsername

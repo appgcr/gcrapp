@@ -50,6 +50,20 @@ const userSchema = new mongoose.Schema({
   notificationPrefs: { type: Map, of: Boolean, default: {} },
   // First app-open time per day (last 30 days) — used to learn each person's usual start time
   activityLog: { type: [Date], default: [] },
+  // Signed-in devices (services/sessions.js). The login token carries the sid; ending a session signs that device out.
+  sessions: [{
+    _id: false,
+    sid: { type: String, required: true },
+    device: { type: String, default: '' },
+    platform: { type: String, default: 'web' },
+    app: { type: Boolean, default: false },
+    ip: { type: String, default: '' },
+    createdAt: { type: Date, default: Date.now },
+    lastSeenAt: { type: Date, default: Date.now },
+    pushToken: { type: String, default: '' },
+  }],
+  // "Sign out of all devices": login tokens from before this moment stop working
+  sessionsRevokedBefore: { type: Date, default: null },
   // Phone push addresses (FCM registration tokens), one per signed-in device
   pushTokens: [{
     token: { type: String, required: true },

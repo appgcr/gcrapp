@@ -9,6 +9,13 @@ const { istParts, istDate: istDayStartFn, addDaysYMD } = require('../services/is
 const ValuationCaseVersion = require('../models/ValuationCaseVersion');
 const { notifyLater } = require('../services/notify');
 const istDayStart = (ymd) => istDayStartFn(ymd, 0);
+// India-time ranges (the server itself runs on UTC): a calendar day, and a calendar month
+const istDayRange = (ymd) => { const start = istDayStart(ymd); return { $gte: start, $lt: new Date(start.getTime() + 86400000) }; };
+function istMonthRange(year, month /* 1-12 */) {
+  const ym = (y, m) => `${y}-${String(m).padStart(2, '0')}-01`;
+  const next = month === 12 ? ym(year + 1, 1) : ym(year, month + 1);
+  return { $gte: istDayStart(ym(year, month)), $lt: istDayStart(next) };
+}
 
 // Whose attendance this request may read: an engineer → only themself; a Branch Admin →
 // their branch's staff; the Super Admin → everyone (or the branch they're viewing).
@@ -26,7 +33,8 @@ function format12Hour(date) {
   return new Date(date).toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit',
-    hour12: true
+    hour12: true,
+    timeZone: 'Asia/Kolkata'   // the server runs on UTC; times shown to people are India time
   });
 }
 
@@ -35,7 +43,8 @@ function formatDateString(date) {
     weekday: 'short',
     year: 'numeric',
     month: 'short',
-    day: 'numeric'
+    day: 'numeric',
+    timeZone: 'Asia/Kolkata'
   });
 }
 
@@ -61,16 +70,11 @@ router.get('/', authenticateToken, async (req, res) => {
     }
 
     if (req.query.year && req.query.month) {
-      const year = parseInt(req.query.year);
-      const month = parseInt(req.query.month) - 1; // 0-indexed
-      const startDate = new Date(year, month, 1);
-      const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
-      filter.timestamp = { $gte: startDate, $lte: endDate };
+      filter.timestamp = istMonthRange(parseInt(req.query.year, 10), parseInt(req.query.month, 10));
     } else if (req.query.date) {
-      const target = new Date(req.query.date);
-      const start = new Date(target.setHours(0, 0, 0, 0));
-      const end = new Date(target.setHours(23, 59, 59, 999));
-      filter.timestamp = { $gte: start, $lte: end };
+      // "YYYY-MM-DD" is an India calendar day (midnight to midnight IST)
+      const ymd = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date)) ? String(req.query.date) : istParts(new Date(req.query.date)).ymd;
+      filter.timestamp = istDayRange(ymd);
     }
 
     const records = await Attendance.find(filter).sort({ timestamp: -1 });
@@ -150,25 +154,19 @@ router.get('/calendar-summary', authenticateToken, async (req, res) => {
     const allowed = await visibleUserIds(req);
     if (allowed && !allowed.includes(userId)) return res.status(403).json({ error: 'Not allowed.' });
 
-    const y = parseInt(year);
-    const m = parseInt(month) - 1;
-    const startDate = new Date(y, m, 1);
-    const endDate = new Date(y, m + 1, 0, 23, 59, 59, 999);
-
     const records = await Attendance.find({
       userId,
-      timestamp: { $gte: startDate, $lte: endDate }
+      timestamp: istMonthRange(parseInt(year, 10), parseInt(month, 10))
     }).sort({ timestamp: 1 });
 
     // Group logs by YYYY-MM-DD
     const dayMap = {};
     records.forEach(log => {
-      const d = new Date(log.timestamp);
-      const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const dateKey = istParts(new Date(log.timestamp)).ymd;   // the India calendar day
       if (!dayMap[dateKey]) {
         dayMap[dateKey] = {
           date: dateKey,
-          day: d.getDate(),
+          day: Number(dateKey.slice(8)),
           firstClockIn: null,
           lastClockOut: null,
           totalDurationHours: 0,
