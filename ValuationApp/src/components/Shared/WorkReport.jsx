@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, ChevronLeft, ChevronRight, Loader2, Clock, MapPin, FileText, CheckCircle2, RotateCcw, FolderOpen, Users, Inbox, UserX } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Loader2, Clock, MapPin, FileText, CheckCircle2, RotateCcw, FolderOpen, Users, Inbox, UserX, Download } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { saveBlobToDevice } from '../../utils/fileDownload';
 import { API_BASE_URL } from '../../config/api';
 
 // India calendar date helpers (the report is always India time)
@@ -59,6 +61,18 @@ export default function WorkReport({ initialPeriod = 'day', initialDate = '', on
       .then(setData).catch((e) => setErr(e.message));
   }, [period, ymd, userId]);
   useEffect(() => { load(); }, [load]);
+  // The same report as a polished PDF (to keep, print or share on WhatsApp)
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const downloadPdf = async () => {
+    setPdfBusy(true);
+    try {
+      const q = new URLSearchParams({ period, date: ymd, ...(userId ? { userId } : {}) });
+      const r = await fetch(`${API_BASE_URL}/api/work-report/pdf?${q}`);
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Could not make the PDF.');
+      const name = (/filename="([^"]+)"/.exec(r.headers.get('Content-Disposition') || '') || [])[1] || `Gouru_${period === 'week' ? 'Weekly' : 'Daily'}_Report_${ymd}.pdf`;
+      await saveBlobToDevice(await r.blob(), name, { successMsg: 'Report PDF saved' });
+    } catch (e2) { toast.error(e2.message); } finally { setPdfBusy(false); }
+  };
   const step = period === 'week' ? 7 : 1;
   const atToday = shift(ymd, step) > todayYmd();   // nothing to show in the future
   const t = data?.totals;
@@ -85,7 +99,9 @@ export default function WorkReport({ initialPeriod = 'day', initialDate = '', on
 
         {err ? <div className="wr-empty">{err}</div> : !data ? <div className="wr-empty"><Loader2 size={20} className="spin" /></div> : (
           <>
-            <div className="wr-title">{data.kind === 'engineer' ? (e?.name || '') : data.kind === 'branch' ? `${data.branch?.name || 'Branch'} branch` : 'All branches'}</div>
+            <div className="wr-title">{data.kind === 'engineer' ? (e?.name || '') : data.kind === 'branch' ? `${data.branch?.name || 'Branch'} branch` : 'All branches'}
+              <button type="button" className="wr-pdf" onClick={downloadPdf} disabled={pdfBusy}>{pdfBusy ? <Loader2 size={15} className="spin" /> : <Download size={15} />} PDF</button>
+            </div>
             {data.kind === 'engineer' && e && (
               <>
                 <div className="wr-tiles">
@@ -138,6 +154,8 @@ export default function WorkReport({ initialPeriod = 'day', initialDate = '', on
           @media (min-width: 768px) { .wr-sheet { border-radius: 18px; } }
           .wr-top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; margin-bottom: 10px; }
           .wr-top b { font-size: 17px; }
+          .wr-pdf { float: right; display: inline-flex; align-items: center; gap: 5px; border: 0; border-radius: 999px; padding: 6px 12px; background: #0f2a5c; color: #fde68a; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; }
+          .wr-pdf:disabled { opacity: .6; }
           .wr-x { justify-self: end; border: 0; background: #e5e7eb; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; cursor: pointer; }
           .wr-back { justify-self: start; border: 0; background: transparent; color: #2563eb; font: inherit; font-weight: 600; display: flex; align-items: center; cursor: pointer; padding: 0; }
           .wr-seg { display: flex; background: #e5e7eb; border-radius: 10px; padding: 3px; margin-bottom: 10px; }

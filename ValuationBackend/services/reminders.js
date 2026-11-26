@@ -67,6 +67,10 @@ function parseInspection(dateStr, timeStr) {
 
 // "Due" if now is at/after the target time but within the catch-up window
 const isDue = (nowMin, targetMin) => targetMin !== null && nowMin >= targetMin && nowMin < targetMin + CATCH_UP_MIN;
+// Reports and reminders that must never be missed: from the set time until the end of that day (India time).
+// If the server was asleep or restarting at the set time, they go out as soon as it is up again — still once
+// per person per day (each send is claimed by its own key).
+const isDueToday = (nowMin, targetMin, untilMin = 24 * 60) => targetMin !== null && nowMin >= targetMin && nowMin < untilMin;
 
 const isOpen = (c) => c.status !== 'Approved' && c.status !== 'Rejected';
 const isAssigned = (c) => c.assignedEngineerId && c.assignedEngineerId !== 'UNASSIGNED';
@@ -437,7 +441,7 @@ const INVOICE_DAYS = [7, 15, 22, 29, 36, 43, 50, 57, 64, 71, 78, 85];
 const BACKUP_AT = 10 * 60;
 async function ruleBackupReminder(ctx) {
   const { ist, now, admins } = ctx;
-  if (!isDue(ist.minutes, BACKUP_AT)) return 0;
+  if (!isDueToday(ist.minutes, BACKUP_AT, 20 * 60)) return 0;
   const AppConfig = require('../models/AppConfig');
   const cfg = await AppConfig.findOne({ key: 'global' }).select('backup').lean();
   const last = cfg && cfg.backup && cfg.backup.lastAt ? new Date(cfg.backup.lastAt) : null;
@@ -458,7 +462,7 @@ async function ruleBackupReminder(ctx) {
 
 async function ruleInvoiceReminders(ctx) {
   const { ist, now, admins } = ctx;
-  if (!isDue(ist.minutes, INVOICE_AT)) return 0;
+  if (!isDueToday(ist.minutes, INVOICE_AT, 20 * 60)) return 0; // missed at 10:30 → still sent that day, until 8 PM
   const billing = require('./billing');
   const { emailReady, contactFor } = require('./reportDelivery');
   const base = process.env.PUBLIC_API_URL || process.env.RENDER_EXTERNAL_URL || 'https://gcrapp-api.onrender.com';
@@ -530,7 +534,7 @@ async function ruleWorkReports(ctx, period) {
   const cfg = period === 'week' ? settings.weeklyReport : settings.dailyReport;
   if (!cfg?.enabled) return 0;
   if (period === 'week' && ist.weekday !== (cfg.day || 'Sat')) return 0;
-  if (!isDue(ist.minutes, toMinutes(cfg.time || '20:00'))) return 0;
+  if (!isDueToday(ist.minutes, toMinutes(cfg.time || '20:00'))) return 0; // missed at 8 PM → still sent later that evening
   const { workReport, summaryLine } = require('./workReports');
   const type = period === 'week' ? 'weekly_report' : 'daily_report';
   const word = period === 'week' ? 'weekly' : 'daily';
