@@ -24,6 +24,7 @@ const CATEGORIES = [
   { key: 'report_ready', role: 'BANK', required: true, label: 'Report ready', description: 'When your valuation report is approved', types: ['report_ready'] },
   { key: 'invoice_due', role: 'BANK', required: true, label: 'Payment reminders', description: 'When a valuation fee is due or overdue', types: ['invoice_due'] },
   { key: 'morning_digest', role: 'ALL', required: false, label: 'Morning summary', description: 'One summary at the start of your day', types: ['morning_digest'] },
+  { key: 'good_morning', role: 'ALL', required: false, label: 'Good-morning & thank-you', description: 'A friendly hello at 8 AM, and a thank-you when you check out', types: ['good_morning', 'good_evening'] },
   { key: 'announcement', role: 'ALL', required: true, label: 'Announcements', description: 'Messages from the admin to all staff', types: ['announcement'] },
   { key: 'work_reports', role: 'ALL', required: false, label: 'Daily & weekly report', description: 'Your work report every evening at 8 PM and each Saturday', types: ['daily_report', 'weekly_report'] },
   { key: 'login_approval', role: 'SUPER_ADMIN', required: true, label: 'Sign-in approvals', description: 'When someone signs in on a new device', types: ['login_approval'] },

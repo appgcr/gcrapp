@@ -123,6 +123,7 @@ async function notify({ to, title, message, caseId = '', type = 'general', prior
     const push = await sendPush(allowed, { title, message, caseId, type, priority: prio, notificationId: record._id });
     record.pushStatus = 'sent';
     record.pushedAt = new Date();
+    record.pushResult = { devices: push.devices != null ? push.devices : (push.sent || 0) + (push.failed || 0), sent: push.sent || 0, failed: push.failed || 0, reason: push.reason || '' };
     await record.save();
     if (process.env.NODE_ENV !== 'test') console.log(`🔔 notify → ${to} | ${type} | ${prio} | push: ${JSON.stringify(push)}`);
     return { record, push };

@@ -357,6 +357,8 @@ router.post('/', authenticateToken, async (req, res) => {
     const newRecord = new Attendance(payload);
     const saved = await newRecord.save();
     res.status(201).json(saved);
+    // Checked out: a warm thank-you with their day (once a day, after the reply)
+    if (type === 'Clock-Out' && req.user.role === 'ENGINEER') require('../services/thankYou').thankAfterCheckOut(req.user).catch(() => {});
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

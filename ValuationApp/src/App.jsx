@@ -146,6 +146,8 @@ export default function App() {
   useEffect(() => {
     const open = (e) => {
       const caseId = e.detail?.caseId;
+      // Good-morning / check-in reminders open the Today screen with the Check In button
+      if (!caseId && ['good_morning', 'checkin_reminder'].includes(e.detail?.type)) { setActiveTab('forms'); setSelectedCaseId(null); return; }
       setActiveTab('cases');
       setSelectedCaseId(caseId || null);
     };

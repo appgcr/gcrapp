@@ -215,6 +215,7 @@ async function ruleMorningDigest(ctx) {
 
   let count = 0;
   for (const a of admins) {
+    if (settings.goodMorning?.enabled && a.role === 'ADMIN') continue; // they get the 8 AM good-morning instead
     // Super Admin: every branch. Branch Admin: only their own branch.
     const cases = a.role === 'ADMIN' ? ctx.cases.filter((c) => c.branchId === a.branchId) : ctx.cases;
     const engineers = a.role === 'ADMIN' ? ctx.engineers.filter((e) => e.branchId === a.branchId) : ctx.engineers;
@@ -243,9 +244,57 @@ async function ruleMorningDigest(ctx) {
   return count;
 }
 
+// 8 AM good-morning: a warm, personal hello to every engineer and branch admin with their day and a nudge to check
+// in. Sent once a day; if the server was asleep at 8 it still goes out up to 11 AM. Never held by quiet hours.
+const GREETINGS = [
+  "😊 I'm here to make your work smoother today.",
+  '😊 A fresh day — let\'s make it a smooth one together.',
+  "😊 I'm ready when you are — let's make today easy.",
+  '😊 Wishing you a smooth and productive day.',
+];
+async function ruleGoodMorning(ctx) {
+  const { settings, ist, cases, engineers, admins } = ctx;
+  const cfg = settings.goodMorning;
+  if (!cfg?.enabled) return 0;
+  if (!isDueToday(ist.minutes, toMinutes(cfg.time || '08:00'), 11 * 60)) return 0;
+  const hello = GREETINGS[Number(ist.ymd.replace(/-/g, '')) % GREETINGS.length];
+  const today = inspectionsToday(cases, ist.ymd);
+  const firstName = (u) => { const f = String(u.name || u.username || '').trim().split(/\s+/)[0] || ''; return /^(super|kadapa|branch|admin|gcr)$/i.test(f) ? '' : f; };
+  let count = 0;
+  for (const e of engineers) {
+    const mine = cases.filter((c) => isOpen(c) && (c.assignedEngineerId === e.id || c.assignedEngineerId === e.username));
+    const visits = today.filter(({ c }) => c.assignedEngineerId === e.id || c.assignedEngineerId === e.username);
+    const returned = mine.filter((c) => c.status === 'Returned').length;
+    const day = mine.length
+      ? [`You have ${mine.length} open case${mine.length === 1 ? '' : 's'}`, returned ? `${returned} to correct` : null,
+        visits.length ? `site visit${visits.length > 1 ? 's' : ''} at ${visits.map(({ c, at }) => `${fmt12(istParts(at).minutes)} (${c.clientName || `#${c.id}`})`).join(', ')}` : null].filter(Boolean).join(' · ') + '.'
+      : 'No open cases right now — new work may come in today.';
+    const f = firstName(e);
+    if (await send(`goodMorning:${e.id}:${ist.ymd}`, 'goodMorning', {
+      to: e.id, type: 'good_morning', priority: 'digest', now: ctx.now,
+      title: f ? `Good morning, ${f} ☀️` : 'Good morning ☀️',
+      message: `${hello} ${day} Shall we check in and get started?`,
+    })) count += 1;
+  }
+  for (const a of admins.filter((x) => x.role === 'ADMIN' && x.branchId)) {
+    const bc = cases.filter((c) => c.branchId === a.branchId);
+    const open = bc.filter((c) => isOpen(c)).length;
+    const review = bc.filter((c) => c.status === 'Reviewing').length;
+    const team = engineers.filter((e) => e.branchId === a.branchId).length;
+    const f = firstName(a);
+    if (await send(`goodMorning:${a.id}:${ist.ymd}`, 'goodMorning', {
+      to: a.id, type: 'good_morning', priority: 'digest', now: ctx.now,
+      title: f ? `Good morning, ${f} ☀️` : 'Good morning ☀️',
+      message: `${hello} Your branch today: ${open} open case${open === 1 ? '' : 's'} · ${review} waiting your review · ${team} engineer${team === 1 ? '' : 's'}. Let's have a great day!`,
+    })) count += 1;
+  }
+  return count;
+}
+
 async function ruleEngineerDigest(ctx) {
   const { settings, ist, cases, engineers } = ctx;
   if (!settings.engineerDigest?.enabled) return 0;
+  if (settings.goodMorning?.enabled) return 0; // engineers get the 8 AM good-morning (with their day) instead
   const today = inspectionsToday(cases, ist.ymd);
   let count = 0;
   for (const e of engineers) {
@@ -543,8 +592,11 @@ async function ruleWorkReports(ctx, period) {
   const deliver = async (person, scope, title) => {
     const r = await workReport(period, ist.ymd, scope);
     if (!r) return;
+    // Branch admins: a thank-you first (engineers get theirs when they check out)
+    const thanks = person.role === 'ADMIN' && settings.goodMorning?.enabled !== false
+      ? `🙏 Thank you for leading ${r.branch && r.branch.name ? `${r.branch.name} ` : 'your branch '}${period === 'week' ? 'this week' : 'today'}. ` : '';
     const sent = await send(`${type}:${person.id}:${ist.ymd}`, `${word}Report`, {
-      to: person.id, type, priority: 'digest', now, title, message: summaryLine(r),
+      to: person.id, type, priority: 'digest', now, title, message: thanks + summaryLine(r),
     });
     if (sent) count += 1;
   };
@@ -599,6 +651,7 @@ async function runReminders(now = new Date()) {
   // Daily work report (8 PM by default — after the working-hours rules below stop)
   try { summary.sent.dailyReport = await ruleWorkReports(ctx, 'day'); } catch (err) { console.warn('daily report:', err.message); }
   if (ist.minutes >= WORK_START && ist.minutes < WORK_END) {
+    try { summary.sent.goodMorning = await ruleGoodMorning(ctx); } catch (err) { console.warn('good morning:', err.message); }
     summary.sent.morningDigest = await ruleMorningDigest(ctx);
     summary.sent.engineerDigest = await ruleEngineerDigest(ctx);
     summary.sent.checkIn = await ruleCheckIn(ctx);

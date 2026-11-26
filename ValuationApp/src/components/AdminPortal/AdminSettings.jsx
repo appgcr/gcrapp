@@ -9,6 +9,7 @@ import { isSuperAdmin, roleLabel } from '../../utils/session';
 import IconTile, { AssistiveGlyph } from '../Shared/IconTile';
 import ReminderSettingsCard from './ReminderSettingsCard';
 import BackupCard from './BackupCard';
+import DeliveryCheckCard from './DeliveryCheckCard';
 import NotificationPrefsCard from '../Shared/NotificationPrefsCard';
 import NotificationInsightsCard from './NotificationInsightsCard';
 import { Row, Switch, IosSettingsStyles } from '../Shared/IosSettings';
@@ -162,7 +163,7 @@ export default function AdminSettings({ currentUser, handleLogout }) {
   const name = currentUser?.name || 'Admin User';
   const initials = name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || 'A';
 
-  const titles = { notifications: 'Notifications', reminders: 'Automatic Reminders', insights: 'Alert Insights', banks: 'Banks', letterhead: 'Letterhead & Valuer', signature: 'Digital Signature', backup: 'Database backup' };
+  const titles = { notifications: 'Notifications', reminders: 'Automatic Reminders', insights: 'Alert Insights', banks: 'Banks', letterhead: 'Letterhead & Valuer', signature: 'Digital Signature', backup: 'Database backup', delivery: 'Notification delivery' };
 
   if (page !== 'main') {
     return (
@@ -189,6 +190,7 @@ export default function AdminSettings({ currentUser, handleLogout }) {
         {page === 'insights' && <NotificationInsightsCard currentUser={currentUser} />}
         {page === 'banks' && <BanksSettings />}
         {page === 'backup' && <BackupCard />}
+        {page === 'delivery' && <DeliveryCheckCard />}
         {page === 'signature' && <SignatureSettings />}
         {page === 'letterhead' && <LetterheadSettings branchId={currentUser?.branchId} branchName={currentUser?.branchInfo?.name} />}
         <IosSettingsStyles />
@@ -243,6 +245,7 @@ export default function AdminSettings({ currentUser, handleLogout }) {
         {/* Company-wide alert rules are set by the Super Admin */}
         {isSuperAdmin(currentUser) && <Row icon={Clock} color="purple" label="Automatic Reminders" onClick={() => open('reminders')} />}
         {isSuperAdmin(currentUser) && <Row icon={BarChart3} color="indigo" label="Alert Insights" onClick={() => open('insights')} />}
+        {isSuperAdmin(currentUser) && <Row icon={Bell} color="green" label="Notification delivery" onClick={() => open('delivery')} />}
       </div>
 
       <div className="ios-section">General</div>

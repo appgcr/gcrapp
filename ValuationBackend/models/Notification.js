@@ -13,6 +13,8 @@ const notificationSchema = new mongoose.Schema({
   pushStatus: { type: String, enum: ['pending', 'sent', 'held', 'bundled', 'none', 'muted'], default: 'pending' },
   deliverAfter: { type: Date, default: null },   // when a held push may be released
   pushedAt: { type: Date, default: null },
+  // What the phone delivery did: { devices, sent, failed, reason } — reason: no-devices | fcm-disabled | test-server
+  pushResult: { type: mongoose.Schema.Types.Mixed, default: null },
   // Engagement tracking
   readAt: { type: Date, default: null },        // seen / tapped inside the app (bell)
   openedAt: { type: Date, default: null },      // opened by tapping the phone notification

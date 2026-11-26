@@ -9,6 +9,52 @@ const mongoose = require('mongoose');
 
 // GET /api/notifications/stats?days=30 — Super Admin: how useful each alert type is.
 // (Declared before '/:user' so "stats" isn't treated as a user id.)
+// GET /api/notifications/delivery?type=good_morning&date=2026-11-27 — Super Admin: who got this notification, did it
+// reach their phone, did they open / see it. One row per person (latest of that day).
+const DELIVERY_TYPES = {
+  good_morning: ['good_morning'], daily_report: ['daily_report'], weekly_report: ['weekly_report'],
+  checkin_reminder: ['checkin_reminder'], login_approval: ['login_approval'], announcement: ['announcement'],
+  case_assigned: ['case_assigned'], morning_digest: ['morning_digest'], good_evening: ['good_evening'],
+};
+router.get('/delivery', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+  try {
+    const kind = DELIVERY_TYPES[req.query.type] ? req.query.type : 'good_morning';
+    const ymd = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date || '')) ? String(req.query.date) : new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+    const start = new Date(`${ymd}T00:00:00+05:30`); const end = new Date(start.getTime() + 86400000);
+    const list = await Notification.find({ type: { $in: DELIVERY_TYPES[kind] }, createdAt: { $gte: start, $lt: end } })
+      .select('targetUser branchId title pushStatus pushResult deliverAfter readAt openedAt mutedFor createdAt').sort({ createdAt: -1 }).lean();
+    // 'ADMIN' alerts (e.g. sign-in approvals, announcements) are one record for many people: shown as one row
+    const ids = [...new Set(list.map((n) => n.targetUser).filter((t) => t && t !== 'ADMIN'))];
+    const users = await User.find({ $or: [{ id: { $in: ids } }, { username: { $in: ids } }] }).select('id username name role branchId').lean();
+    const Branch = require('../models/Branch');
+    const bnames = Object.fromEntries((await Branch.find({}).select('id name').lean()).map((b) => [b.id, b.name]));
+    const seen = new Set();
+    const rows = [];
+    for (const n of list) {
+      const key = n.targetUser;
+      if (seen.has(key)) continue; seen.add(key);
+      const u = users.find((x) => x.id === key || x.username === key);
+      const pr = n.pushResult || {};
+      const phone = n.pushStatus === 'muted' ? 'off' : n.pushStatus === 'held' ? 'held' : pr.sent > 0 ? 'delivered'
+        : pr.reason === 'no-devices' ? 'no-phone' : pr.reason === 'fcm-disabled' ? 'server-off' : pr.failed > 0 ? 'failed' : n.pushStatus === 'sent' ? 'unknown' : 'pending';
+      rows.push({
+        to: u ? u.name || u.username : key === 'ADMIN' ? 'Admins' : key, role: u ? (u.role === 'ADMIN' ? 'Branch Admin' : u.role === 'SUPER_ADMIN' ? 'Super Admin' : u.role === 'ENGINEER' ? 'Engineer' : u.role) : '',
+        branch: u && u.branchId ? bnames[u.branchId] || '' : '', title: n.title, at: n.createdAt, phone, deliverAfter: n.deliverAfter,
+        openedAt: n.openedAt, readAt: n.readAt,
+      });
+    }
+    const totals = {
+      people: rows.length,
+      delivered: rows.filter((r) => r.phone === 'delivered').length,
+      notOnPhone: rows.filter((r) => ['no-phone', 'server-off', 'failed', 'off'].includes(r.phone)).length,
+      opened: rows.filter((r) => r.openedAt || r.readAt).length,
+    };
+    res.json({ type: kind, date: ymd, totals, rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/stats', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
   try {
     const days = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 30));

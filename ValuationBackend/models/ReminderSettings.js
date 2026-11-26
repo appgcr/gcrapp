@@ -7,6 +7,12 @@ const reminderSettingsSchema = new mongoose.Schema({
   enabled: { type: Boolean, default: true },            // master switch
   skipSundays: { type: Boolean, default: true },
 
+  // 8 AM: a warm personal "good morning" to every engineer and branch admin, with their day and a check-in nudge
+  // (replaces the engineers' and branch admins' morning summary while on)
+  goodMorning: {
+    enabled: { type: Boolean, default: true },
+    time: { type: String, default: '08:00' }
+  },
   morningDigest: {
     enabled: { type: Boolean, default: true },
     time: { type: String, default: '08:30' }        // fallback time
