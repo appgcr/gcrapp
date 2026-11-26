@@ -31,6 +31,8 @@ const headersFor = (user) => {
   return h;
 };
 
+import TestPushCard from './TestPushCard';
+
 export default function NotificationPrefsCard({ currentUser, compact = false }) {
   const [cats, setCats] = useState(null);
 
@@ -58,6 +60,7 @@ export default function NotificationPrefsCard({ currentUser, compact = false }) 
 
   return (
     <div className={`admin-card np-card ${compact ? 'np-compact' : ''}`}>
+      {!compact && <TestPushCard />}
       <div className="np-head">
         <IconTile icon={BellRing} color="red" size={28} />
         <div>

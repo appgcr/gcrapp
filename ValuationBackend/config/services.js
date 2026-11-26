@@ -35,6 +35,8 @@ const geminiStatus = {
 
 // 3. Firebase Cloud Messaging (FCM)
 let firebaseApp = null;
+// Why phone push is (not) working — shown by Settings → Notifications → "Send test notification"
+let fcmStatus = !config.FCM_ENABLED ? 'FCM_ENABLED is not true on the server' : !config.FCM_SERVICE_ACCOUNT_PATH ? 'FCM_SERVICE_ACCOUNT_PATH is not set on the server' : 'ready';
 if (config.FCM_ENABLED && config.FCM_SERVICE_ACCOUNT_PATH) {
   try {
     const serviceAccountFile = path.resolve(config.FCM_SERVICE_ACCOUNT_PATH);
@@ -47,9 +49,11 @@ if (config.FCM_ENABLED && config.FCM_SERVICE_ACCOUNT_PATH) {
       }, 'gcr_fcm_app');
     } else {
       console.warn(`⚠️ FCM_SERVICE_ACCOUNT_PATH file not found at: ${serviceAccountFile}`);
+      fcmStatus = `The Firebase key file was not found at ${serviceAccountFile} (Render → Environment → Secret Files)`;
     }
   } catch (err) {
     console.warn('⚠️ Firebase Admin SDK initialization notice:', err.message);
+    fcmStatus = `The Firebase key could not be read: ${String(err.message || '').slice(0, 120)}`;
   }
 }
 
@@ -76,6 +80,7 @@ module.exports = {
   cloudinary,
   geminiStatus,
   firebaseApp,
+  fcmStatus: () => fcmStatus,
   emailTransport,
   storageProvider: config.STORAGE_PROVIDER || 'local',
   ocrConfig: {

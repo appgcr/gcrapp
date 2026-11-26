@@ -54,6 +54,33 @@ router.get('/stats', authenticateToken, requireRole('SUPER_ADMIN'), async (req, 
 });
 
 // POST /api/notifications/opened — the user tapped a phone notification. Body: { ids: [...] }
+// POST /api/notifications/test-push — "Send test notification" in Settings: checks the server can send, this person
+// has a phone registered, then (after a few seconds, so the app can be closed) sends a real phone notification.
+const lastTest = new Map(); // userId → { at, sent, failed, errors } (shown when the app is opened again)
+router.get('/test-push', authenticateToken, (req, res) => res.json(lastTest.get(req.user.id) || null));
+router.post('/test-push', authenticateToken, async (req, res) => {
+  try {
+    const User = require('../models/User');
+    const { sendPush } = require('../services/notify');
+    const { fcmStatus } = require('../config/services');
+    const status = typeof fcmStatus === 'function' ? fcmStatus() : 'unknown';
+    const me = await User.findOne({ id: req.user.id }).select('id name pushTokens').lean();
+    const devices = ((me && me.pushTokens) || []).map((t) => ({ platform: t.platform || 'phone', updatedAt: t.updatedAt }));
+    if (status !== 'ready') return res.json({ ok: false, problem: 'server', detail: status, devices: devices.length });
+    if (!devices.length) return res.json({ ok: false, problem: 'no-device', devices: 0 });
+    const delay = Math.min(30, Math.max(0, Number((req.body || {}).delaySeconds) || 10));
+    res.json({ ok: true, devices: devices.length, platforms: [...new Set(devices.map((d) => d.platform))], delaySeconds: delay });
+    // After the reply: wait, then send (the person closes the app meanwhile, so it shows in the notification panel)
+    setTimeout(() => {
+      sendPush([me], { title: 'Test notification', message: 'Phone notifications are working for Gouru Valuations.', type: 'system', priority: 'urgent' })
+        .then((r) => { lastTest.set(req.user.id, { at: new Date(), ...r }); console.log('test push:', req.user.id, JSON.stringify(r)); })
+        .catch((err) => { lastTest.set(req.user.id, { at: new Date(), sent: 0, failed: 1, errors: [err.message] }); console.warn('test push failed:', err.message); });
+    }, delay * 1000);
+  } catch (err) {
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/opened', authenticateToken, async (req, res) => {
   try {
     const ids = (Array.isArray(req.body?.ids) ? req.body.ids : [])

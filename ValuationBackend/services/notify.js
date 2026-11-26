@@ -84,7 +84,8 @@ async function sendPush(users, { title, message, caseId, type, priority, notific
     if (!r.success && r.error && INVALID_TOKEN_CODES.has(r.error.code)) dead.push(tokens[i]);
   });
   if (dead.length) await User.updateMany({}, { $pull: { pushTokens: { token: { $in: dead } } } });
-  return { sent: res.successCount, failed: res.failureCount, removed: dead.length };
+  const errors = [...new Set(res.responses.filter((r) => !r.success && r.error).map((r) => r.error.code || r.error.message))].slice(0, 3);
+  return { sent: res.successCount, failed: res.failureCount, removed: dead.length, errors };
 }
 
 const normalizePriority = (p) => (p === 'urgent' || p === 'digest' ? p : 'normal');
@@ -256,4 +257,4 @@ function notifyCaseChange(before, after, actor = {}, now = new Date()) {
   }
 }
 
-module.exports = { notify, notifyLater, notifyCaseChange, releaseHeld, pushEnabled };
+module.exports = { notify, notifyLater, notifyCaseChange, releaseHeld, pushEnabled, sendPush };

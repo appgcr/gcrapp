@@ -1,6 +1,6 @@
 import { API_BASE_URL } from '../../config/api';
 import React, { useEffect, useRef, useState } from 'react';
-import { Eye, EyeOff, Fingerprint, Loader2, AlertCircle, KeyRound, MapPin, FileCheck2, Users, X, Mail, ShieldCheck, Smartphone } from 'lucide-react';
+import { Eye, EyeOff, Fingerprint, Loader2, AlertCircle, KeyRound, MapPin, FileCheck2, Users, X, Mail, Smartphone } from 'lucide-react';
 import { startAuthentication } from '@simplewebauthn/browser';
 import GcrLogo from '../Shared/GcrLogo';
 import pkg from '../../../package.json';
@@ -159,7 +159,6 @@ export default function LoginScreen({ onLogin }) {
 
           {waiting ? (
             <div className="lg-wait" role="status" aria-live="polite">
-              <div className="lg-wait-icon"><ShieldCheck size={30} /></div>
               <h3>Waiting for approval</h3>
               <p>This is a new device for your account. Your Super Admin has been asked to approve it — you’ll be signed in automatically once they do.</p>
               {waiting.device && <div className="lg-wait-device"><Smartphone size={16} /> {waiting.device}</div>}
@@ -168,9 +167,9 @@ export default function LoginScreen({ onLogin }) {
               <style>{`
                 .lg-wait { text-align: center; padding: 8px 4px 4px; }
                 .lg-wait-icon { width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 18px; background: #eff6ff; color: #2563eb; display: grid; place-items: center; }
-                .lg-wait h3 { margin: 0 0 8px; font-size: 20px; }
-                .lg-wait p { margin: 0 auto 14px; max-width: 340px; color: #64748b; font-size: 14.5px; line-height: 1.45; }
-                .lg-wait-device { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px; background: #f1f5f9; color: #334155; font-size: 13.5px; font-weight: 600; margin-bottom: 16px; }
+                .lg-wait h3 { margin: 0 0 8px; font-size: 20px; color: var(--lg-text); }
+                .lg-wait p { margin: 0 auto 14px; max-width: 340px; color: var(--lg-sub); font-size: 14.5px; line-height: 1.45; }
+                .lg-wait-device { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px; background: var(--lg-fill); color: var(--lg-text); font-size: 13.5px; font-weight: 600; margin-bottom: 16px; }
                 .lg-wait-spin { display: flex; align-items: center; justify-content: center; gap: 8px; color: #2563eb; font-weight: 600; font-size: 14px; margin-bottom: 14px; }
               `}</style>
             </div>
