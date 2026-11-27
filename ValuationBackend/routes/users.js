@@ -82,12 +82,14 @@ router.get('/:idOrUsername/notification-prefs', authenticateToken, async (req, r
     if (req.user.id !== idOrUsername && req.user.username !== idOrUsername) {
       return res.status(403).json({ error: 'You can only view your own notification settings.' });
     }
-    const { categoriesForRole, prefValue } = require('../services/notificationCategories');
+    const { categoriesForRole, prefValue, choosesOwnAlerts } = require('../services/notificationCategories');
     const user = await User.findOne({ id: req.user.id }).select('role notificationPrefs');
+    const own = choosesOwnAlerts(user); // everyone else: all on, set by the Super Admin
     res.json({
+      managed: !own,
       categories: categoriesForRole(user.role).map((c) => ({
-        key: c.key, label: c.label, description: c.description, required: c.required,
-        enabled: c.required ? true : prefValue(user.notificationPrefs, c.key),
+        key: c.key, label: c.label, description: c.description, required: c.required || !own,
+        enabled: c.required || !own ? true : prefValue(user.notificationPrefs, c.key),
       })),
     });
   } catch (err) {
@@ -102,8 +104,9 @@ router.put('/:idOrUsername/notification-prefs', authenticateToken, async (req, r
     if (req.user.id !== idOrUsername && req.user.username !== idOrUsername) {
       return res.status(403).json({ error: 'You can only change your own notification settings.' });
     }
-    const { categoriesForRole } = require('../services/notificationCategories');
+    const { categoriesForRole, choosesOwnAlerts } = require('../services/notificationCategories');
     const user = await User.findOne({ id: req.user.id }).select('role notificationPrefs');
+    if (!choosesOwnAlerts(user)) return res.status(403).json({ error: 'Notifications are set by the Super Admin.' });
     const allowed = new Map(categoriesForRole(user.role).map((c) => [c.key, c]));
     const set = {};
     for (const [key, val] of Object.entries(req.body || {})) {

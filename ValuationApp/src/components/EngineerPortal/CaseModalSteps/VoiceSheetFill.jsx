@@ -7,6 +7,7 @@ import { requestMic, openMicSettings } from '../../../utils/micPermission';
 import askConfirm from '../../Shared/askConfirm';
 import localforage from 'localforage';
 import { uploadDocumentFile } from '../../../utils/docFiles';
+import { WaitCard } from '../../Shared/ReadingProgress';
 
 /**
  * Speak the office-sheet details — "owner name Mahesh, S/o Maheer, address 2/240-45, engineer Chanikya Reddy,
@@ -118,6 +119,7 @@ export function sheetFilledList(f) {
 export default function VoiceSheetFill({ setSheet, emptySheet, onFilled, apply, example, storeKey, allowUpload = false, big = false, missing = [], onVoiceNote }) {
   const pickRef = useRef(null);
   const [state, setState] = useState('idle'); // idle | rec | paused | busy
+  const [showEx, setShowEx] = useState(false); // the spoken example, opened on tap
   const [secs, setSecs] = useState(0);
   const [note, setNote] = useState('');
   const [result, setResult] = useState(null);
@@ -362,37 +364,58 @@ export default function VoiceSheetFill({ setSheet, emptySheet, onFilled, apply, 
   sendRef.current = send;
   const time = fmt(secs);
   return (
-    <div className="vsf">
-      {big && <div className="vsf-h"><b>Fill this case by voice</b><small>Speak now, or upload a recording you made at the site. English, Telugu or a mix.</small></div>}
+    <div className={`vsf${big ? ' vsf-big' : ''}`}>
+      {big && (
+        <div className="vsf-h">
+          <span className="vsf-hic"><Mic size={20} /></span>
+          <span className="vsf-ht"><b>Fill this case by voice</b><small>Speak now or upload a recording · English, Telugu or a mix</small></span>
+        </div>
+      )}
       {allowUpload && <input ref={pickRef} type="file" hidden accept={AUDIO_ACCEPT} onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; uploadAudio(f); }} />}
       {state === 'idle' && (
-        <div className="vsf-row">
-          <button type="button" className="vsf-btn" onClick={() => record(true)}><Mic size={18} /> {result ? 'Speak more details' : 'Speak the details'}</button>
-          {allowUpload && <button type="button" className="vsf-btn up" onClick={() => pickRef.current?.click()}><Upload size={18} /> Upload audio</button>}
+        <div className="vsf-row vsf-stack">
+          <button type="button" className="vsf-btn" onClick={() => record(true)}><Mic size={19} /> {result ? 'Speak more details' : 'Speak the details'}</button>
+          {allowUpload && <button type="button" className="vsf-btn up" onClick={() => pickRef.current?.click()}><Upload size={17} /> Upload a recording</button>}
         </div>
       )}
-      {state === 'rec' && (
-        <div className="vsf-row">
-          <button type="button" className="vsf-btn rec" onClick={() => pause('')} aria-label="Pause"><Pause size={17} /> Pause · {time}</button>
-          <button type="button" className="vsf-btn go" onClick={done}><Check size={17} /> Done</button>
+      {(state === 'rec' || state === 'paused') && (
+        <div className={`vsf-live${state === 'paused' ? ' paused' : ''}`}>
+          <div className="vsf-live-top">
+            <span className="vsf-dot" aria-hidden="true" />
+            <span className="vsf-live-t">{state === 'rec' ? 'Listening…' : 'Paused'}</span>
+            {secs > 0 && <b className="vsf-time">{time}</b>}
+            {state === 'paused' && <button type="button" className="vsf-x" onClick={discard} aria-label="Delete recording"><Trash2 size={17} /></button>}
+          </div>
+          <div className="vsf-wave" aria-hidden="true">{Array.from({ length: 21 }).map((_, i) => <i key={i} style={{ animationDelay: `${(i * 97) % 700}ms` }} />)}</div>
+          <div className="vsf-row">
+            {state === 'rec'
+              ? <button type="button" className="vsf-btn soft" onClick={() => pause('')}><Pause size={18} /> Pause</button>
+              : <button type="button" className="vsf-btn soft" onClick={() => record(false)}><Play size={18} /> Resume</button>}
+            <button type="button" className="vsf-btn go" onClick={done}><Check size={18} /> {state === 'rec' ? 'Done' : 'Fill now'}</button>
+          </div>
         </div>
       )}
-      {state === 'paused' && (
-        <div className="vsf-row">
-          <button type="button" className="vsf-btn" onClick={() => record(false)}><Play size={17} /> Resume · {time}</button>
-          <button type="button" className="vsf-btn go" onClick={done}><Check size={17} /> Fill now</button>
-          <button type="button" className="vsf-x" onClick={discard} aria-label="Delete recording"><Trash2 size={17} /></button>
+      {state === 'busy' && (
+        <div className="vsf-busy">
+          <WaitCard busy games={false} expectSec={25} title="Gouru AI is filling the details"
+            stages={[stage || 'Listening to your recording…', 'Writing down what you said…', 'Putting each value in its box…', 'Checking names and numbers…']} />
         </div>
       )}
-      {state === 'busy' && <button type="button" className="vsf-btn" disabled><Loader2 size={18} className="spin" /> {stage || 'Gouru AI is filling…'}</button>}
       {note && <div className="vsf-pnote">{note}</div>}
-      <div className="vsf-hint">
-        {state === 'rec'
-          ? 'Listening… say the field name, then the value. Pause any time; a call pauses it by itself.'
-          : state === 'paused'
-            ? 'Paused. What you said is kept. Resume to say more, or Fill now.'
-            : `Say the field name, then the value. e.g. "${example || 'Owner name Mahesh, S/o Maheer, address 2/240-45, engineer Chanikya Reddy, inspection date today, deed number 123 by 2025, deed date 23-04-24, survey number 114'}"`}
-      </div>
+      {(state === 'rec' || (state === 'paused' && !note)) ? (
+        <div className="vsf-hint">
+          {state === 'rec'
+            ? 'Listening… say the field name, then the value. Pause any time; a call pauses it by itself.'
+            : 'Paused. What you said is kept. Resume to say more, or Fill now.'}
+        </div>
+      ) : state === 'idle' ? (
+        <div className="vsf-howto">
+          <button type="button" className="vsf-exbtn" onClick={() => setShowEx((x) => !x)} aria-expanded={showEx}>
+            <span>How to speak: field name, then the value</span><b>{showEx ? 'Hide' : 'Example'}</b>
+          </button>
+          {showEx && <div className="vsf-ex">“{example || 'Owner name Mahesh, S/o Maheer, address 2/240-45, engineer Chanikya Reddy, inspection date today, deed number 123 by 2025, deed date 23-04-24, survey number 114'}”</div>}
+        </div>
+      ) : null}
       {result && state === 'idle' && missing.length > 0 && (
         <div className="vsf-miss">
           <b>Still needed ({missing.length})</b>
@@ -415,21 +438,48 @@ export default function VoiceSheetFill({ setSheet, emptySheet, onFilled, apply, 
         </div>
       )}
       <style>{`
-        .vsf { padding: 12px; border-radius: 14px; background: linear-gradient(135deg, #eef2ff, #f5f3ff); border: 1px solid #c7d2fe; }
-        .vsf-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 999px; padding: 13px; font-size: 15.5px; font-weight: 800; color: #fff; background: #4f46e5; cursor: pointer; font-family: inherit; }
+        .vsf { padding: 12px; border-radius: 16px; background: #eef2ff; border: 1px solid #c7d2fe; }
+        .vsf-big { padding: 14px; }
+        .vsf-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 14px; padding: 13px; min-height: 50px; box-sizing: border-box; font-size: 16px; font-weight: 700; color: #fff; background: #4f46e5; cursor: pointer; font-family: inherit; }
         .vsf-row { display: flex; gap: 8px; align-items: center; }
         .vsf-row .vsf-btn { flex: 1; }
-        .vsf-btn.go { background: #16a34a; flex: 0 0 auto; padding: 13px 18px; }
-        .vsf-btn.up { background: #fff; color: #4338ca; border: 1.5px solid #a5b4fc; }
-        .vsf-h { margin-bottom: 10px; display: flex; flex-direction: column; gap: 2px; }
-        .vsf-h b { font-size: 15.5px; color: #1e1b4b; } .vsf-h small { font-size: 12.5px; color: #4338ca; line-height: 1.4; }
+        .vsf-btn.go { background: #16a34a; }
+        .vsf-busy .rp { margin: 0; }
+        .vsf-row .vsf-btn { white-space: nowrap; padding-left: 10px; padding-right: 10px; }
+        @media (max-width: 360px) { .vsf-btn { font-size: 15px; gap: 6px; } .vsf-live { padding: 10px; } }
+        .vsf-btn.soft { background: #fff; color: #4338ca; border: 1px solid #c7d2fe; }
+        .vsf-live { background: #fff; border: 1px solid #e0e7ff; border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+        .vsf-live-top { display: flex; align-items: center; gap: 8px; }
+        .vsf-dot { width: 10px; height: 10px; border-radius: 50%; background: #dc2626; flex: none; animation: vsfBlink 1s ease-in-out infinite; }
+        .vsf-live.paused .vsf-dot { background: #f59e0b; animation: none; }
+        .vsf-live-t { flex: 1; font-weight: 700; font-size: 15px; color: #1e1b4b; }
+        .vsf-time { font-size: 20px; font-variant-numeric: tabular-nums; color: #1e1b4b; }
+        .vsf-live .vsf-x { width: 38px; height: 38px; }
+        .vsf-wave { height: 36px; display: flex; align-items: center; justify-content: center; gap: 4px; }
+        .vsf-wave i { display: block; width: 4px; height: 100%; border-radius: 4px; background: #6366f1; transform-origin: center; animation: vsfWave .9s ease-in-out infinite; }
+        .vsf-live.paused .vsf-wave i { animation: none; transform: scaleY(.18); background: #c7d2fe; }
+        @keyframes vsfWave { 0%,100% { transform: scaleY(.2); } 50% { transform: scaleY(1); } }
+        @keyframes vsfBlink { 50% { opacity: .3; } }
+        body.dark-theme .vsf-live { background: #2c2c2e; border-color: #3a3a3c; } body.dark-theme .vsf-live-t, body.dark-theme .vsf-time { color: #fff; }
+        body.dark-theme .vsf-btn.soft { background: #1c1c1e; color: #a5b4fc; border-color: #4f46e5; }
+        .vsf-btn.up { background: #fff; color: #4338ca; border: 1px solid #c7d2fe; min-height: 44px; padding: 10px; font-size: 15px; font-weight: 600; }
+        .vsf-stack { flex-direction: column; align-items: stretch; }
+        .vsf-howto { margin-top: 10px; }
+        .vsf-exbtn { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 0; background: none; padding: 2px 2px; font-family: inherit; cursor: pointer; text-align: left; }
+        .vsf-exbtn span { font-size: 12.5px; color: #4338ca; line-height: 1.35; } .vsf-exbtn b { font-size: 12.5px; color: #4f46e5; flex: none; }
+        .vsf-ex { margin-top: 6px; background: #fff; border: 1px solid #e0e7ff; border-radius: 10px; padding: 9px 11px; font-size: 13px; color: #312e81; line-height: 1.5; }
+        body.dark-theme .vsf-ex { background: #2c2c2e; border-color: #3a3a3c; color: #c7d2fe; }
+        .vsf-h { margin-bottom: 12px; display: flex; align-items: center; gap: 10px; }
+        .vsf-hic { width: 40px; height: 40px; border-radius: 12px; background: #4f46e5; color: #fff; display: grid; place-items: center; flex: none; }
+        .vsf-ht { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+        .vsf-h b { font-size: 16px; color: #1e1b4b; } .vsf-h small { font-size: 12.5px; color: #4338ca; line-height: 1.35; }
         body.dark-theme .vsf-btn.up { background: #2c2c2e; color: #a5b4fc; border-color: #4f46e5; } body.dark-theme .vsf-h b { color: #fff; } body.dark-theme .vsf-h small { color: #a5b4fc; }
         .vsf-x { width: 46px; height: 46px; flex-shrink: 0; border-radius: 50%; border: 1px solid #fecaca; background: #fff; color: #dc2626; display: grid; place-items: center; cursor: pointer; }
         .vsf-pnote { margin-top: 8px; font-size: 12.5px; font-weight: 600; color: #b45309; text-align: center; line-height: 1.4; }
         .vsf-btn.rec { background: #dc2626; animation: vsfPulse 1.4s ease-in-out infinite; }
         .vsf-btn:disabled { opacity: .85; }
         @keyframes vsfPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(220,38,38,.45); } 50% { box-shadow: 0 0 0 10px rgba(220,38,38,0); } }
-        .vsf-hint { margin-top: 8px; font-size: 12px; color: #4338ca; line-height: 1.45; text-align: center; }
+        .vsf-hint { margin-top: 8px; font-size: 12.5px; color: #4338ca; line-height: 1.45; }
         .vsf-res { margin-top: 10px; background: #fff; border-radius: 10px; padding: 10px 12px; font-size: 13px; color: #1e1b4b; line-height: 1.45; }
         .vsf-heard { color: #475569; }
         .vsf-res ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }

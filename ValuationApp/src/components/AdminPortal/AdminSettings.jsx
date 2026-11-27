@@ -1,6 +1,6 @@
 import { API_BASE_URL } from '../../config/api';
 import React, { useState } from 'react';
-import { Bell, HelpCircle, X, Mail, Phone, ChevronRight, ChevronLeft, Clock, BarChart3, Fingerprint, KeyRound, Landmark, FileImage, PenTool, DatabaseBackup } from 'lucide-react';
+import { Bell, HelpCircle, X, Mail, Phone, ChevronRight, ChevronLeft, Clock, BarChart3, Fingerprint, KeyRound, Landmark, FileImage, PenTool, DatabaseBackup, ListChecks } from 'lucide-react';
 import LetterheadSettings from '../Shared/LetterheadSettings';
 import SignatureSettings from '../Shared/SignatureSettings';
 import BanksSettings from './BanksSettings';
@@ -16,6 +16,7 @@ import { Row, Switch, IosSettingsStyles } from '../Shared/IosSettings';
 import { authHeaders } from '../Shared/authHeaders';
 import { startRegistration } from '@simplewebauthn/browser';
 import toast from 'react-hot-toast';
+import { FillModesByBranch } from './FillModesCard';
 export default function AdminSettings({ currentUser, handleLogout }) {
   const [pushNotes, setPushNotes] = useState(() => {
     return localStorage.getItem('admin_push_notifications') !== 'false';
@@ -163,7 +164,7 @@ export default function AdminSettings({ currentUser, handleLogout }) {
   const name = currentUser?.name || 'Admin User';
   const initials = name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || 'A';
 
-  const titles = { notifications: 'Notifications', reminders: 'Automatic Reminders', insights: 'Alert Insights', banks: 'Banks', letterhead: 'Letterhead & Valuer', signature: 'Digital Signature', backup: 'Database backup', delivery: 'Notification delivery' };
+  const titles = { notifications: 'Notifications', reminders: 'Automatic Reminders', insights: 'Alert Insights', banks: 'Banks', letterhead: 'Letterhead & Valuer', signature: 'Digital Signature', backup: 'Database backup', delivery: 'Notification delivery', fillmodes: 'Case fill options' };
 
   if (page !== 'main') {
     return (
@@ -191,6 +192,7 @@ export default function AdminSettings({ currentUser, handleLogout }) {
         {page === 'banks' && <BanksSettings />}
         {page === 'backup' && <BackupCard />}
         {page === 'delivery' && <DeliveryCheckCard />}
+        {page === 'fillmodes' && <FillModesByBranch />}
         {page === 'signature' && <SignatureSettings />}
         {page === 'letterhead' && <LetterheadSettings branchId={currentUser?.branchId} branchName={currentUser?.branchInfo?.name} />}
         <IosSettingsStyles />
@@ -247,6 +249,16 @@ export default function AdminSettings({ currentUser, handleLogout }) {
         {isSuperAdmin(currentUser) && <Row icon={BarChart3} color="indigo" label="Alert Insights" onClick={() => open('insights')} />}
         {isSuperAdmin(currentUser) && <Row icon={Bell} color="green" label="Notification delivery" onClick={() => open('delivery')} />}
       </div>
+
+      {isSuperAdmin(currentUser) && (
+        <>
+          <div className="ios-section">Engineers</div>
+          <div className="ios-group">
+            <Row icon={ListChecks} color="orange" label="Case fill options" onClick={() => open('fillmodes')} />
+          </div>
+          <p className="ios-footnote">For each branch, choose which New Case cards its engineers see: Upload documents, Office sheet, Audio, Valocity.</p>
+        </>
+      )}
 
       <div className="ios-section">General</div>
       <div className="ios-group">

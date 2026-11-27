@@ -6,7 +6,7 @@ import { API_BASE_URL } from '../../config/api';
 const KINDS = [
   ['good_morning', 'Good morning (8 AM)'], ['good_evening', 'Thank-you (at check-out)'], ['daily_report', 'Daily report (8 PM)'], ['weekly_report', 'Weekly report'],
   ['checkin_reminder', 'Check-in reminder'], ['case_assigned', 'New case assigned'], ['announcement', 'Announcements'],
-  ['login_approval', 'Sign-in approvals'], ['morning_digest', 'Morning summary'],
+  ['login_approval', 'Sign-in approvals'], ['morning_digest', 'Morning summary'], ['revaluation_due', 'Revaluation Radar'],
 ];
 const PHONE = {
   delivered: ['Reached phone', 'ok'], held: ['Waiting (quiet hours)', 'wait'], 'no-phone': ['No phone registered', 'bad'],

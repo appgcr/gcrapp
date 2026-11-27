@@ -7,6 +7,9 @@ import { isWordFile, resolveDocUrl } from '../../utils/docFiles';
 import { PdfSheet } from './AdminFees';
 import PdfPages from '../Shared/PdfPages';
 import { reportFileName } from '../../utils/reportFileName';
+import ValocityFilesCard from '../Shared/ValocityFilesCard';
+import { isValocityBank } from '../../utils/valocityFiles';
+import { useBanks } from '../../utils/banks';
 
 const DOCS = [
   ['bankDocs', 'Documents from the bank'],
@@ -36,6 +39,7 @@ function FilesSheet({ c, onClose }) {
   const [err, setErr] = useState('');
   const [view, setView] = useState(null);   // { url, name, pdf, word }
   const [all, setAll] = useState(false);
+  const banks = useBanks();
 
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/cases/${c.id}`, { headers: authHeaders() })
@@ -67,6 +71,7 @@ function FilesSheet({ c, onClose }) {
               <button type="button" className="cf-all" onClick={() => setAll(true)} disabled={!docCount && !photos.length}>
                 <Download size={17} /> All documents &amp; photos as one PDF
               </button>
+              {isValocityBank(banks, full.bankName) && <ValocityFilesCard caseInfo={full} documents={docs} photos={photos} />}
               <div className="cf-sec">Documents <small>{docCount} file{docCount === 1 ? '' : 's'}</small></div>
               {DOCS.map(([id, title]) => {
                 const pages = Array.isArray(docs[id]) ? docs[id] : [];

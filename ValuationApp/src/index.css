@@ -841,7 +841,7 @@ body.dark-theme .ios-tabbar .ios-tab.active { color: #0a84ff; }
 .fs-row + .fs-row::before { content: ''; position: absolute; top: 0; left: 16px; right: 0; height: .5px; background: rgba(60,60,67,.18); }
 .fs-row > span { width: 96px; flex: none; }
 .fs-row input, .fs-row select { flex: 1; min-width: 0; height: 44px; border: none; outline: none; background: transparent; font: inherit; font-size: 16px; color: #000; text-align: right; }
-.fs-row select { direction: rtl; color: #007aff; cursor: pointer; }
+.fs-row select { direction: ltr; text-align-last: right; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; color: #007aff; cursor: pointer; } /* long names end in … instead of losing their start */
 .fs-row input::placeholder { color: #c7c7cc; }
 .fs-icon { width: 32px; height: 32px; border: none; background: none; color: #8e8e93; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex: none; }
 .fs-icon:active { background: rgba(120,120,128,.12); }

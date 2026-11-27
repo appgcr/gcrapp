@@ -4,6 +4,13 @@ import toast, { Toaster, ToastBar } from 'react-hot-toast';
 import { CheckCircle2, AlertCircle, Info, Loader2, X } from 'lucide-react';
 import ToastLimit from './ToastLimit';
 
+// The same error message shown twice at once (e.g. two loads failing together) appears only once
+if (!toast.__gcrOnce) {
+  const plainError = toast.error.bind(toast);
+  toast.error = (msg, opts = {}) => plainError(msg, typeof msg === 'string' && !opts.id ? { ...opts, id: `err:${msg}` } : opts);
+  toast.__gcrOnce = true;
+}
+
 // The app's message cards: clear icon, readable text, a real close (X) button,
 // and tap or swipe up/sideways to close.
 const KIND = {

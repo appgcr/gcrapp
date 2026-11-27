@@ -45,6 +45,14 @@ const branchSchema = new mongoose.Schema({
   // Super Admin switch: this branch's engineers may upload the filled office data sheet
   // (GOURU VALUATION – OFFICE) instead of the 5 documents + check + site steps
   sheetBypass: { type: Boolean, default: false },
+  // How this branch's engineers may fill a New Case (the four cards). Set by the Super Admin.
+  // null = not set yet: office sheet and audio then follow sheetBypass (older setting), documents on, Valocity off.
+  fillModes: {
+    docs: { type: Boolean, default: null },
+    sheet: { type: Boolean, default: null },
+    audio: { type: Boolean, default: null },
+    valocity: { type: Boolean, default: null },
+  },
   createdAt: { type: Date, default: Date.now },
 });
 

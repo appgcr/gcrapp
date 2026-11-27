@@ -85,7 +85,7 @@ function drawCases() {
     meta.title = caseLine(c);
     info.append(name, meta);
     d.append(av, info);
-    d.onclick = () => { selected = c; setFillReady(); drawCases(); };
+    d.onclick = () => { selected = c; setFillReady(); drawCases(); loadValocityFiles(); };
     $('cases').appendChild(d);
   }
   if (!rows.length) $('cases').innerHTML = `<div class="empty">${cases.length ? 'No cases here. Try “All”.' : 'No cases found.'}</div>`;
@@ -150,6 +150,7 @@ $('search').oninput = drawCases;
 $('statusFilter').onchange = async () => {
   selected = null;
   setFillReady();
+  loadValocityFiles();
   drawCases();
   await chrome.storage.local.set({ statusFilter: $('statusFilter').value });
 };
@@ -178,6 +179,81 @@ $('fill').onclick = async () => {
     setFillReady();
   }
 };
+
+// ── Valocity files: only the files marked for Valocity in the Gouru app, attached into Valocity's upload box ──
+let vFiles = [];
+async function loadValocityFiles() {
+  vFiles = [];
+  $('vf').classList.toggle('hidden', !selected);
+  $('vfList').innerHTML = '';
+  if (!selected) return;
+  const forCase = selected.id;
+  $('vfCount').textContent = '';
+  $('vfList').innerHTML = '<div class="vf-s">Loading…</div>';
+  try {
+    const r = await api(`/api/cases/${encodeURIComponent(forCase)}/valocity-files`);
+    if (!selected || selected.id !== forCase) return;
+    vFiles = r.files || [];
+  } catch (e) {
+    $('vfList').innerHTML = '';
+    show(e.message, 'err');
+    return;
+  }
+  drawValocityFiles();
+}
+function drawValocityFiles() {
+  $('vfCount').textContent = vFiles.length ? `(${vFiles.length})` : '';
+  $('vfAll').classList.toggle('hidden', vFiles.length < 2);
+  $('vfList').innerHTML = '';
+  if (!vFiles.length) { $('vfList').innerHTML = '<div class="vf-s">None added yet. In the Gouru app: open the case → Valocity files → Add, Camera or From this case.</div>'; return; }
+  for (const f of vFiles) {
+    const row = document.createElement('div');
+    row.className = 'vf-r';
+    const a = document.createElement('a');
+    a.href = `${state.server}${f.url}`;
+    a.target = '_blank';
+    a.textContent = f.name;
+    a.title = 'Open the file';
+    const b = document.createElement('button');
+    b.className = 'vf-b';
+    b.textContent = 'Attach';
+    b.onclick = () => attachFiles([f], [b]);
+    f.btn = b;
+    row.append(a, b);
+    $('vfList').appendChild(row);
+  }
+}
+async function asBase64(url) {
+  const r = await fetch(`${state.server}${url}`);
+  if (!r.ok) throw new Error('Could not download the file from Gouru.');
+  const blob = await r.blob();
+  const b64 = await new Promise((ok, bad) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(',')[1] || ''); fr.onerror = bad; fr.readAsDataURL(blob); });
+  return { b64, type: blob.type };
+}
+async function attachFiles(list, buttons) {
+  show('');
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!PORTALS.some((p) => p.match(tab?.url || ''))) { show('Open the Valocity job in this tab first, then press Attach.', 'err'); return; }
+  buttons.forEach((b) => { b.disabled = true; b.textContent = '…'; });
+  try {
+    const payload = [];
+    for (const f of list) { const got = await asBase64(f.url); payload.push({ name: f.name, type: got.type || f.type, b64: got.b64 }); }
+    const target = { tabId: tab.id, allFrames: false };
+    await chrome.scripting.executeScript({ target, files: ['attach.js'] });
+    const [{ result }] = await chrome.scripting.executeScript({ target, func: (l) => gouruAttach(l), args: [payload] }); // eslint-disable-line no-undef
+    if (!result || !result.ok) throw new Error('No upload box found on this page. In Valocity, open the place where you add photos / documents, then press Attach again.');
+    const done = list.slice(0, result.count);
+    for (const f of done) if (f.btn) { f.btn.textContent = 'Attached'; f.btn.classList.add('done'); }
+    let text = `Attached ${result.count} file${result.count === 1 ? '' : 's'} to Valocity's upload box. Check they appear there, then save in Valocity.`;
+    if (result.count < list.length) text += `\nThis upload box takes one file at a time — press Attach on the next file.`;
+    show(text, 'ok');
+  } catch (e) {
+    show(e.message, 'err');
+  } finally {
+    buttons.forEach((b) => { if (!b.classList.contains('done')) { b.disabled = false; b.textContent = b.id === 'vfAll' ? 'Attach all' : 'Attach'; } else b.disabled = false; });
+  }
+}
+$('vfAll').onclick = () => attachFiles(vFiles, [$('vfAll')]);
 
 (async () => {
   const saved = await chrome.storage.local.get(['server', 'token', 'user', 'statusFilter']);

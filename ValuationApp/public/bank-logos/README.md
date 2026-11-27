@@ -18,5 +18,6 @@ Then set `logo: true` for that bank in `src/config/site.js` (BANKS list). Banks 
 | State Bank of India | sbi.png  ✅ (verified, from an official SBI report) |
 | UCO Bank | uco.png |
 | Union Bank of India | union.png |
+| Shriram Finance Ltd | shriram.png  ✅ (from shriramfinance.in, the official site) |
 
 Never draw or generate a logo — only use the bank's own artwork (see GCR_BANK_LOGO_VERIFICATION.md).

@@ -9,7 +9,9 @@ import { saveBlobToDevice } from '../../utils/fileDownload';
 export default function BackupCard() {
   const [st, setSt] = useState(null);
   const [busy, setBusy] = useState('');
-  const load = () => fetch(`${API_BASE_URL}/api/backup/status`, { headers: authHeaders() }).then((r) => (r.ok ? r.json() : null)).then(setSt).catch(() => {});
+  // If the check fails (no signal / server waking up) say so, instead of "Checking…" for ever
+  const load = () => { setSt(null); return fetch(`${API_BASE_URL}/api/backup/status`, { headers: authHeaders() })
+    .then((r) => (r.ok ? r.json() : Promise.reject())).then(setSt).catch(() => setSt({ failed: true })); };
   useEffect(() => { load(); }, []);
   const download = async (full) => {
     setBusy(full ? 'full' : 'data');
@@ -22,13 +24,13 @@ export default function BackupCard() {
       load();
     } catch (e) { toast.error(e.message); } finally { setBusy(''); }
   };
-  const old = !st || st.daysSince === null || st.daysSince >= 7;
+  const old = !st || st.failed || st.daysSince === null || st.daysSince >= 7;
   return (
     <>
       <div className="ios-group bk-card">
         <div className={`bk-st ${old ? 'old' : ''}`}>
           {old ? <AlertTriangle size={18} /> : <ShieldCheck size={18} />}
-          <span>{!st ? 'Checking…' : st.lastAt
+          <span>{!st ? 'Checking…' : st.failed ? <>Couldn’t check the last backup. <button type="button" className="bk-retry" onClick={load}>Try again</button></> : st.lastAt
             ? `Last backup ${st.daysSince === 0 ? 'today' : `${st.daysSince} day${st.daysSince === 1 ? '' : 's'} ago`} (${st.lastKind === 'full' ? 'with files' : 'data'}) by ${st.lastBy}`
             : 'No backup taken yet'}</span>
         </div>
@@ -44,6 +46,7 @@ export default function BackupCard() {
         .bk-card { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
         .bk-st { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: #15803d; font-weight: 600; }
         .bk-st.old { color: #b45309; }
+        .bk-retry { border: 0; background: none; color: #2563eb; font-weight: 700; font-size: 13.5px; padding: 0; cursor: pointer; font-family: inherit; }
         .bk-btn { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; text-align: left; border: 0; border-radius: 12px; padding: 12px 14px; background: #2563eb; color: #fff; font-size: 15px; font-weight: 700; cursor: pointer; font-family: inherit; }
         .bk-btn small { width: 100%; font-size: 12px; font-weight: 500; opacity: .85; }
         .bk-btn.ghost { background: #eff6ff; color: #1d4ed8; }

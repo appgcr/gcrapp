@@ -18,6 +18,7 @@ import {
   Terminal
 } from 'lucide-react';
 import { REQUIRED_DOCS, getPageDisplayInfo, getDocMetaPills } from './caseModalHelpers';
+import { WaitCard } from '../../Shared/ReadingProgress';
 
 export default function Step2LegalDocs({
   uploadedDocs = {},
@@ -64,6 +65,16 @@ export default function Step2LegalDocs({
             </span>
           </div>
 
+          {/* While Gouru AI scans an upload: percentage card + a small game */}
+          {(() => {
+            const scanning = REQUIRED_DOCS.filter((d) => scanningDocs[d.id]);
+            const name = scanning.length === 1 ? ({ saleDeed: 'the sale deed', buildingPlan: 'the building plan', propertyTax: 'the tax receipt', marketValue: 'the market value', layoutPlan: 'the layout plan' }[scanning[0].id] || 'the document') : 'the documents';
+            return (
+              <WaitCard busy={scanning.length > 0} title={`Gouru AI is scanning ${name}`} doneTitle="Scan finished"
+                doneNote="Check the result on the document below." expectSec={20}
+                stages={['Reading the pages…', 'Checking it is the right document…', 'Looking for the same file on other cases…', 'Almost done — PDFs take a little longer…']} />
+            );
+          })()}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
             {REQUIRED_DOCS.map((doc) => {
               const pages = uploadedDocs[doc.id] || [];

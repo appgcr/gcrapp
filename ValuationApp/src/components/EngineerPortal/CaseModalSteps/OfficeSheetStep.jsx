@@ -7,6 +7,7 @@ import { uploadDocumentFile, resolveDocUrl, formatMB } from '../../../utils/docF
 import { ListMessage } from '../../Shared/AppToaster';
 import VoiceSheetFill from './VoiceSheetFill';
 import { ageYears, depPercentFor, tooOldText, MAX_BUILDING_AGE } from '../../../utils/buildingAge';
+import { WaitCard } from '../../Shared/ReadingProgress';
 
 // The filled GOURU VALUATION – OFFICE sheet: upload it (Word / PDF / photo), Gouru AI reads it, the
 // engineer checks every value here, then goes on to the site photos.
@@ -162,7 +163,10 @@ export default function OfficeSheetStep({ voiceKey, sheet, setSheet, sheetFiles 
 
       <div className={`os-up ${sheetFiles.length ? 'done' : ''}`}>
         {busy ? (
-          <div className="os-busy"><Loader2 size={20} className="spin" /> {busy}</div>
+          <div style={{ width: '100%' }}>
+            <WaitCard busy title={busy.replace(/…$/, '')} expectSec={35}
+              stages={['Uploading the pages…', 'Reading the sheet…', 'Finding the owner, extents and boundaries…', 'Reading the rates and comments…', 'Almost done — several pages take a little longer…']} />
+          </div>
         ) : sheetFiles.length ? (
           <>
             {sheetFiles.map((f, i) => (

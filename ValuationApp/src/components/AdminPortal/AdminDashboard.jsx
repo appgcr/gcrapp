@@ -6,7 +6,8 @@ import AdminInsights from './AdminInsights';
 import DashboardSummary from './DashboardSummary';
 import IntakeBreakdown from './IntakeBreakdown';
 import { Row, BackBar, IosSettingsStyles } from '../Shared/IosSettings';
-import { Layers, BarChart3, FileText, Users, Landmark, FolderOpen, ChevronRight } from 'lucide-react';
+import { Layers, BarChart3, FileText, Users, Landmark, FolderOpen, ChevronRight , Radar } from 'lucide-react';
+import { RevaluationSheet, useRevaluationCount } from '../Shared/RevaluationRadar';
 
 const timeAgo = (iso) => {
   const t = new Date(iso).getTime();
@@ -514,6 +515,8 @@ export default function AdminDashboard({ onNavigate, showLibrary = false }) {
         </button>
       )}
 
+      {onNavigate && <RevaluationShortcut />}
+
       {/* Only what needs action — or a single "All caught up" row */}
       <AdminInsights cases={cases} users={users} onNavigate={onNavigate} only="attention" />
 
@@ -545,5 +548,23 @@ function DashStyles() {
       .ios-dash.ios-subpage .admin-card { margin: 0 !important; }
       .ios-dash.ios-subpage .ios-large-title { margin-bottom: 4px; }
     `}</style>
+  );
+}
+
+// Revaluation Radar shortcut: how many properties are due, opens the radar
+function RevaluationShortcut() {
+  const n = useRevaluationCount();
+  const [open, setOpen] = React.useState(false);
+  return (
+    <>
+      <button type="button" className="fsc" onClick={() => setOpen(true)}>
+        <ShortcutStyle />
+        <span className="fsc-ic" style={{ background: '#0f766e' }}><Radar size={18} /></span>
+        <span className="fsc-t"><b>Revaluation Radar</b><small style={{ color: '#64748b' }}>{n ? `${n} propert${n === 1 ? 'y' : 'ies'} due for the bank’s revaluation` : 'Properties due for the bank’s revaluation'}</small></span>
+        {n > 0 && <span style={{ background: '#dc2626', color: '#fff', borderRadius: 99, fontSize: 12, fontWeight: 700, padding: '2px 8px', marginRight: 6 }}>{n}</span>}
+        <ChevronRight size={18} className="fsc-ch" />
+      </button>
+      {open && <RevaluationSheet onClose={() => setOpen(false)} />}
+    </>
   );
 }

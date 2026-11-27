@@ -142,9 +142,16 @@ function collectHashes(body) {
 
 const MAX_SITE_PHOTOS = 10;
 
+// A revaluation case may reuse the documents of the case it revalues (the same property): that pair never counts
+async function relatedIds(caseId) {
+  if (!caseId) return [''];
+  const me = await ValuationCase.findOne({ id: caseId }).select('id revaluationOf').lean();
+  const kids = await ValuationCase.find({ revaluationOf: caseId }).select('id').lean();
+  return [caseId, ...(me && me.revaluationOf ? [me.revaluationOf] : []), ...kids.map((k) => k.id)];
+}
 async function duplicateOwner(hashes, caseId) {
   if (!hashes.length) return null;
-  return ValuationCase.findOne({ documentHashes: { $in: hashes }, id: { $ne: caseId || '' } }).select('id fileNumber').lean();
+  return ValuationCase.findOne({ documentHashes: { $in: hashes }, id: { $nin: await relatedIds(caseId) } }).select('id fileNumber').lean();
 }
 
 // POST /api/cases/check-duplicates  { hashes: [...], caseId }  → files already used on another case
@@ -152,7 +159,7 @@ router.post('/check-duplicates', authenticateToken, async (req, res) => {
   try {
     const hashes = (Array.isArray(req.body.hashes) ? req.body.hashes : []).map(String).filter(Boolean).slice(0, 50);
     if (!hashes.length) return res.json({ duplicates: [] });
-    const others = await ValuationCase.find({ documentHashes: { $in: hashes }, id: { $ne: req.body.caseId || '' } })
+    const others = await ValuationCase.find({ documentHashes: { $in: hashes }, id: { $nin: await relatedIds(req.body.caseId) } })
       .select('id fileNumber documentHashes').lean();
     const duplicates = [];
     for (const c of others) {
@@ -172,6 +179,60 @@ router.get('/:id', authenticateToken, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Valocity files: only these go to the bank's Valocity portal (the Gouru Autofill extension attaches them there).
+// GET  /api/cases/:id/valocity-files            → { files }
+// POST /api/cases/:id/valocity-files { files }  → adds [{ name, url, type, size, from }] (url = a stored /api/files link)
+// DELETE /api/cases/:id/valocity-files/:fileId  → removes one from the list (the stored file itself stays)
+const MAX_VALOCITY_FILES = 40;
+async function valocityCase(req, res) {
+  if (req.user.role === 'BANK') { res.status(403).json({ error: 'Access denied.' }); return null; }
+  return loadVisibleCase(req, res);
+}
+router.get('/:id/valocity-files', authenticateToken, async (req, res) => {
+  try {
+    const c = await valocityCase(req, res);
+    if (c) res.json({ files: c.valocityFiles || [] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+router.post('/:id/valocity-files', authenticateToken, async (req, res) => {
+  try {
+    const c = await valocityCase(req, res);
+    if (!c) return;
+    const list = Array.isArray(c.valocityFiles) ? [...c.valocityFiles] : [];
+    const have = new Set(list.map((f) => f.url));
+    const incoming = Array.isArray(req.body.files) ? req.body.files : [];
+    for (const f of incoming) {
+      const parsed = fileStore.parseFileUrl(f && f.url);
+      if (!parsed) return res.status(400).json({ error: 'Upload the file first, then add it to the Valocity list.' });
+      const url = `/api/files/${parsed.id}?k=${parsed.key}`;
+      if (have.has(url)) continue;
+      if (list.length >= MAX_VALOCITY_FILES) return res.status(400).json({ error: `Up to ${MAX_VALOCITY_FILES} Valocity files per case.` });
+      have.add(url);
+      list.push({
+        id: `vf_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+        name: String(f.name || 'file').slice(0, 160), url,
+        type: String(f.type || '').slice(0, 100), size: Number(f.size) || 0,
+        from: f.from === 'case' ? 'case' : 'upload',
+        addedAt: new Date(), addedBy: req.user.name || req.user.username || req.user.id,
+      });
+    }
+    c.valocityFiles = list;
+    c.markModified('valocityFiles');
+    await c.save();
+    res.json({ files: list });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+router.delete('/:id/valocity-files/:fileId', authenticateToken, async (req, res) => {
+  try {
+    const c = await valocityCase(req, res);
+    if (!c) return;
+    c.valocityFiles = (c.valocityFiles || []).filter((f) => f.id !== req.params.fileId);
+    c.markModified('valocityFiles');
+    await c.save();
+    res.json({ files: c.valocityFiles });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // POST /api/cases — Initial Case Creation (Bank is Optional)
@@ -361,9 +422,11 @@ router.put('/:id', authenticateToken, async (req, res) => {
           if (!demo && !(updateData.siteSelfie || existingCase.siteSelfie)) return res.status(422).json({ error: 'Please take your selfie at the site before submitting.', code: 'NEED_SELFIE' });
         }
         if (pd.entryMode === 'sheet') {
-          // Office sheet route: only when the Super Admin has switched it on for this branch
-          const br = await Branch.findOne({ id: existingCase.branchId }).select('sheetBypass').lean();
-          if (!br || !br.sheetBypass) return res.status(403).json({ error: 'Office sheet upload is not switched on for your branch. Please upload the 5 documents instead.' });
+          // Office sheet / audio route: only when it is switched on for this branch (Settings → Case fill options)
+          const br = await Branch.findOne({ id: existingCase.branchId }).select('sheetBypass fillModes').lean();
+          const modes = require('../services/fillModes').fillModesOf(br);
+          const viaAudio = pd.sheetSource === 'audio';
+          if (!br || !(viaAudio ? modes.audio : modes.sheet)) return res.status(403).json({ error: `${viaAudio ? 'Audio' : 'Office sheet'} is not switched on for your branch. Ask your branch admin, or upload the 5 documents instead.` });
           if (!has('officeSheet') && pd.sheetSource !== 'audio') return res.status(422).json({ error: 'Please upload the filled office data sheet before submitting.' });
           if (!(updateData.siteSelfie || existingCase.siteSelfie)) return res.status(422).json({ error: 'Please take your selfie at the site before submitting.' });
         } else {

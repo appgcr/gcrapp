@@ -2,13 +2,14 @@ import PullDownReach from '../Shared/PullDownReach';
 import React, { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import AppToaster from '../Shared/AppToaster';
-import { Plus, FileText, LogOut, Download, Loader2, RefreshCw, KeyRound, CheckCircle2, Building2, Receipt, Paperclip, Camera, X } from 'lucide-react';
+import { Plus, FileText, LogOut, Download, Loader2, RefreshCw, KeyRound, CheckCircle2, Building2, Receipt, Paperclip, Camera, X , Radar } from 'lucide-react';
 import { uploadDocumentFile } from '../../utils/docFiles';
 import { API_BASE_URL } from '../../config/api';
 import ReportViewer, { fetchReport } from '../Shared/ReportViewer';
 import './BankPortal.css';
 import { PdfSheet } from '../AdminPortal/AdminFees';
 import { reportFileName } from '../../utils/reportFileName';
+import RevaluationRadar, { useRevaluationCount } from '../Shared/RevaluationRadar';
 
 const STEPS = ['Received by Gouru', 'Engineer assigned', 'Site visit done', 'Under Gouru review', 'Report ready'];
 const EMPTY = { clientName: '', clientPhone: '', notes: '', bankBranch: '', documents: [], inspectionDate: '', inspectionTime: '', engineerId: '' };
@@ -20,6 +21,7 @@ export default function BankPortal({ currentUser, handleLogout }) {
   const [me, setMe] = useState(null);
   const [rows, setRows] = useState(null);
   const [tab, setTab] = useState('list');
+  const revalDue = useRevaluationCount();
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
   const [viewing, setViewing] = useState(null);
@@ -131,8 +133,11 @@ export default function BankPortal({ currentUser, handleLogout }) {
         <div className="bp-tabs" role="tablist">
           <button role="tab" aria-selected={tab === 'list'} className={tab === 'list' ? 'on' : ''} onClick={() => setTab('list')}><FileText size={16} /> My requests</button>
           <button role="tab" aria-selected={tab === 'new'} className={tab === 'new' ? 'on' : ''} onClick={() => setTab('new')} data-testid="new-request-tab"><Plus size={16} /> New request</button>
+          <button role="tab" aria-selected={tab === 'reval'} className={tab === 'reval' ? 'on' : ''} onClick={() => setTab('reval')}><Radar size={16} /> Revaluation{revalDue > 0 ? ` (${revalDue})` : ''}</button>
           {tab === 'list' && <button className="bp-refresh" onClick={load} aria-label="Refresh"><RefreshCw size={16} /></button>}
         </div>
+
+        {tab === 'reval' && <RevaluationRadar mode="bank" />}
 
         {tab === 'list' && (
           rows === null ? <p className="bp-muted">Loading…</p> :

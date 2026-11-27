@@ -153,7 +153,7 @@ router.put('/reminders', authenticateToken, requireRole('SUPER_ADMIN'), async (r
       if (!['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].includes(b.weeklyReport.day)) return res.status(400).json({ error: 'weeklyReport.day must be Mon–Sun' });
       s.weeklyReport.day = b.weeklyReport.day;
     }
-    for (const k of ['goodMorning', 'morningDigest', 'engineerDigest', 'checkIn', 'checkOut', 'dailyReport', 'weeklyReport']) {
+    for (const k of ['goodMorning', 'revaluation', 'morningDigest', 'engineerDigest', 'checkIn', 'checkOut', 'dailyReport', 'weeklyReport']) {
       if (!s[k] && b[k]) s[k] = {};
       if (b[k] && bool(b[k].enabled)) s[k].enabled = b[k].enabled;
       if (b[k] && b[k].time !== undefined) {

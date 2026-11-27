@@ -8,6 +8,7 @@ import { API_BASE_URL } from '../../config/api';
 import { authHeaders } from '../Shared/authHeaders';
 import { setBranchScope } from '../../utils/session';
 import StaffFormSheet from './StaffFormSheet';
+import FillModesCard from './FillModesCard';
 
 // Short code from a name, e.g. "Kadapa" → "KDP", "Tirupati" → "TRP"
 const suggestCode = (name) => {
@@ -175,7 +176,6 @@ function BranchSheet({ branch, onClose, onSaved, onAddAdmin, onOpenPerson }) {
   const [form, setForm] = useState({ name: branch.name, address: branch.address || '', phone: branch.phone || '' });
   const [showLetterhead, setShowLetterhead] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [bypass, setBypass] = useState(!!branch.sheetBypass);
   const dirty = form.name !== branch.name || form.address !== (branch.address || '') || form.phone !== (branch.phone || '');
 
   const save = async (patch) => {
@@ -237,19 +237,8 @@ function BranchSheet({ branch, onClose, onSaved, onAddAdmin, onOpenPerson }) {
             </div>
           </div>, document.body)}
 
-        <div className="fs-section">Engineer workflow</div>
-        <div className="fs-group">
-          <label className="fs-row bd-switch">
-            <span className="bd-sw-text">
-              <b>Office sheet upload</b>
-              <small>{bypass
-                ? 'On: engineers may upload the filled office sheet instead of the 5 documents, then take site photos + a selfie and sign.'
-                : 'Off: engineers upload the 5 documents, check them and fill the site details (normal workflow).'}</small>
-            </span>
-            <input type="checkbox" role="switch" aria-label="Office sheet upload" checked={bypass} disabled={busy}
-              onChange={async (e) => { const on = e.target.checked; setBypass(on); await save({ sheetBypass: on }); }} />
-          </label>
-        </div>
+        <div className="fs-section">New Case cards</div>
+        <FillModesCard branchId={branch.id} initial={branch.modes} onSaved={onSaved} />
 
         <div className="fs-section">Branch Admins</div>
         <div className="fs-group">

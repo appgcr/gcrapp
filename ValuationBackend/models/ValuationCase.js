@@ -124,6 +124,12 @@ const valuationCaseSchema = new mongoose.Schema({
   
   documents: { type: mongoose.Schema.Types.Mixed, default: {} },
   sitePhotos: [{ type: String }],
+  // Only these files go to the bank's Valocity portal (Gouru Autofill extension): [{ id, name, url, type, size, from, addedAt, addedBy }]
+  valocityFiles: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  // Revaluation Radar. On an old approved case: { state: 'requested' | 'dismissed', at, by, byName, newCaseId, reason }.
+  // On the new case made from it: revaluationOf = the old case id (its documents may be reused).
+  reval: { type: mongoose.Schema.Types.Mixed, default: null },
+  revaluationOf: { type: String, default: '', index: true },
   // Engineer's selfie at the property (GPS-stamped) — required with the office sheet
   siteSelfie: { type: String, default: '' },
   // Content fingerprints of every uploaded document page and site photo (stops the same file being reused)

@@ -4,6 +4,7 @@ import { X, Download, Loader2, FileWarning, RefreshCw } from 'lucide-react';
 import { renderAsync } from 'docx-preview';
 import toast from 'react-hot-toast';
 import { saveBlobToDevice } from '../../utils/fileDownload';
+import { WaitCard } from './ReadingProgress';
 
 /**
  * Shows the bank-format report (the .docx the server builds) inside the app — the same
@@ -111,7 +112,10 @@ export default function ReportViewer({ title = 'Valuation Report', subtitle, loa
 
       <div className="rv-scroll" ref={scrollRef}>
         {state === 'loading' && (
-          <div className="rv-state"><Loader2 size={26} className="spin" /><span>Preparing the bank report…</span></div>
+          <div style={{ width: 'min(420px, 100%)', margin: '24px auto', padding: '0 12px', boxSizing: 'border-box' }}>
+            <WaitCard busy title="Preparing the bank report" expectSec={20}
+              stages={['Putting the details into the bank\'s format…', 'Adding the photos and documents…', 'Making the pages…', 'Almost done — big reports take a little longer…']} />
+          </div>
         )}
         {state === 'error' && (
           <div className="rv-state">

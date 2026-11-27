@@ -252,6 +252,40 @@ const GREETINGS = [
   "😊 I'm ready when you are — let's make today easy.",
   '😊 Wishing you a smooth and productive day.',
 ];
+// Revaluation Radar: on the 1st of the month (caught up until the 3rd if the server slept), each Super Admin,
+// branch admin and bank staff member hears how many of their properties are due for revaluation
+async function ruleRevaluation(ctx) {
+  const { settings, ist, now, admins } = ctx;
+  const cfg = settings.revaluation || {};
+  if (cfg.enabled === false) return 0;
+  if (Number(ist.ymd.slice(8, 10)) > 3) return 0;
+  if (!isDueToday(ist.minutes, toMinutes(cfg.time || '10:00'), 20 * 60)) return 0;
+  const rv = require('./revaluation');
+  const all = await rv.dueList({}, { now });
+  if (!all.length) return 0;
+  const ym = ist.ymd.slice(0, 7);
+  const lakh = (v) => (v >= 1e7 ? `₹${(v / 1e7).toFixed(1)} crore` : `₹${Math.round(v / 1e5)} lakh`);
+  const tell = async (user, list, where) => {
+    if (!list.length) return 0;
+    const t = rv.totals(list);
+    const ok = await send(`revaluation:${ym}:${user.id}`, 'revaluation', {
+      to: user.id, type: 'revaluation_due', priority: 'digest', now,
+      title: `Revaluation Radar: ${t.count} propert${t.count === 1 ? 'y' : 'ies'} due`,
+      message: `${where}${[t.overdue ? `${t.overdue} overdue` : '', t.soon ? `${t.soon} due in the next 60 days` : ''].filter(Boolean).join(', ')}${t.value ? ` · about ${lakh(t.value)} of security` : ''}. `
+        + (user.role === 'BANK' ? 'Open Gouru → Revaluation to request them with one tap.' : 'Open Dashboard → Revaluation Radar to start them.'),
+    });
+    return ok ? 1 : 0;
+  };
+  let n = 0;
+  for (const a of admins) {
+    if (a.role === 'SUPER_ADMIN') n += await tell(a, all, 'All branches: ');
+    else if (a.branchId) n += await tell(a, all.filter((r) => r.branchId === a.branchId), '');
+  }
+  const bankStaff = await User.find({ role: 'BANK', status: { $ne: 'Inactive' } }).select('id name role').lean();
+  for (const b of bankStaff) n += await tell(b, all.filter((r) => r.requestedBy && r.requestedBy.id === b.id), '');
+  return n;
+}
+
 async function ruleGoodMorning(ctx) {
   const { settings, ist, cases, engineers, admins } = ctx;
   const cfg = settings.goodMorning;
@@ -662,6 +696,7 @@ async function runReminders(now = new Date()) {
     if (!settings.dailyReport?.enabled) summary.sent.eveningSummary = await ruleEveningSummary(ctx);
     try { summary.sent.invoiceReminders = await ruleInvoiceReminders(ctx); } catch (err) { console.warn('invoice reminders:', err.message); }
     try { summary.sent.backupReminder = await ruleBackupReminder(ctx); } catch (err) { console.warn('backup reminder:', err.message); }
+    try { summary.sent.revaluation = await ruleRevaluation(ctx); } catch (err) { console.warn('revaluation radar:', err.message); }
   }
   return summary;
 }
@@ -696,6 +731,7 @@ function stopReminderScheduler() {
 }
 
 module.exports = {
+  ruleRevaluation,
   ruleInvoiceReminders,
   startReminderScheduler, stopReminderScheduler, runReminders, getSettings,
   // exported for tests

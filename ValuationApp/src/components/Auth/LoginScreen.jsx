@@ -5,6 +5,7 @@ import { startAuthentication } from '@simplewebauthn/browser';
 import GcrLogo from '../Shared/GcrLogo';
 import pkg from '../../../package.json';
 import './LoginScreen.css';
+import { WaitCard } from '../Shared/ReadingProgress';
 
 const REMEMBER_KEY = 'gcr_remember_username';
 
@@ -17,6 +18,13 @@ export default function LoginScreen({ onLogin }) {
   const [error, setError] = useState('');
   const [shake, setShake] = useState(0);
   const [busy, setBusy] = useState(null); // 'password' | 'passkey' | null
+  // Sign-in taking more than 3 s = the free server was asleep: show a percentage bar while it wakes (about a minute)
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (busy !== 'password') { setSlow(false); return undefined; }
+    const t = setTimeout(() => setSlow(true), 3000);
+    return () => clearTimeout(t);
+  }, [busy]);
   const [showHelp, setShowHelp] = useState(false);
   // A new device: the sign-in waits for the Super Admin ({ requestId, pollKey, device, since })
   const [waiting, setWaiting] = useState(null);
@@ -219,9 +227,15 @@ export default function LoginScreen({ onLogin }) {
               </label>
             </div>
 
-            <div className="lg-msg" role="alert" aria-live="polite">
-              {error && <><AlertCircle size={15} /> {error}</>}
-            </div>
+            {slow ? (
+              <WaitCard busy={busy === 'password'} games={false} expectSec={50} title="Waking up the Gouru server"
+                doneTitle="Server is ready" doneNote="Signing you in…"
+                stages={['The server sleeps when nobody uses it — waking it up…', 'Starting the server…', 'Connecting to the database…', 'Almost ready…']} />
+            ) : (
+              <div className="lg-msg" role="alert" aria-live="polite">
+                {error && <><AlertCircle size={15} /> {error}</>}
+              </div>
+            )}
 
             <div className="lg-row">
               <label className="lg-remember">

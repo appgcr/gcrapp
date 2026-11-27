@@ -22,5 +22,6 @@ export const BANKS = [
   { key: 'cbi', name: 'Central Bank of India', logo: true, wordmark: true }, { key: 'indian', name: 'Indian Bank', logo: true, wordmark: true }, { key: 'iob', name: 'Indian Overseas Bank', logo: true, wordmark: true },
   { key: 'karnataka', name: 'Karnataka Bank', logo: true, wordmark: true }, { key: 'pnb', name: 'Punjab National Bank', logo: true, wordmark: true }, { key: 'sbi', name: 'State Bank of India', logo: true },
   { key: 'uco', name: 'UCO Bank', logo: true, wordmark: true }, { key: 'union', name: 'Union Bank of India', logo: true, wordmark: true },
+  { key: 'shriram', name: 'Shriram Finance Ltd', logo: true, wordmark: true },
 ];
 export const BANKS_SERVED = BANKS.map((b) => b.name);

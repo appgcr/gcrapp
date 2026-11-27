@@ -6,6 +6,7 @@ const ValuationCase = require('../models/ValuationCase');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { isSuper } = require('../services/access');
 const { istParts } = require('../services/istTime');
+const { fillModesOf, KEYS: FILL_KEYS } = require('../services/fillModes');
 
 const cleanCode = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
 
@@ -20,7 +21,7 @@ router.get('/', authenticateToken, async (req, res) => {
   try {
     const filter = isSuper(req.user) ? {} : { id: req.user.branchId || '__none__' };
     const branches = (await Branch.find(filter).select('-letterhead.dataUrl').sort({ name: 1 }).lean())
-      .map((b) => ({ ...b, hasLetterhead: !!(b.letterhead && b.letterhead.updatedAt), hasValuer: !!(b.valuer && b.valuer.name) }));
+      .map((b) => ({ ...b, modes: fillModesOf(b), hasLetterhead: !!(b.letterhead && b.letterhead.updatedAt), hasValuer: !!(b.valuer && b.valuer.name) }));
     if (!req.query.stats) return res.json(branches);
 
     const ids = branches.map((b) => b.id);
@@ -69,6 +70,23 @@ router.post('/', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res)
     res.status(201).json(branch);
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+// PUT /api/branches/:id/fill-modes { docs, sheet, audio, valocity } — which New Case cards this branch's engineers
+// see. Super Admin only. At least one must stay on.
+router.put('/:id/fill-modes', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
+  try {
+    const branch = await Branch.findOne({ id: req.params.id });
+    if (!branch) return res.status(404).json({ error: 'Branch not found' });
+    const next = { ...fillModesOf(branch) };
+    for (const k of FILL_KEYS) if (typeof req.body?.[k] === 'boolean') next[k] = req.body[k];
+    if (!FILL_KEYS.some((k) => next[k])) return res.status(400).json({ error: 'Keep at least one way to fill a case switched on.' });
+    const set = { fillModes: next, sheetBypass: next.sheet || next.audio }; // older app versions read sheetBypass
+    const updated = await Branch.findOneAndUpdate({ id: branch.id }, { $set: set }, { new: true }).select('-letterhead.dataUrl').lean();
+    res.json({ ...updated, modes: fillModesOf(updated) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

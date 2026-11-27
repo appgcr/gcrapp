@@ -173,6 +173,22 @@ export default function App() {
 
   // Engineer: unread office messages → red badge on the Chat tab
   const [chatUnread, setChatUnread] = useState(0);
+  // Chat tab: the bottom bar stays visible (its height is measured so the chat sits just above it); while the
+  // engineer is typing a message the bar steps aside so the keyboard has the room
+  const [chatTyping, setChatTyping] = useState(false);
+  useEffect(() => {
+    if (activeTab !== 'chat') { setChatTyping(false); return undefined; }
+    const isField = (el) => el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !['file', 'checkbox', 'radio', 'button'].includes(el.type)));
+    const onIn = (e) => { if (isField(e.target)) setChatTyping(true); };
+    const onOut = () => setTimeout(() => setChatTyping(isField(document.activeElement)), 120);
+    document.addEventListener('focusin', onIn); document.addEventListener('focusout', onOut);
+    const bar = document.querySelector('.bottom-tab-bar');
+    const fit = () => { const b = document.querySelector('.bottom-tab-bar'); if (b) document.documentElement.style.setProperty('--tabbar-h', `${Math.round(b.getBoundingClientRect().height)}px`); };
+    fit();
+    const ro = bar && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(fit) : null;
+    if (ro) ro.observe(bar);
+    return () => { document.removeEventListener('focusin', onIn); document.removeEventListener('focusout', onOut); if (ro) ro.disconnect(); };
+  }, [activeTab]);
   useEffect(() => {
     if (!currentUser?.id || isAdminRole(currentUser) || isBankRole(currentUser)) return undefined;
     const check = () => {
@@ -394,7 +410,7 @@ export default function App() {
       )}
 
       {/* Main Scrollable Content */}
-      <main key={refreshKey} className="main-content" style={activeTab === 'chat' ? { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', zIndex: 1000 } : {}}>
+      <main key={refreshKey} className="main-content" style={activeTab === 'chat' ? { position: 'fixed', top: 0, left: 0, right: 0, bottom: chatTyping ? 0 : 'var(--tabbar-h, 64px)', padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', zIndex: 1000 } : {}}>
         <Suspense fallback={<PartLoading />}>
         {activeTab !== 'chat' && <OfflineBar onOpenCase={(id) => { setSelectedCaseId(id); setActiveTab('cases'); }} />}
         {activeTab === 'dashboard' && !selectedCaseId && (
@@ -430,8 +446,8 @@ export default function App() {
         </Suspense>
       </main>
 
-      {/* Persistent Mobile Bottom Tab Bar */}
-      {activeTab !== 'chat' && (
+      {/* Persistent Mobile Bottom Tab Bar (on Chat too, except while typing a message) */}
+      {!(activeTab === 'chat' && chatTyping) && (
       <nav className="bottom-tab-bar ios-tabbar" aria-label="Main">
         {[
           { key: 'forms', label: 'Today', Icon: CalendarIcon, go: () => { setActiveTab('forms'); setSelectedCaseId(null); } },

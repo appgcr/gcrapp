@@ -46,6 +46,12 @@ function clean(body = {}) {
     out.email = e;
   }
   if (body.autoSend !== undefined) out.autoSend = !!body.autoSend;
+  if (body.portal !== undefined) out.portal = body.portal === 'valocity' ? 'valocity' : '';
+  if (body.revalYears !== undefined) {
+    const n = Math.round(Number(body.revalYears));
+    if (!Number.isFinite(n) || n < 0 || n > 10) throw new Error('Revaluation must be every 0–10 years.');
+    out.revalYears = n;
+  }
   if (body.fees) {
     out.fees = {};
     for (const k of ['house', 'apartment', 'openSite', 'agriculture', 'industrial']) {

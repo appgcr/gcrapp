@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  BellRing, FilePlus2, RotateCcw, CheckCircle2, MapPin, Clock, FileCheck2, Inbox, AlertTriangle, Sunrise, Megaphone, Lock,
+  BellRing, FilePlus2, RotateCcw, CheckCircle2, MapPin, Clock, FileCheck2, Inbox, AlertTriangle, Sunrise, Megaphone, Lock, Sun, FileBarChart, Radar, Send, Moon, Receipt, ShieldCheck, Banknote,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../../config/api';
@@ -21,6 +21,15 @@ const ICONS = {
   overdue: [AlertTriangle, 'red'],
   morning_digest: [Sunrise, 'orange'],
   announcement: [Megaphone, 'orange'],
+  good_morning: [Sun, 'orange'],
+  revaluation: [Radar, 'teal'],
+  work_reports: [FileBarChart, 'teal'],
+  report_delivery: [Send, 'blue'],
+  evening_summary: [Moon, 'indigo'],
+  invoice_overdue: [Receipt, 'red'],
+  login_approval: [ShieldCheck, 'green'],
+  report_ready: [FileCheck2, 'green'],
+  invoice_due: [Banknote, 'orange'],
 };
 
 const headersFor = (user) => {
@@ -35,12 +44,13 @@ import TestPushCard from './TestPushCard';
 
 export default function NotificationPrefsCard({ currentUser, compact = false }) {
   const [cats, setCats] = useState(null);
+  const [managed, setManaged] = useState(false); // not the Super Admin: every alert is on, set by the Super Admin
 
   useEffect(() => {
     if (!currentUser?.id) return;
     fetch(`${API_BASE_URL}/api/users/${encodeURIComponent(currentUser.id)}/notification-prefs`, { headers: headersFor(currentUser) })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status))))
-      .then((d) => setCats(d.categories))
+      .then((d) => { setCats(d.categories); setManaged(!!d.managed); })
       .catch(() => setCats(false));
   }, [currentUser?.id]);
 
@@ -65,7 +75,7 @@ export default function NotificationPrefsCard({ currentUser, compact = false }) 
         <IconTile icon={BellRing} color="red" size={28} />
         <div>
           <div className="np-title">My Alerts</div>
-          <div className="np-sub">Choose what buzzes your phone. Everything still shows in the bell.</div>
+          <div className="np-sub">{managed ? 'Your alerts are set by the Super Admin, so you never miss work. Everything also shows in the bell.' : 'Choose what buzzes your phone. Everything still shows in the bell.'}</div>
         </div>
       </div>
 
@@ -82,7 +92,7 @@ export default function NotificationPrefsCard({ currentUser, compact = false }) 
               <div className="np-row-sub">{c.description}</div>
             </div>
             {c.required ? (
-              <span className="np-always" title="Needed for your work, can't be turned off"><Lock size={12} /> Always on</span>
+              <span className="np-always" title={managed ? 'Set by the Super Admin' : "Needed for your work, can't be turned off"}><Lock size={12} /> {managed ? 'On' : 'Always on'}</span>
             ) : (
               <button
                 type="button"

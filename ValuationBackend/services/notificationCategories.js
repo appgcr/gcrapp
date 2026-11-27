@@ -24,6 +24,7 @@ const CATEGORIES = [
   { key: 'report_ready', role: 'BANK', required: true, label: 'Report ready', description: 'When your valuation report is approved', types: ['report_ready'] },
   { key: 'invoice_due', role: 'BANK', required: true, label: 'Payment reminders', description: 'When a valuation fee is due or overdue', types: ['invoice_due'] },
   { key: 'morning_digest', role: 'ALL', required: false, label: 'Morning summary', description: 'One summary at the start of your day', types: ['morning_digest'] },
+  { key: 'revaluation', role: 'ALL', required: false, label: 'Revaluation due', description: 'Once a month: properties due for revaluation', types: ['revaluation_due'] },
   { key: 'good_morning', role: 'ALL', required: false, label: 'Good-morning & thank-you', description: 'A friendly hello at 8 AM, and a thank-you when you check out', types: ['good_morning', 'good_evening'] },
   { key: 'announcement', role: 'ALL', required: true, label: 'Announcements', description: 'Messages from the admin to all staff', types: ['announcement'] },
   { key: 'work_reports', role: 'ALL', required: false, label: 'Daily & weekly report', description: 'Your work report every evening at 8 PM and each Saturday', types: ['daily_report', 'weekly_report'] },
@@ -42,11 +43,16 @@ function prefValue(prefs, key) {
   return v !== false;
 }
 
+// Only the Super Admin chooses their own alerts; engineers, branch admins and banks get every alert their role has
+// (the Super Admin switches whole alert kinds on/off for everyone in Settings → Automatic Reminders)
+const choosesOwnAlerts = (user) => !!user && user.role === 'SUPER_ADMIN';
+
 /** Should this person's phone be notified for this alert type? (in-app bell always keeps it) */
 function allowsPush(user, type) {
   const cat = TYPE_TO_CATEGORY.get(type);
   if (!cat || cat.required) return true;
+  if (!choosesOwnAlerts(user)) return true;
   return prefValue(user?.notificationPrefs, cat.key);
 }
 
-module.exports = { CATEGORIES, TYPE_TO_CATEGORY, categoriesForRole, prefValue, allowsPush };
+module.exports = { CATEGORIES, TYPE_TO_CATEGORY, categoriesForRole, prefValue, allowsPush, choosesOwnAlerts };

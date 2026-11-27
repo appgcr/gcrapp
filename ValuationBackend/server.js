@@ -81,6 +81,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/cases', require('./routes/cases'));
 app.use('/api/bank', require('./routes/bank'));
+app.use('/api/revaluation', require('./routes/revaluation'));
 app.use('/api/upload', require('./routes/upload'));
 app.use('/api/attendance', require('./routes/attendance'));
 app.use('/api/notifications', require('./routes/notifications'));

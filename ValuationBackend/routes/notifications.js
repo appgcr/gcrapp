@@ -14,7 +14,7 @@ const mongoose = require('mongoose');
 const DELIVERY_TYPES = {
   good_morning: ['good_morning'], daily_report: ['daily_report'], weekly_report: ['weekly_report'],
   checkin_reminder: ['checkin_reminder'], login_approval: ['login_approval'], announcement: ['announcement'],
-  case_assigned: ['case_assigned'], morning_digest: ['morning_digest'], good_evening: ['good_evening'],
+  case_assigned: ['case_assigned'], morning_digest: ['morning_digest'], good_evening: ['good_evening'], revaluation_due: ['revaluation_due'],
 };
 router.get('/delivery', authenticateToken, requireRole('SUPER_ADMIN'), async (req, res) => {
   try {

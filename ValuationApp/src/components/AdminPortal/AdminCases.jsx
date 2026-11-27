@@ -534,7 +534,7 @@ export default function AdminCases({ defaultFilter = '', currentUser }) {
           {(tab === 'REVIEW' || tab === 'DONE') && (
             <button className="cs-btn cs-ghost" onClick={() => setViewing(c)}><FileText size={15} /> View Report</button>
           )}
-          {(tab !== 'NEW' || (c.documents?.bankDocs || []).length > 0) && <CaseFiles c={c} />}
+          {(tab !== 'NEW' || (c.documents?.bankDocs || []).length > 0 || matchBank(bankRecords, c.bankName)?.portal === 'valocity') && <CaseFiles c={c} />}
           {tab === 'DONE' && c.status === 'Approved' && <SendToBank c={c} />}
         </div>
 

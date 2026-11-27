@@ -34,6 +34,9 @@ import OfficeSheetStep, { EMPTY_SHEET, sheetToCase, sheetMissing } from './Offic
 import VoiceSheetFill, { sheetFilledList } from './VoiceSheetFill';
 import AiReviewCall from './AiReviewCall';
 import Step4SiteImages from './Step4SiteImages';
+import ValocityFilesCard from '../../Shared/ValocityFilesCard';
+import { WaitCard } from '../../Shared/ReadingProgress';
+import { isValocityBank } from '../../../utils/valocityFiles';
 import Step5ExtractedDataReview from './Step5ExtractedDataReview';
 import Step6FinalReviewSignature from './Step6FinalReviewSignature';
 import { getPageDisplayInfo, formatFileSize, isBuiltProperty, REQUIRED_DOCS } from './caseModalHelpers';
@@ -326,7 +329,7 @@ export default function CaseCreationModal({
     if (!isOpen && modalStep === 0) return;
     fetch(`${API_BASE_URL}/api/branches`).then((r) => (r.ok ? r.json() : [])).then((list) => {
       const mine = Array.isArray(list) ? list.find((b) => b.id === currentUser?.branchId) : null; // only this engineer's branch
-      setBypassAllowed(!!(mine && mine.sheetBypass));
+      setBypassAllowed(!!(mine && (mine.modes ? (mine.modes.sheet || mine.modes.audio) : mine.sheetBypass)));
       // App Review (Demo) office: the reviewers can't take site photos with GPS, so the visit proof is not asked
       setDemoOffice(!!(mine && (String(mine.code || '').toUpperCase() === 'DEMO' || /app\s*review/i.test(mine.name || ''))));
     }).catch(() => {});
@@ -1865,9 +1868,10 @@ export default function CaseCreationModal({
     <>
       {reviewBusy && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 11000, background: 'rgba(11,21,51,.88)', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, textAlign: 'center', padding: 24 }} data-no-reach>
-          <Loader2 size={34} className="spin" />
-          <div style={{ fontSize: 18, fontWeight: 800 }}>Gouru AI is checking your case…</div>
-          <div style={{ fontSize: 14, color: '#c7d2fe', maxWidth: 320 }}>Comparing your entries with the documents and the valuer checks. If anything needs your answer, Gouru AI will call you.</div>
+          <div style={{ width: 'min(400px, calc(100vw - 32px))', textAlign: 'left', maxHeight: '92vh', overflowY: 'auto' }}>
+            <WaitCard busy={reviewBusy} title="Gouru AI is checking your case" expectSec={30}
+              stages={['Comparing your entries with the documents…', 'Running the valuer checks…', 'Looking for anything doubtful…', 'If anything needs your answer, Gouru AI will call you…']} />
+          </div>
         </div>
       )}
       {reviewQuestions && (
@@ -2219,6 +2223,14 @@ export default function CaseCreationModal({
                 onTakeSelfie={() => startCamera('SITE_SELFIE')}
                 onRemoveSelfie={() => setSiteSelfie(null)}
                 selfieCamera={activeDocUpload === 'SITE_SELFIE'}
+              />
+            )}
+            {/* Valocity banks: the files that go to the Valocity portal (Gouru Autofill extension) — only these */}
+            {modalStep === 4 && editingCaseId && isValocityBank(bankRecords, bankName) && (
+              <ValocityFilesCard
+                caseInfo={{ id: editingCaseId, clientName, fileNumber: caseStampRef.current && /\//.test(caseStampRef.current) ? caseStampRef.current : '' }}
+                documents={uploadedDocs}
+                photos={siteImages}
               />
             )}
 

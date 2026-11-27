@@ -13,6 +13,12 @@ const reminderSettingsSchema = new mongoose.Schema({
     enabled: { type: Boolean, default: true },
     time: { type: String, default: '08:00' }
   },
+  // Revaluation Radar: on the 1st of each month (caught up until the 3rd), admins and bank staff hear which
+  // properties are due for revaluation
+  revaluation: {
+    enabled: { type: Boolean, default: true },
+    time: { type: String, default: '10:00' }
+  },
   morningDigest: {
     enabled: { type: Boolean, default: true },
     time: { type: String, default: '08:30' }        // fallback time

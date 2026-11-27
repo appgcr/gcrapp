@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BellRing, Sunrise, LogIn, MapPin, AlertTriangle, LogOut, CalendarOff, Coffee, Moon, Sparkles, BarChart3, CalendarRange, Sun } from 'lucide-react';
+import { BellRing, Sunrise, LogIn, MapPin, AlertTriangle, LogOut, CalendarOff, Coffee, Moon, Sparkles, BarChart3, CalendarRange, Sun , Radar } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_BASE_URL } from '../../config/api';
 import IconTile from '../Shared/IconTile';
@@ -106,6 +106,11 @@ export default function ReminderSettingsCard({ currentUser, embedded = false }) 
     {
       key: 'checkOut', icon: LogOut, color: 'indigo', title: 'Check-out reminder',
       sub: 'To engineers still checked in at the end of the day',
+      control: 'time',
+    },
+    {
+      key: 'revaluation', icon: Radar, color: 'teal', title: 'Revaluation Radar',
+      sub: 'On the 1st of each month: admins and bank staff hear which properties are due for revaluation',
       control: 'time',
     },
     {

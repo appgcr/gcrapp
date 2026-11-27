@@ -26,6 +26,11 @@ const bankSchema = new mongoose.Schema({
   // Which report layout the bank uses: 'apgb' = the bank's own exact format (installed),
   // 'standard' = the general GCR report until that bank's format is supplied
   format: { type: String, default: 'standard' },
+  // The bank's online valuation portal, if any: 'valocity' → cases get a "Valocity files" list that the Gouru Autofill
+  // extension attaches on the portal ('' = none)
+  portal: { type: String, default: '' },
+  // Revaluation Radar: banks re-value the properties they hold as security every few years. 0 = this bank doesn't.
+  revalYears: { type: Number, default: 3, min: 0, max: 10 },
   // Realizable / distress value as % of fair market value, per property type
   policies: {
     house: policy,

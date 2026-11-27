@@ -69,8 +69,16 @@ export function installApiAuth() {
     if (deviceId && !headers.has('x-device-id')) headers.set('x-device-id', deviceId);
     const method = String(init.method || (typeof input !== 'string' && input?.method) || 'GET').toUpperCase();
     const cacheKey = method === 'GET' && offlineCacheable(url) ? `apiCache:${u?.id || 'anon'}:${url.slice(API_BASE_URL.length)}` : null;
-    // A device the Super Admin signed out: tell the app, which returns to the login screen
-    const p = original(input, { ...init, headers }).then((res) => {
+    // A device the Super Admin signed out: tell the app, which returns to the login screen.
+    // No connection (no signal, or the server is restarting) → a plain message instead of the browser's "Failed to fetch".
+    const p = original(input, { ...init, headers }).catch((err) => {
+      if (!err || err.name === 'AbortError' || err.name === 'TimeoutError') throw err;
+      const e = new TypeError(typeof navigator !== 'undefined' && navigator.onLine === false
+        ? 'No internet connection. Please check your signal and try again.'
+        : 'Can’t reach the Gouru server right now. Please try again in a moment.');
+      e.cause = err;
+      throw e;
+    }).then((res) => {
       if (res.status === 401 && token) {
         res.clone().json().then((j) => { if (j && j.code === 'SIGNED_OUT') window.dispatchEvent(new CustomEvent('gcr_signed_out')); }).catch(() => {});
       }

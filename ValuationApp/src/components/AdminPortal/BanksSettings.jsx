@@ -14,13 +14,9 @@ const TYPES = [
   ['industrial', 'Industrial Unit'],
 ];
 
-// Badge letters: short name, else initials (Central Bank of India → CBI, Axis Bank → AXIS)
-const badge = (b) => {
-  if (b.shortName) return b.shortName.slice(0, 5).toUpperCase();
-  const words = b.name.replace(/\(.*?\)/g, '').split(/\s+/).filter((w) => w && !/^(of|&|and|the)$/i.test(w));
-  if (words.length === 1 || (words.length === 2 && /^bank$/i.test(words[1]))) return words[0].slice(0, 4).toUpperCase();
-  return words.map((w) => w[0]).join('').slice(0, 4).toUpperCase();
-};
+
+// No logo file yet: the lender's name, neatly in the same white box ("Shriram Finance", not "SHRIR")
+const logoText = (b) => String(b.name || '').replace(/\(.*?\)/g, '').replace(/\b(ltd|limited|pvt|private|co|company)\.?$/i, '').trim().split(/\s+/).slice(0, 3).join(' ');
 
 // Official logo (public/bank-logos/<key>.png) for the 13 built-in banks — matched by the bank's format key or name.
 const logoFor = (b) => {
@@ -80,7 +76,7 @@ export default function BanksSettings() {
               <span className="bk-slot" aria-hidden="true">
                 {logoFor(b)
                   ? <span className={`bk-img ${b.status === 'Inactive' ? 'off' : ''}`}><img src={logoFor(b)} alt="" loading="lazy" /></span>
-                  : <span className={`bk-logo ${b.status === 'Inactive' ? 'off' : ''}`}>{badge(b)}</span>}
+                  : <span className={`bk-img bk-name-logo ${b.status === 'Inactive' ? 'off' : ''}`}>{logoText(b)}</span>}
               </span>
               <span className="bk-text">
                 <span className="bk-name">{b.name}{b.status === 'Inactive' && <em> · Hidden</em>}</span>
@@ -120,6 +116,8 @@ export default function BanksSettings() {
         .bk-row { gap: 12px; }
         .bk-logo { width: 38px; height: 38px; flex-shrink: 0; border-radius: 9px; display: grid; place-items: center; background: linear-gradient(160deg,#2f6bff,#1d4ed8); color: #fff; font-size: 10.5px; font-weight: 800; letter-spacing: .3px; }
         .bk-logo.off { background: #c7c7cc; }
+        .bk-name-logo { color: #1d4ed8; font-weight: 800; font-size: 12.5px; line-height: 1.15; text-align: center; letter-spacing: .1px; overflow: hidden; }
+        .bk-name-logo.off { color: #8e8e93; }
         .bk-slot { width: 96px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
         .bk-img { width: 96px; height: 44px; overflow: hidden; border-radius: 9px; background: #fff; border: 1px solid #e5e5ea; display: grid; place-items: center; padding: 4px 6px; box-sizing: border-box; }
         .bk-img img { max-width: 84px; max-height: 34px; width: auto; height: auto; object-fit: contain; display: block; }
@@ -206,8 +204,10 @@ function BankSheet({ bank, formats, onClose, onSaved }) {
     })(),
     email: bank.email || '',
     autoSend: bank.autoSend !== false,
-    contacts: (bank.contacts || []).map((r) => [r.branch, r.email, r.phone].filter(Boolean).join(' | ')).join('\n'),
+    contacts: (bank.contacts || []).map((r) => ({ branch: r.branch || '', email: r.email || '', phone: r.phone || '' })),
     format: bank.format || 'standard',
+    portal: bank.portal || '',
+    revalYears: bank.revalYears ?? 3,
     status: bank.status || 'Active',
     fees: Object.fromEntries(TYPES.map(([k]) => [k, bank.fees?.[k] ?? ''])),
     policies: Object.fromEntries(TYPES.map(([k]) => [k, {
@@ -305,21 +305,29 @@ function BankSheet({ bank, formats, onClose, onSaved }) {
           .ob-name { font-weight: 600; text-transform: capitalize; flex: 1; }
           .ob-count { color: #8e8e93; font-size: 14px; }
           body.dark-theme .ob > summary { background: #1c1c1e; color: #fff; }
+          .fs-row.bk-wide > span { width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          @media (max-width: 360px) { .fs-row.bk-wide > span { width: 128px; font-size: 15px; } }
+          .bk-swrow { gap: 12px; padding-top: 8px; padding-bottom: 8px; cursor: pointer; }
+          .fs-row.bk-swrow > .bk-swt { flex: 1 1 auto; width: auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+          .bk-swt b { font-weight: 400; font-size: 16px; } .bk-swt small { font-size: 12.5px; color: #8e8e93; }
+          .bk-swrow input[role=switch] { appearance: none; -webkit-appearance: none; flex: 0 0 51px; width: 51px; height: 31px; border-radius: 31px; background: #e5e5ea; position: relative; cursor: pointer; transition: background .2s; margin: 0; }
+          .bk-swrow input[role=switch]::after { content: ''; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,.2); transition: transform .2s; }
+          .bk-swrow input[role=switch]:checked { background: #34c759; } .bk-swrow input[role=switch]:checked::after { transform: translateX(20px); }
         `}</style>
 
         <div className="fs-section">Report delivery</div>
         <div className="fs-group">
-          <label className="fs-row"><span>Bank email</span><input type="email" value={form.email} onChange={set('email')} placeholder="Used when a branch has none" autoComplete="off" /></label>
-          <label className="fs-row"><span>Email on approval</span><input type="checkbox" checked={form.autoSend} onChange={(e) => setForm((f) => ({ ...f, autoSend: e.target.checked }))} style={{ width: 22, height: 22, flex: '0 0 auto' }} /></label>
-          <textarea
-            value={form.contacts}
-            onChange={set('contacts')}
-            rows={4}
-            placeholder={'Branch | email | WhatsApp, one per line, e.g.\nITI Road | sbi.itiroad@sbi.co.in | 9876543210'}
-            style={{ width: '100%', border: 0, borderTop: '1px solid rgba(0,0,0,.06)', outline: 'none', resize: 'vertical', padding: '12px 16px', font: 'inherit', fontSize: 16, lineHeight: 1.5, background: 'transparent', color: 'inherit', boxSizing: 'border-box' }}
-          />
+          <label className="fs-row bk-swrow">
+            <span className="bk-swt"><b>Email report on approval</b><small>{form.autoSend ? 'On: the report goes to the branch by itself' : 'Off: send it yourself from the Done tab'}</small></span>
+            <input type="checkbox" role="switch" aria-label="Email report on approval" checked={form.autoSend} onChange={(e) => setForm((f) => ({ ...f, autoSend: e.target.checked }))} />
+          </label>
+          <label className="fs-row bk-wide"><span>Bank email</span><input type="email" value={form.email} onChange={set('email')} placeholder="If a branch has none" autoComplete="off" /></label>
         </div>
-        <p className="fs-foot">When a report is approved it is emailed to the branch (or the bank email). Admins can also send it by WhatsApp from the Done tab.</p>
+
+        <div className="fs-section">Branch contacts</div>
+        <ContactsEditor list={form.contacts} branches={[...form.general, ...Object.values(form.groups).flat()]}
+          onChange={(contacts) => setForm((f) => ({ ...f, contacts }))} />
+        <p className="fs-foot">The approved report is emailed to that branch’s email (or the bank email above). The WhatsApp number is used for “Send on WhatsApp” and fee reminders.</p>
 
         <div className="fs-section">Report</div>
         <div className="fs-group">
@@ -329,12 +337,27 @@ function BankSheet({ bank, formats, onClose, onSaved }) {
               {formats.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
             </select>
           </label>
+          <label className="fs-row">
+            <span>Bank portal</span>
+            <select value={form.portal} onChange={set('portal')}>
+              <option value="">None</option>
+              <option value="valocity">Valocity</option>
+            </select>
+          </label>
+          <label className="fs-row">
+            <span>Revaluation</span>
+            <select value={form.revalYears} onChange={(e) => setForm((f) => ({ ...f, revalYears: Number(e.target.value) }))}>
+              <option value={0}>Not needed</option>
+              {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>Every {n === 1 ? 'year' : `${n} years`}</option>)}
+            </select>
+          </label>
         </div>
+        <p className="fs-foot">Revaluation: Revaluation Radar lists this bank’s properties when they are due and reminds you on the 1st of each month.{form.portal === 'valocity' ? ' Valocity: this bank’s cases get a “Valocity files” list, and only those files go to the Valocity portal.' : ''}</p>
 
         <div className="fs-section">Our fee (₹, before GST)</div>
         <div className="fs-group">
           {TYPES.map(([k, label]) => (
-            <label className="fs-row" key={k}><span>{label}</span>
+            <label className="fs-row bk-wide" key={k}><span>{label}</span>
               <input inputMode="decimal" value={form.fees[k]} placeholder="—" onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, '').slice(0, 8); setForm((f) => ({ ...f, fees: { ...f.fees, [k]: v } })); }} aria-label={`${label} fee`} />
             </label>
           ))}
@@ -371,5 +394,64 @@ function BankSheet({ bank, formats, onClose, onSaved }) {
       </form>
     </div>,
     document.body,
+  );
+}
+
+// Branch contacts as a list: each row = branch, email, WhatsApp; "+ Add branch contact" opens three proper boxes
+function ContactsEditor({ list, branches = [], onChange }) {
+  const [edit, setEdit] = useState(null); // { i (index or -1 for new), branch, email, phone }
+  const [err, setErr] = useState('');
+  const okEmail = (e) => !e || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+  const save = () => {
+    const row = { branch: edit.branch.trim(), email: edit.email.trim().toLowerCase(), phone: edit.phone.replace(/[^\d]/g, '').slice(-10) };
+    if (!row.branch) return setErr('Enter the branch name.');
+    if (!row.email && !row.phone) return setErr('Enter an email or a WhatsApp number.');
+    if (!okEmail(row.email)) return setErr('The email does not look right.');
+    if (row.phone && row.phone.length !== 10) return setErr('Enter a 10-digit WhatsApp number.');
+    if (list.some((r, j) => j !== edit.i && r.branch.toLowerCase() === row.branch.toLowerCase())) return setErr('This branch is already in the list.');
+    onChange(edit.i < 0 ? [...list, row] : list.map((r, j) => (j === edit.i ? row : r)));
+    setEdit(null); setErr('');
+  };
+  const form = edit && (
+    <div className="bc-form">
+      <label className="fs-row bk-wide"><span>Branch</span><input value={edit.branch} list="bc-branches" placeholder="ITI Road" autoFocus onChange={(e) => { setErr(''); setEdit({ ...edit, branch: e.target.value }); }} /></label>
+      <label className="fs-row bk-wide"><span>Email</span><input type="email" inputMode="email" value={edit.email} placeholder="branch@bank.co.in" onChange={(e) => { setErr(''); setEdit({ ...edit, email: e.target.value }); }} /></label>
+      <label className="fs-row bk-wide"><span>WhatsApp</span><input inputMode="tel" value={edit.phone} placeholder="10 digits" onChange={(e) => { setErr(''); setEdit({ ...edit, phone: e.target.value }); }} /></label>
+      {err && <div className="bc-err">{err}</div>}
+      <div className="bc-btns">
+        <button type="button" className="bc-cancel" onClick={() => { setEdit(null); setErr(''); }}>Cancel</button>
+        <button type="button" className="bc-save" onClick={save}>{edit.i < 0 ? 'Add' : 'Save'}</button>
+      </div>
+      <datalist id="bc-branches">{[...new Set(branches)].map((b) => <option key={b} value={b} />)}</datalist>
+    </div>
+  );
+  return (
+    <div className="fs-group">
+      {list.map((r, i) => (edit && edit.i === i ? <React.Fragment key={i}>{form}</React.Fragment> : (
+        <div className="bc-row" key={i}>
+          <button type="button" className="bc-main" onClick={() => setEdit({ i, ...r })}>
+            <b>{r.branch}</b>
+            <small>{[r.email, r.phone && `WhatsApp ${r.phone}`].filter(Boolean).join(' · ')}</small>
+          </button>
+          <button type="button" className="bc-del" aria-label={`Remove ${r.branch}`} onClick={() => onChange(list.filter((_, j) => j !== i))}>×</button>
+        </div>
+      )))}
+      {edit && edit.i < 0 ? form : !edit && (
+        <button type="button" className="bc-add" onClick={() => setEdit({ i: -1, branch: '', email: '', phone: '' })}>+ Add branch contact</button>
+      )}
+      <style>{`
+        .bc-row { display: flex; align-items: center; border-bottom: .5px solid rgba(60,60,67,.18); }
+        .bc-main { flex: 1; min-width: 0; text-align: left; border: 0; background: none; padding: 10px 16px; display: flex; flex-direction: column; gap: 2px; cursor: pointer; font-family: inherit; color: inherit; }
+        .bc-main b { font-weight: 500; font-size: 16px; } .bc-main small { font-size: 13px; color: #8e8e93; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .bc-del { flex: none; width: 44px; height: 44px; border: 0; background: none; color: #ff3b30; font-size: 24px; cursor: pointer; }
+        .bc-add { width: 100%; border: 0; background: none; padding: 13px 16px; text-align: left; color: #007aff; font-size: 16px; cursor: pointer; font-family: inherit; }
+        .bc-form { background: rgba(0,122,255,.04); border-bottom: .5px solid rgba(60,60,67,.18); padding-bottom: 10px; }
+        .bc-err { color: #ff3b30; font-size: 13px; padding: 4px 16px 0; }
+        .bc-btns { display: flex; gap: 8px; padding: 8px 16px 0; justify-content: flex-end; }
+        .bc-btns button { border-radius: 10px; padding: 9px 18px; font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit; }
+        .bc-cancel { border: 1px solid #d1d1d6; background: #fff; color: #3a3a3c; } .bc-save { border: 0; background: #007aff; color: #fff; }
+        body.dark-theme .bc-cancel { background: #2c2c2e; color: #fff; border-color: #3a3a3c; }
+      `}</style>
+    </div>
   );
 }
